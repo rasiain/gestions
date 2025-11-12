@@ -48,7 +48,7 @@ COPY docker/nginx/default.conf /etc/nginx/sites-available/default
 COPY docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Copy application files
-COPY . .
+COPY src/ .
 
 # Install Laravel dependencies
 RUN composer install --no-dev --optimize-autoloader --no-interaction
