@@ -118,7 +118,7 @@ docker run --rm -it -v $(pwd):/var/www/html -w /var/www/html php:8.4-cli bash -c
 ## Step 5: Start Docker Containers
 
 ```bash
-docker-compose up -d --build
+docker compose up -d --build (or dcupdb)
 ```
 
 ## Step 6: Generate Application Key
@@ -130,25 +130,25 @@ cat .env | grep APP_KEY
 
 If empty, generate it:
 ```bash
-docker-compose exec app php artisan key:generate
+docker compose exec app php artisan key:generate (or dce app php artisan key:generate )
 ```
 
 ## Step 7: Run Database Migrations
 
 ```bash
-docker-compose exec app php artisan migrate
+docker compose exec app php artisan migrate (or dce app php artisan migrate)
 ```
 
 ## Step 8: Install NPM Dependencies
 
 ```bash
-docker-compose exec app npm install --legacy-peer-deps
+docker compose exec app npm install --legacy-peer-deps (or dce app npm install)
 ```
 
 ## Step 9: Build Frontend Assets
 
 ```bash
-docker-compose exec app npm run build
+docker compose exec app npm run build (or dce app npm run build)
 ```
 
 ## Step 10: Access Your Application
@@ -163,156 +163,85 @@ Open: **http://localhost:8080**
 
 ```bash
 # Start containers
-docker-compose up -d
+dcupd
 
 # Start and rebuild
-docker-compose up -d --build
+dcupdb
 
 # Stop containers
-docker-compose down
+dcdn
 
 # Restart containers
-docker-compose restart
+dcrestart
 
 # View status
-docker-compose ps
+dps
 ```
 
 ## Logs
 
 ```bash
 # View all logs
-docker-compose logs -f
+dcl
 
 # View specific service
-docker-compose logs -f app
+dclf app
 
 # Last 50 lines
-docker-compose logs --tail=50 app
+dcl --tail=50 app
 ```
 
 ## Access Container Shell
 
 ```bash
-docker-compose exec app bash
-docker-compose exec db bash
+dce app bash
+dce db bash
 ```
 
 ## Laravel Commands
 
 ```bash
-docker-compose exec app php artisan migrate
-docker-compose exec app php artisan make:model Product
-docker-compose exec app php artisan make:controller ProductController
-docker-compose exec app php artisan route:list
-docker-compose exec app php artisan cache:clear
+dce app php artisan migrate
+dce app php artisan make:model Product
+dce app php artisan make:controller ProductController
+dce app php artisan route:list
+dce app php artisan cache:clear
 ```
 
 ## Composer Commands
 
 ```bash
-docker-compose exec app composer install
-docker-compose exec app composer require package/name
-docker-compose exec app composer update
+dce app composer install
+dce app composer require package/name
+dce app composer update
 ```
 
 ## NPM Commands
 
 ```bash
-docker-compose exec app npm install --legacy-peer-deps
-docker-compose exec app npm run build
-docker-compose exec app npm run dev
+dce app npm install --legacy-peer-deps
+dce app npm run build
+dce app npm run dev
 ```
 
 ## Database Commands
 
 ```bash
 # MySQL CLI
-docker-compose exec db mysql -u laravel_user -p
+dce db mysql -u laravel_user -p
 
 # Dump database
-docker-compose exec db mysqldump -u laravel_user -plaravel_password laravel > backup.sql
+dce db mysqldump -u laravel_user -plaravel_password laravel > backup.sql
 
 # Restore database
-docker-compose exec -T db mysql -u laravel_user -plaravel_password laravel < backup.sql
+dce -T db mysql -u laravel_user -plaravel_password laravel < backup.sql
 ```
 
 ## Testing
 
 ```bash
-docker-compose exec app php artisan test
-docker-compose exec app php artisan test --coverage
-```
-
----
-
-# Troubleshooting
-
-## Port Already in Use
-
-**Error**: `bind: address already in use`
-
-**Solution**: Change port in `docker-compose.yml`:
-```yaml
-ports:
-  - "8081:80"  # Change 8080 to 8081
-```
-
-## NPM Dependency Conflicts
-
-**Error**: `ERESOLVE unable to resolve dependency tree`
-
-**Solution**:
-```bash
-docker-compose exec app npm install --legacy-peer-deps
-```
-
-## Permission Denied
-
-**Error**: `Permission denied: storage/logs/laravel.log`
-
-**Solution**:
-```bash
-docker-compose exec -u root app chown -R www-data:www-data /var/www/html
-docker-compose exec -u root app chmod -R 755 storage bootstrap/cache
-```
-
-## Database Connection Failed
-
-**Error**: `Connection refused`
-
-**Check `.env`**:
-```bash
-DB_HOST=db  # Must be "db", not "localhost"
-```
-
-**Restart containers**:
-```bash
-docker-compose restart
-```
-
-## Application Key Missing
-
-**Solution**:
-```bash
-docker-compose exec app php artisan key:generate
-```
-
-## Assets Not Loading
-
-**Solution**:
-```bash
-docker-compose exec app npm run build
-docker-compose exec app php artisan optimize:clear
-```
-
-## Complete Reset
-
-```bash
-docker-compose down -v
-rm -rf vendor node_modules
-./setup.sh
-# Follow installation steps again
+dce app php artisan test
+dce app php artisan test --coverage
 ```
 
 ---
@@ -353,85 +282,7 @@ max_execution_time=600
 
 Restart:
 ```bash
-docker-compose restart app
-```
-
-## MySQL 8.4 LTS Alternative
-
-Edit `docker-compose.yml`:
-```yaml
-db:
-  image: mysql:8.4  # Instead of mysql:9.1
-```
-
-## Add Queue Worker
-
-Add to `docker-compose.yml`:
-
-```yaml
-queue:
-  build:
-    context: .
-    dockerfile: Dockerfile
-  container_name: laravel-queue
-  restart: unless-stopped
-  command: php artisan queue:work --tries=3
-  volumes:
-    - .:/var/www/html
-  networks:
-    - laravel-network
-  depends_on:
-    - app
-    - redis
-```
-
-## Mailpit (Development Email)
-
-Add to `docker-compose.yml`:
-
-```yaml
-mailpit:
-  image: axllent/mailpit
-  container_name: laravel-mailpit
-  ports:
-    - "8025:8025"
-    - "1025:1025"
-  networks:
-    - laravel-network
-```
-
-Update `.env`:
-```bash
-MAIL_MAILER=smtp
-MAIL_HOST=mailpit
-MAIL_PORT=1025
-```
-
-Access: http://localhost:8025
-
-## Hot Module Replacement (HMR)
-
-Edit `vite.config.js`:
-```js
-server: {
-    host: '0.0.0.0',
-    port: 5173,
-    hmr: {
-        host: 'localhost',
-    },
-}
-```
-
-Add to `docker-compose.yml`:
-```yaml
-ports:
-  - "8080:80"
-  - "5173:5173"
-```
-
-Run:
-```bash
-docker-compose exec app npm run dev
+dcrestart app
 ```
 
 ---
@@ -442,47 +293,25 @@ docker-compose exec app npm run dev
 
 ```bash
 # Start
-docker-compose up -d
+dcupd
 
 # Make changes
 # Files are mounted, changes reflect immediately
 
 # Build assets after JS/Vue changes
-docker-compose exec app npm run build
+dce app npm run build
 
 # End
-docker-compose down
+dcdn
 ```
 
 ## After Pulling Code
 
 ```bash
-docker-compose exec app composer install
-docker-compose exec app npm install --legacy-peer-deps
-docker-compose exec app php artisan migrate
-docker-compose exec app npm run build
-docker-compose exec app php artisan optimize:clear
+dce app composer install
+dce app npm install --legacy-peer-deps
+dce app php artisan migrate
+dce app npm run build
+dce app php artisan optimize:clear
 ```
 
-## Useful Aliases
-
-Add to `~/.bashrc` or `~/.zshrc`:
-
-```bash
-alias dce='docker-compose exec app'
-alias dcr='docker-compose restart'
-alias dcl='docker-compose logs -f'
-```
-
-Then use:
-```bash
-dce php artisan migrate
-dce composer install
-dce npm run build
-```
-
----
-
-## 🎉 You're All Set!
-
-Your Laravel + Vue + Inertia application with Docker is ready to use!
