@@ -2,7 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\ExcelController;
+use App\Http\Controllers\DataFileController;
 
-Route::post('/excel/process-transactions', [ExcelController::class, 'processTransactions']);
-Route::get('/excel/supported-formats', [ExcelController::class, 'getSupportedFormats']);
+Route::post('/data/process', [DataFileController::class, 'process']);
+Route::get('/data/supported-formats', [DataFileController::class, 'getSupportedFormats']);

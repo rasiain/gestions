@@ -4,14 +4,14 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class ProcessExcelTransactionsRequest extends FormRequest
+class ProcessDataFileRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
      */
     public function authorize(): bool
     {
-        return true; // You can add authorization logic here if needed
+        return true;
     }
 
     /**
@@ -25,10 +25,11 @@ class ProcessExcelTransactionsRequest extends FormRequest
 
         // Use file extensions instead of MIME types for better compatibility
         // Many banks export "xls" files that are actually HTML
+        // CSV files with tab separators often have txt extension or text/plain MIME type
         if ($format === 'html') {
             $fileValidation = 'mimes:html,htm,xls';
         } else {
-            $fileValidation = 'mimes:xlsx,xls,csv,html,htm';
+            $fileValidation = 'mimes:xlsx,xls,csv,txt,html,htm';
         }
 
         return [
@@ -42,7 +43,7 @@ class ProcessExcelTransactionsRequest extends FormRequest
                 'nullable',
                 'integer',
                 'min:0',
-                'max:50', // Reasonable limit to prevent abuse
+                'max:50',
             ],
             'format' => [
                 'nullable',
@@ -59,13 +60,13 @@ class ProcessExcelTransactionsRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'excel_file.required' => 'Please select an Excel file to upload.',
-            'excel_file.file' => 'The uploaded file is not valid.',
-            'excel_file.mimes' => 'The file must be a valid Excel file (.xlsx, .xls) or CSV file (.csv).',
-            'excel_file.max' => 'The file size must not exceed 10MB.',
-            'header_lines.integer' => 'The header lines must be a whole number.',
-            'header_lines.min' => 'The header lines cannot be negative.',
-            'header_lines.max' => 'The header lines cannot exceed 50.',
+            'excel_file.required' => 'Selecciona un fitxer de dades per pujar.',
+            'excel_file.file' => 'El fitxer pujat no és vàlid.',
+            'excel_file.mimes' => 'El fitxer ha de ser un fitxer Excel (.xlsx, .xls), CSV (.csv, .txt) o HTML vàlid.',
+            'excel_file.max' => 'La mida del fitxer no pot superar els 10MB.',
+            'header_lines.integer' => 'Les línies de capçalera han de ser un número enter.',
+            'header_lines.min' => 'Les línies de capçalera no poden ser negatives.',
+            'header_lines.max' => 'Les línies de capçalera no poden superar 50.',
         ];
     }
 
@@ -77,8 +78,8 @@ class ProcessExcelTransactionsRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'excel_file' => 'Excel file',
-            'header_lines' => 'header lines to skip',
+            'excel_file' => 'fitxer de dades',
+            'header_lines' => 'línies de capçalera a saltar',
         ];
     }
 }

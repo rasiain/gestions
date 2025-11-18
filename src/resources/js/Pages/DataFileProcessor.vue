@@ -8,15 +8,23 @@ interface Transaction {
     [key: string]: string | null;
 }
 
+interface HeaderInfo {
+    line: number;
+    content: string;
+}
+
 interface ProcessedData {
     success: boolean;
     message: string;
     data?: {
         file_info: {
             total_rows: number;
-            header_lines_skipped: number;
+            header_line_index: number;
+            num_columns: number;
             data_rows_processed: number;
         };
+        account_info: string | null;
+        header_info: HeaderInfo[];
         total_transactions: number;
         headers: string[];
         transactions: Transaction[];
@@ -25,8 +33,6 @@ interface ProcessedData {
 }
 
 const selectedFile = ref<File | null>(null);
-const headerLines = ref<number>(1);
-const format = ref<string>('auto');
 const isProcessing = ref<boolean>(false);
 const processedData = ref<ProcessedData | null>(null);
 const errorMessage = ref<string>('');
@@ -42,7 +48,7 @@ const handleFileChange = (event: Event) => {
 
 const processFile = async () => {
     if (!selectedFile.value) {
-        errorMessage.value = 'Please select a file first';
+        errorMessage.value = 'Selecciona un fitxer primer';
         return;
     }
 
@@ -53,11 +59,9 @@ const processFile = async () => {
     try {
         const formData = new FormData();
         formData.append('excel_file', selectedFile.value);
-        formData.append('header_lines', headerLines.value.toString());
-        formData.append('format', format.value);
 
         const response = await axios.post<ProcessedData>(
-            '/api/excel/process-transactions',
+            '/api/data/process',
             formData,
             {
                 headers: {
@@ -69,9 +73,9 @@ const processFile = async () => {
         processedData.value = response.data;
     } catch (error: any) {
         if (error.response?.data) {
-            errorMessage.value = error.response.data.message || 'An error occurred while processing the file';
+            errorMessage.value = error.response.data.message || 'Hi ha hagut un error processant el fitxer';
         } else {
-            errorMessage.value = 'Network error: Could not connect to the server';
+            errorMessage.value = 'Error de xarxa: No s\'ha pogut connectar amb el servidor';
         }
         console.error('Error processing file:', error);
     } finally {
@@ -81,8 +85,6 @@ const processFile = async () => {
 
 const resetForm = () => {
     selectedFile.value = null;
-    headerLines.value = 1;
-    format.value = 'auto';
     processedData.value = null;
     errorMessage.value = '';
     const fileInput = document.getElementById('file-upload') as HTMLInputElement;
@@ -91,7 +93,7 @@ const resetForm = () => {
 </script>
 
 <template>
-    <Head title="Excel Upload" />
+    <Head title="Processar fitxer de dades" />
 
     <AuthenticatedLayout>
         <template #header>
@@ -99,13 +101,13 @@ const resetForm = () => {
                 <h2
                     class="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200"
                 >
-                    Excel Upload
+                    Processar fitxer de dades
                 </h2>
                 <Link
                     :href="route('dashboard')"
                     class="inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                 >
-                    ← Back to Dashboard
+                    ← Tornar al Dashboard
                 </Link>
             </div>
         </template>
@@ -118,7 +120,7 @@ const resetForm = () => {
                 >
                     <div class="p-6">
                         <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
-                            Upload Excel File
+                            Seleccionar fitxer de dades
                         </h3>
 
                         <div class="space-y-4">
@@ -128,54 +130,18 @@ const resetForm = () => {
                                     for="file-upload"
                                     class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                                 >
-                                    Select File
+                                    Seleccionar fitxer
                                 </label>
                                 <input
                                     id="file-upload"
                                     type="file"
-                                    accept=".xlsx,.xls,.csv,.html"
+                                    accept=".xlsx,.xls,.csv,.txt,.html"
                                     @change="handleFileChange"
                                     class="block w-full text-sm text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer bg-gray-50 dark:bg-gray-700 focus:outline-none"
                                 />
                                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                    Supported formats: .xlsx, .xls, .csv, .html (Max: 10MB)
+                                    Formats suportats: .xlsx, .xls, .csv, .txt, .html (Màxim: 10MB)
                                 </p>
-                            </div>
-
-                            <!-- Header Lines Input -->
-                            <div>
-                                <label
-                                    for="header-lines"
-                                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-                                >
-                                    Header Lines to Skip
-                                </label>
-                                <input
-                                    id="header-lines"
-                                    v-model.number="headerLines"
-                                    type="number"
-                                    min="0"
-                                    max="50"
-                                    class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                />
-                            </div>
-
-                            <!-- Format Selection -->
-                            <div>
-                                <label
-                                    for="format"
-                                    class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-                                >
-                                    File Format
-                                </label>
-                                <select
-                                    id="format"
-                                    v-model="format"
-                                    class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                >
-                                    <option value="auto">Auto Detect</option>
-                                    <option value="html">HTML Table</option>
-                                </select>
                             </div>
 
                             <!-- Action Buttons -->
@@ -185,15 +151,15 @@ const resetForm = () => {
                                     :disabled="!selectedFile || isProcessing"
                                     class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <span v-if="isProcessing">Processing...</span>
-                                    <span v-else>Process File</span>
+                                    <span v-if="isProcessing">Processant...</span>
+                                    <span v-else>Processar fitxer</span>
                                 </button>
                                 <button
                                     @click="resetForm"
                                     type="button"
                                     class="inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                                 >
-                                    Reset
+                                    Netejar
                                 </button>
                             </div>
 
@@ -217,25 +183,54 @@ const resetForm = () => {
                 >
                     <div class="p-6">
                         <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
-                            Processed Data
+                            Dades processades
                         </h3>
 
+                        <!-- Account Info -->
+                        <div
+                            v-if="processedData.data?.account_info"
+                            class="mb-6 rounded-lg bg-blue-50 dark:bg-blue-900/20 p-4"
+                        >
+                            <p class="text-sm font-medium text-blue-800 dark:text-blue-200">
+                                Compte detectat: <span class="font-mono">{{ processedData.data.account_info }}</span>
+                            </p>
+                        </div>
+
+                        <!-- Header Info -->
+                        <div
+                            v-if="processedData.data?.header_info && processedData.data.header_info.length > 0"
+                            class="mb-6 rounded-lg bg-gray-50 dark:bg-gray-700 p-4"
+                        >
+                            <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Informació de capçalera:</p>
+                            <ul class="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                                <li v-for="info in processedData.data.header_info" :key="info.line">
+                                    Línia {{ info.line }}: {{ info.content }}
+                                </li>
+                            </ul>
+                        </div>
+
                         <!-- File Info -->
-                        <div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        <div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-4">
                             <div class="rounded-lg bg-gray-50 dark:bg-gray-700 p-4">
-                                <p class="text-xs text-gray-500 dark:text-gray-400">Total Rows</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Total de files</p>
                                 <p class="text-2xl font-semibold text-gray-900 dark:text-gray-100">
                                     {{ processedData.data?.file_info.total_rows }}
                                 </p>
                             </div>
                             <div class="rounded-lg bg-gray-50 dark:bg-gray-700 p-4">
-                                <p class="text-xs text-gray-500 dark:text-gray-400">Header Lines Skipped</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Línia de capçalera</p>
                                 <p class="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                                    {{ processedData.data?.file_info.header_lines_skipped }}
+                                    {{ (processedData.data?.file_info.header_line_index ?? 0) + 1 }}
                                 </p>
                             </div>
                             <div class="rounded-lg bg-gray-50 dark:bg-gray-700 p-4">
-                                <p class="text-xs text-gray-500 dark:text-gray-400">Total Transactions</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Columnes</p>
+                                <p class="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                                    {{ processedData.data?.file_info.num_columns }}
+                                </p>
+                            </div>
+                            <div class="rounded-lg bg-gray-50 dark:bg-gray-700 p-4">
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Total de registres</p>
                                 <p class="text-2xl font-semibold text-gray-900 dark:text-gray-100">
                                     {{ processedData.data?.total_transactions }}
                                 </p>

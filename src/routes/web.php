@@ -23,10 +23,10 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // Excel upload page
-    Route::get('/excel/upload', function () {
-        return Inertia::render('ExcelUpload');
-    })->name('excel.upload');
+    // Data file processor page
+    Route::get('/data/process', function () {
+        return Inertia::render('DataFileProcessor');
+    })->name('data.process');
 });
 
 require __DIR__.'/auth.php';

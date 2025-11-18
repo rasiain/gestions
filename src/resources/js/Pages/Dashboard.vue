@@ -27,9 +27,9 @@ import { Head, Link } from '@inertiajs/vue3';
                 </div>
 
                 <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                    <!-- Excel Upload Card -->
+                    <!-- Data File Processor Card -->
                     <Link
-                        :href="route('excel.upload')"
+                        :href="route('data.process')"
                         class="group relative overflow-hidden rounded-lg bg-white p-6 shadow-sm transition-all hover:shadow-md dark:bg-gray-800"
                     >
                         <div class="flex items-center">
@@ -44,21 +44,21 @@ import { Head, Link } from '@inertiajs/vue3';
                                         stroke-linecap="round"
                                         stroke-linejoin="round"
                                         stroke-width="2"
-                                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                                        d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                                     />
                                 </svg>
                             </div>
                             <div class="ml-4">
                                 <h4 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                                    Upload Excel File
+                                    Processar fitxer de dades
                                 </h4>
                                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                                    Import transactions from Excel or CSV files
+                                    Importar dades des de fitxers Excel o CSV
                                 </p>
                             </div>
                         </div>
                         <div class="mt-4 flex items-center text-sm font-medium text-indigo-600 dark:text-indigo-400">
-                            Go to upload
+                            Anar al processador
                             <svg
                                 class="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1"
                                 fill="none"
