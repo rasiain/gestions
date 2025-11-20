@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CompteCorrentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\TitularController;
 use Illuminate\Foundation\Application;
@@ -33,6 +34,13 @@ Route::middleware('auth')->group(function () {
     Route::resource('titulars', TitularController::class)->only([
         'index', 'store', 'update', 'destroy'
     ]);
+
+    // Comptes corrents management
+    Route::resource('comptes-corrents', CompteCorrentController::class)
+        ->parameters(['comptes-corrents' => 'compte_corrent'])
+        ->only([
+            'index', 'store', 'update', 'destroy'
+        ]);
 });
 
 require __DIR__.'/auth.php';
