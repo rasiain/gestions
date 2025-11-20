@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\TitularController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -27,6 +28,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/data/process', function () {
         return Inertia::render('DataFileProcessor');
     })->name('data.process');
+
+    // Titulars management
+    Route::resource('titulars', TitularController::class)->only([
+        'index', 'store', 'update', 'destroy'
+    ]);
 });
 
 require __DIR__.'/auth.php';
