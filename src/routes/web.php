@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\CompteCorrentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\TitularController;
@@ -41,6 +42,11 @@ Route::middleware('auth')->group(function () {
         ->only([
             'index', 'store', 'update', 'destroy'
         ]);
+
+    // Categories management
+    Route::resource('categories', CategoriaController::class)->only([
+        'index', 'store', 'update', 'destroy'
+    ]);
 });
 
 require __DIR__.'/auth.php';

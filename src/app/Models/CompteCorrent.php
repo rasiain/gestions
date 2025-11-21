@@ -42,4 +42,12 @@ class CompteCorrent extends Model
         return $this->belongsToMany(Titular::class, 'g_compte_corrent_titular', 'compte_corrent_id', 'titular_id')
             ->withTimestamps();
     }
+
+    /**
+     * Get the categories associated with this compte corrent.
+     */
+    public function categories()
+    {
+        return $this->hasMany(Categoria::class, 'compte_corrent_id')->orderBy('ordre');
+    }
 }
