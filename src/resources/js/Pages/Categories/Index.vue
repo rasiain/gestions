@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import CategoryTreeNode from '@/Components/CategoryTreeNode.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
 
@@ -105,10 +106,26 @@ const submit = () => {
     }
 };
 
-const deleteCategoria = (categoria: Categoria) => {
-    if (confirm(`Estàs segur que vols eliminar la categoria "${categoria.nom}"? Això també eliminarà totes les seves subcategories.`)) {
-        router.delete(route('categories.destroy', categoria.id));
+const deleteCategoria = (categoriaId: number) => {
+    const categoria = allCategories.value.find(c => c.id === categoriaId);
+    if (categoria && confirm(`Estàs segur que vols eliminar la categoria "${categoria.nom}"? Això també eliminarà totes les seves subcategories.`)) {
+        router.delete(route('categories.destroy', categoriaId));
     }
+};
+
+// Track expanded/collapsed state for each category
+const expandedCategories = ref<Set<number>>(new Set());
+
+const toggleCategory = (categoriaId: number) => {
+    if (expandedCategories.value.has(categoriaId)) {
+        expandedCategories.value.delete(categoriaId);
+    } else {
+        expandedCategories.value.add(categoriaId);
+    }
+};
+
+const isCategoryExpanded = (categoriaId: number) => {
+    return expandedCategories.value.has(categoriaId);
 };
 </script>
 
@@ -181,68 +198,18 @@ const deleteCategoria = (categoria: Categoria) => {
 
                         <!-- Hierarchical Category Tree -->
                         <div v-if="categories.length > 0" class="space-y-2">
-                            <template v-for="categoria in categories" :key="categoria.id">
-                                <!-- Root Category -->
-                                <div class="rounded-lg border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900">
-                                    <div class="flex items-center justify-between p-4">
-                                        <div class="flex items-center space-x-3">
-                                            <span class="text-lg font-semibold">{{ categoria.nom }}</span>
-                                            <span class="text-sm text-gray-500">Ordre: {{ categoria.ordre }}</span>
-                                        </div>
-                                        <div class="flex items-center space-x-2">
-                                            <button
-                                                @click="openCreateModal(categoria.id)"
-                                                class="text-sm text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
-                                            >
-                                                + Subcategoria
-                                            </button>
-                                            <button
-                                                @click="openEditModal(categoria)"
-                                                class="text-sm text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-                                            >
-                                                Editar
-                                            </button>
-                                            <button
-                                                @click="deleteCategoria(categoria)"
-                                                class="text-sm text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                                            >
-                                                Eliminar
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <!-- Child Categories -->
-                                    <div v-if="categoria.fills && categoria.fills.length > 0" class="border-t border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
-                                        <div
-                                            v-for="child in categoria.fills"
-                                            :key="child.id"
-                                            class="flex items-center justify-between border-b border-gray-100 p-3 pl-8 last:border-b-0 dark:border-gray-700"
-                                        >
-                                            <div class="flex items-center space-x-3">
-                                                <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                                                </svg>
-                                                <span>{{ child.nom }}</span>
-                                                <span class="text-xs text-gray-500">Ordre: {{ child.ordre }}</span>
-                                            </div>
-                                            <div class="flex items-center space-x-2">
-                                                <button
-                                                    @click="openEditModal(child)"
-                                                    class="text-sm text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-                                                >
-                                                    Editar
-                                                </button>
-                                                <button
-                                                    @click="deleteCategoria(child)"
-                                                    class="text-sm text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                                                >
-                                                    Eliminar
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </template>
+                            <CategoryTreeNode
+                                v-for="categoria in categories"
+                                :key="categoria.id"
+                                :categoria="categoria"
+                                :level="0"
+                                :is-expanded="isCategoryExpanded(categoria.id)"
+                                :expanded-categories="expandedCategories"
+                                @toggle="toggleCategory"
+                                @create-child="openCreateModal"
+                                @edit="openEditModal"
+                                @delete="deleteCategoria"
+                            />
                         </div>
 
                         <!-- Empty State -->

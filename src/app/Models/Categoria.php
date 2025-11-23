@@ -53,19 +53,19 @@ class Categoria extends Model
     }
 
     /**
-     * Get the child categories.
+     * Get the child categories, ordered alphabetically by name.
      */
     public function fills()
     {
-        return $this->hasMany(Categoria::class, 'categoria_pare_id')->orderBy('ordre');
+        return $this->hasMany(Categoria::class, 'categoria_pare_id')->orderBy('nom');
     }
 
     /**
-     * Scope to get only root categories (no parent).
+     * Scope to get only root categories (no parent), ordered alphabetically.
      */
     public function scopeArrel($query)
     {
-        return $query->whereNull('categoria_pare_id')->orderBy('ordre');
+        return $query->whereNull('categoria_pare_id')->orderBy('nom');
     }
 
     /**

@@ -22,6 +22,7 @@ class CategoriaController extends Controller
         $compteCorrentId = $request->input('compte_corrent_id', $comptesCorrents->first()?->id);
 
         // Get categories filtered by compte_corrent_id
+        // Sorting is handled automatically by the model's relationships and scopes
         $categories = [];
         if ($compteCorrentId) {
             $categories = Categoria::with('fills.fills')

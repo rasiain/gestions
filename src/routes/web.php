@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CategoriaController;
+use App\Http\Controllers\CategoryImportController;
 use App\Http\Controllers\CompteCorrentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\TitularController;
@@ -47,6 +48,11 @@ Route::middleware('auth')->group(function () {
     Route::resource('categories', CategoriaController::class)->only([
         'index', 'store', 'update', 'destroy'
     ]);
+
+    // Maintenance - Category Import
+    Route::get('/maintenance/categories/import', [CategoryImportController::class, 'index'])->name('maintenance.categories.import');
+    Route::post('/maintenance/categories/import/parse', [CategoryImportController::class, 'parse'])->name('maintenance.categories.import.parse');
+    Route::post('/maintenance/categories/import', [CategoryImportController::class, 'import'])->name('maintenance.categories.import.store');
 });
 
 require __DIR__.'/auth.php';

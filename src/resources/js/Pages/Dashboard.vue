@@ -218,6 +218,54 @@ import { Head, Link } from '@inertiajs/vue3';
                             </svg>
                         </div>
                     </Link>
+
+                    <!-- Import Categories from KMyMoney Card -->
+                    <Link
+                        :href="route('maintenance.categories.import')"
+                        class="group relative overflow-hidden rounded-lg bg-white p-6 shadow-sm transition-all hover:shadow-md dark:bg-gray-800"
+                    >
+                        <div class="flex items-center">
+                            <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900">
+                                <svg
+                                    class="h-6 w-6 text-orange-600 dark:text-orange-400"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                                    />
+                                </svg>
+                            </div>
+                            <div class="ml-4">
+                                <h4 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                                    Importar Categories
+                                </h4>
+                                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                    Importar categories des de KMyMoney
+                                </p>
+                            </div>
+                        </div>
+                        <div class="mt-4 flex items-center text-sm font-medium text-orange-600 dark:text-orange-400">
+                            Importar categories
+                            <svg
+                                class="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M9 5l7 7-7 7"
+                                />
+                            </svg>
+                        </div>
+                    </Link>
                 </div>
             </div>
         </div>
