@@ -3,6 +3,7 @@
 use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\CategoryImportController;
 use App\Http\Controllers\CompteCorrentController;
+use App\Http\Controllers\MovementImportController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\TitularController;
 use Illuminate\Foundation\Application;
@@ -53,6 +54,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/maintenance/categories/import', [CategoryImportController::class, 'index'])->name('maintenance.categories.import');
     Route::post('/maintenance/categories/import/parse', [CategoryImportController::class, 'parse'])->name('maintenance.categories.import.parse');
     Route::post('/maintenance/categories/import', [CategoryImportController::class, 'import'])->name('maintenance.categories.import.store');
+
+    // Maintenance - Movement Import
+    Route::get('/maintenance/movements/import', [MovementImportController::class, 'index'])->name('maintenance.movements.import');
+    Route::post('/maintenance/movements/import/parse', [MovementImportController::class, 'parse'])->name('maintenance.movements.import.parse');
+    Route::post('/maintenance/movements/import', [MovementImportController::class, 'import'])->name('maintenance.movements.import.store');
 });
 
 require __DIR__.'/auth.php';

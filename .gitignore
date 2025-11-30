@@ -3,3 +3,6 @@
 
 # Docker volumes
 db-data/
+
+# Test bank data files
+src/storage/dades-banc-prova/

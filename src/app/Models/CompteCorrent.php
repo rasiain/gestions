@@ -22,6 +22,7 @@ class CompteCorrent extends Model
         'compte_corrent',
         'nom',
         'entitat',
+        'bank_type',
         'ordre',
     ];
 
@@ -32,6 +33,7 @@ class CompteCorrent extends Model
      */
     protected $casts = [
         'ordre' => 'integer',
+        'bank_type' => 'string',
     ];
 
     /**
