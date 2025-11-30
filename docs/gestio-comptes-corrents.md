@@ -39,11 +39,7 @@ Els comptes corrents són els comptes bancaris gestionats per l'aplicació. Cada
 - **Entitat**: Nom de l'entitat bancària
   - Obligatori
   - Màxim 200 caràcters
-
-- **Tipus de Banc**: Tipus de banc per importació de moviments
-  - Opcional
-  - Valors: `caixa_enginyers`, `caixabank`, `kmymoney`
-  - Necessari per poder importar moviments bancaris
+  - El tipus de banc es dedueix automàticament del nom de l'entitat per la importació de moviments
 
 - **Ordre**: Ordre de visualització
   - Opcional
@@ -64,7 +60,6 @@ CREATE TABLE g_comptes_corrents (
     compte_corrent VARCHAR(24) NOT NULL UNIQUE,
     nom VARCHAR(100) NULL,
     entitat VARCHAR(200) NOT NULL,
-    bank_type VARCHAR(20) NULL COMMENT 'Tipus de banc per importació',
     ordre TINYINT UNSIGNED NOT NULL DEFAULT 0,
     created_at TIMESTAMP,
     updated_at TIMESTAMP
@@ -93,6 +88,13 @@ CREATE TABLE g_compte_corrent_titular (
 - `titulars()`: Relació many-to-many amb Titular via taula pivot `g_compte_corrent_titular`
 - `categories()`: Relació one-to-many amb Categoria, ordenada per `ordre`
 
+### Accessors
+- `getBankTypeAttribute()`: Dedueix el tipus de banc a partir del nom de l'entitat
+  - Retorna `caixa_enginyers` si l'entitat conté "enginyer"
+  - Retorna `caixabank` si l'entitat conté "caixabank"
+  - Retorna `kmymoney` si l'entitat conté "kmymoney" o "kmoney"
+  - Retorna `null` si no es pot deduir
+
 ## Validació
 
 **Ubicació**: `app/Http/Requests/CompteCorrentRequest.php`
@@ -102,7 +104,6 @@ CREATE TABLE g_compte_corrent_titular (
 'compte_corrent' => ['required', 'string', 'max:24', 'unique:g_comptes_corrents,compte_corrent'],
 'nom' => ['nullable', 'string', 'max:100'],
 'entitat' => ['required', 'string', 'max:200'],
-'bank_type' => ['nullable', 'string', 'in:caixa_enginyers,caixabank,kmymoney'],
 'ordre' => ['nullable', 'integer', 'min:0', 'max:255'],
 'titular_ids' => ['nullable', 'array'],
 'titular_ids.*' => ['integer', 'exists:g_titulars,id'],
@@ -131,10 +132,7 @@ $compteCorrent->titulars()->sync($request->input('titular_ids', []));
 ### Components
 - Taula amb llista de comptes corrents
 - Columna amb noms dels titulars associats
-- Columna amb tipus de banc (badge de colors)
-- Modal per crear/editar amb:
-  - Checkboxes per seleccionar titulars
-  - Select per tipus de banc
+- Modal per crear/editar amb checkboxes per seleccionar titulars
 - Botons d'acció (editar, eliminar)
 
 ### Interfície TypeScript
@@ -144,13 +142,14 @@ interface CompteCorrent {
     compte_corrent: string;
     nom: string | null;
     entitat: string;
-    bank_type: string | null;
     ordre: number;
     titulars: Titular[];
     created_at: string;
     updated_at: string;
 }
 ```
+
+**Nota**: El camp `bank_type` es dedueix automàticament al backend a partir del nom de l'entitat i s'afegeix dinàmicament a la resposta JSON quan es recuperen els comptes corrents.
 
 ## Rutes
 

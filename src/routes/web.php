@@ -4,6 +4,7 @@ use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\CategoryImportController;
 use App\Http\Controllers\CompteCorrentController;
 use App\Http\Controllers\MovementImportController;
+use App\Http\Controllers\MovimentCompteCorrentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\TitularController;
 use Illuminate\Foundation\Application;
@@ -47,6 +48,11 @@ Route::middleware('auth')->group(function () {
 
     // Categories management
     Route::resource('categories', CategoriaController::class)->only([
+        'index', 'store', 'update', 'destroy'
+    ]);
+
+    // Moviments management
+    Route::resource('moviments', MovimentCompteCorrentController::class)->only([
         'index', 'store', 'update', 'destroy'
     ]);
 

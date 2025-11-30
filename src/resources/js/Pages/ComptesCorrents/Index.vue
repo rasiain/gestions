@@ -14,7 +14,6 @@ interface CompteCorrent {
     compte_corrent: string;
     nom: string | null;
     entitat: string;
-    bank_type: string | null;
     ordre: number;
     titulars: Titular[];
     created_at: string;
@@ -36,7 +35,6 @@ const form = useForm({
     compte_corrent: '',
     nom: '',
     entitat: '',
-    bank_type: null as string | null,
     ordre: 0,
     titular_ids: [] as number[],
 });
@@ -54,7 +52,6 @@ const openEditModal = (compteCorrent: CompteCorrent) => {
     form.compte_corrent = compteCorrent.compte_corrent;
     form.nom = compteCorrent.nom || '';
     form.entitat = compteCorrent.entitat;
-    form.bank_type = compteCorrent.bank_type;
     form.ordre = compteCorrent.ordre;
     form.titular_ids = compteCorrent.titulars.map(t => t.id);
     showModal.value = true;
@@ -88,16 +85,6 @@ const deleteCompteCorrent = (compteCorrent: CompteCorrent) => {
 const getTitularsNames = (titulars: Titular[]): string => {
     if (titulars.length === 0) return 'Sense titulars';
     return titulars.map(t => `${t.nom} ${t.cognoms}`).join(', ');
-};
-
-const getBankTypeLabel = (bankType: string | null): string => {
-    if (!bankType) return '-';
-    const labels: Record<string, string> = {
-        'caixa_enginyers': 'Caixa d\'Enginyers',
-        'caixabank': 'CaixaBank',
-        'kmymoney': 'KMyMoney'
-    };
-    return labels[bankType] || bankType;
 };
 </script>
 
@@ -169,11 +156,6 @@ const getBankTypeLabel = (bankType: string | null): string => {
                                         <th
                                             class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300"
                                         >
-                                            Tipus Banc
-                                        </th>
-                                        <th
-                                            class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300"
-                                        >
                                             Titulars
                                         </th>
                                         <th
@@ -202,12 +184,6 @@ const getBankTypeLabel = (bankType: string | null): string => {
                                         </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                                             {{ compte.entitat }}
-                                        </td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm">
-                                            <span v-if="compte.bank_type" class="inline-flex items-center rounded-md bg-indigo-50 dark:bg-indigo-900/20 px-2 py-1 text-xs font-medium text-indigo-700 dark:text-indigo-300">
-                                                {{ getBankTypeLabel(compte.bank_type) }}
-                                            </span>
-                                            <span v-else class="text-gray-500 dark:text-gray-400">-</span>
                                         </td>
                                         <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                                             {{ getTitularsNames(compte.titulars) }}
@@ -376,32 +352,6 @@ const getBankTypeLabel = (bankType: string | null): string => {
                                     />
                                     <p v-if="form.errors.entitat" class="mt-1 text-sm text-red-600 dark:text-red-400">
                                         {{ form.errors.entitat }}
-                                    </p>
-                                </div>
-
-                                <!-- Tipus Banc -->
-                                <div>
-                                    <label
-                                        for="bank_type"
-                                        class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                                    >
-                                        Tipus de Banc (per importació de moviments)
-                                    </label>
-                                    <select
-                                        id="bank_type"
-                                        v-model="form.bank_type"
-                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
-                                    >
-                                        <option :value="null">Sense tipus</option>
-                                        <option value="caixa_enginyers">Caixa d'Enginyers</option>
-                                        <option value="caixabank">CaixaBank</option>
-                                        <option value="kmymoney">KMyMoney</option>
-                                    </select>
-                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                        Necessari per poder importar moviments bancaris
-                                    </p>
-                                    <p v-if="form.errors.bank_type" class="mt-1 text-sm text-red-600 dark:text-red-400">
-                                        {{ form.errors.bank_type }}
                                     </p>
                                 </div>
 

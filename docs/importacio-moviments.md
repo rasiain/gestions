@@ -17,8 +17,8 @@ Sistema d'importació de moviments bancaris des de tres formats diferents: fitxe
 
 ### Selector de Compte Corrent
 - Dropdown per seleccionar el compte al qual importar
-- Auto-dedueix el tipus de banc del camp `bank_type` del compte
-- Mostra el tipus de banc seleccionat
+- El tipus de banc es dedueix automàticament del nom de l'entitat del compte
+- Mostra el tipus de banc deduït
 
 ### Pujada i Anàlisi de Fitxer
 - Suport per XLS, XLSX, CSV, TXT, QIF (màxim 10MB)
@@ -43,13 +43,13 @@ Sistema d'importació de moviments bancaris des de tres formats diferents: fitxe
 
 ## Tipus de Banc
 
-El camp `bank_type` s'ha afegit a la taula `g_comptes_corrents`:
+El tipus de banc es dedueix automàticament del nom de l'entitat bancària:
 
-- **caixa_enginyers**: Caixa d'Enginyers
-- **caixabank**: CaixaBank
-- **kmymoney**: KMyMoney
+- **caixa_enginyers**: Si l'entitat conté "enginyer"
+- **caixabank**: Si l'entitat conté "caixabank"
+- **kmymoney**: Si l'entitat conté "kmymoney" o "kmoney"
 
-Aquest camp és obligatori per poder importar moviments i es pot gestionar des de la UI de Comptes Corrents.
+La deducció es fa mitjançant l'accessor `getBankTypeAttribute()` del model `CompteCorrent`.
 
 ## Formats de Fitxer
 
@@ -155,15 +155,11 @@ Utilitza un array en memòria per evitar consultes repetides del mateix path.
 
 ## Base de Dades
 
-### Actualització: `g_comptes_corrents`
+### Taula: `g_comptes_corrents`
 
-```sql
-ALTER TABLE g_comptes_corrents
-ADD COLUMN bank_type VARCHAR(20) NULL
-    COMMENT 'Tipus de banc/origen per importació de moviments';
-```
+El tipus de banc es dedueix automàticament del camp `entitat` mitjançant l'accessor `getBankTypeAttribute()` del model. No hi ha cap columna `bank_type` a la base de dades.
 
-**Migració**: `2025_11_29_140000_add_bank_type_to_g_comptes_corrents_table.php`
+**Migració anterior eliminada**: `2025_11_30_000000_remove_bank_type_from_g_comptes_corrents_table.php`
 
 ### Taula: `g_moviments_comptes_corrents`
 
@@ -196,15 +192,26 @@ ON g_moviments_comptes_corrents(compte_corrent_id, data_moviment DESC);
 
 **Ubicació**: `app/Models/CompteCorrent.php`
 
-**Nou camp**:
+**Accessors**:
 ```php
-protected $fillable = [
-    'compte_corrent',
-    'nom',
-    'entitat',
-    'bank_type', // Nou
-    'ordre',
-];
+public function getBankTypeAttribute(): ?string
+{
+    $entitat = strtolower($this->entitat);
+
+    if (str_contains($entitat, 'enginyer')) {
+        return 'caixa_enginyers';
+    }
+
+    if (str_contains($entitat, 'caixabank')) {
+        return 'caixabank';
+    }
+
+    if (str_contains($entitat, 'kmymoney') || str_contains($entitat, 'kmoney')) {
+        return 'kmymoney';
+    }
+
+    return null;
+}
 ```
 
 ### MovimentCompteCorrent
@@ -324,10 +331,7 @@ if (!str_starts_with($category, '[') && !str_ends_with($category, ']')) {
 
 **Ubicació**: `app/Http/Requests/CompteCorrentRequest.php`
 
-**Nova regla**:
-```php
-'bank_type' => ['nullable', 'string', 'in:caixa_enginyers,caixabank,kmymoney'],
-```
+**Nota**: El camp `bank_type` és proporcionat pel frontend però es valida que coincideix amb els tipus suportats.
 
 ## Controller
 
@@ -437,30 +441,13 @@ interface ParsedData {
 
 **Ubicació**: `resources/js/Pages/ComptesCorrents/Index.vue`
 
-**Camps nous**:
-```typescript
-interface CompteCorrent {
-    // ... camps existents
-    bank_type: string | null; // Nou
-}
-```
+**Nota sobre bank_type**:
+El camp `bank_type` es rep del backend com un accessor calculat automàticament a partir del nom de l'entitat. No cal definir-lo explícitament a la interfície TypeScript ja que forma part de la resposta JSON.
 
-**Funció auxiliar**:
-```typescript
-const getBankTypeLabel = (bankType: string | null): string => {
-    if (!bankType) return '-';
-    const labels: Record<string, string> = {
-        'caixa_enginyers': 'Caixa d\'Enginyers',
-        'caixabank': 'CaixaBank',
-        'kmymoney': 'KMyMoney'
-    };
-    return labels[bankType] || bankType;
-};
-```
-
-**UI**:
-- Nova columna "Tipus Banc" a la taula amb badges de colors
-- Camp select al modal amb opcions: Sense tipus, Caixa d'Enginyers, CaixaBank, KMyMoney
+**Canvis**:
+- S'ha eliminat la columna "Tipus Banc" de la taula
+- S'ha eliminat el camp select del modal
+- El tipus de banc es dedueix automàticament del nom de l'entitat al backend
 
 ## Rutes
 
@@ -481,10 +468,9 @@ Route::post('/maintenance/movements/import',
 
 ## Flux d'Ús
 
-1. **Configurar tipus de banc**: Anar a Comptes Corrents i assignar `bank_type`
-2. **Anar a importació**: `/maintenance/movements/import`
-3. **Seleccionar compte**: El tipus de banc es mostra automàticament
-4. **Pujar fitxer**: Segons el format del tipus de banc
+1. **Anar a importació**: `/maintenance/movements/import`
+2. **Seleccionar compte**: El tipus de banc es dedueix i mostra automàticament del nom de l'entitat
+3. **Pujar fitxer**: Segons el format del tipus de banc deduït
 5. **Analitzar**: Botó "Analitzar fitxer"
 6. **Revisar previsualització**:
    - Estadístiques de duplicats

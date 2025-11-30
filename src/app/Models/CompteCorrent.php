@@ -22,7 +22,6 @@ class CompteCorrent extends Model
         'compte_corrent',
         'nom',
         'entitat',
-        'bank_type',
         'ordre',
     ];
 
@@ -33,7 +32,6 @@ class CompteCorrent extends Model
      */
     protected $casts = [
         'ordre' => 'integer',
-        'bank_type' => 'string',
     ];
 
     /**
@@ -51,5 +49,29 @@ class CompteCorrent extends Model
     public function categories()
     {
         return $this->hasMany(Categoria::class, 'compte_corrent_id')->orderBy('ordre');
+    }
+
+    /**
+     * Get the bank type based on the entity name.
+     *
+     * @return string|null
+     */
+    public function getBankTypeAttribute(): ?string
+    {
+        $entitat = strtolower($this->entitat);
+
+        if (str_contains($entitat, 'enginyer')) {
+            return 'caixa_enginyers';
+        }
+
+        if (str_contains($entitat, 'caixabank')) {
+            return 'caixabank';
+        }
+
+        if (str_contains($entitat, 'kmymoney') || str_contains($entitat, 'kmoney')) {
+            return 'kmymoney';
+        }
+
+        return null;
     }
 }

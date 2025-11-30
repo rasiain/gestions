@@ -219,6 +219,54 @@ import { Head, Link } from '@inertiajs/vue3';
                         </div>
                     </Link>
 
+                    <!-- Moviments Management Card -->
+                    <Link
+                        :href="route('moviments.index')"
+                        class="group relative overflow-hidden rounded-lg bg-white p-6 shadow-sm transition-all hover:shadow-md dark:bg-gray-800"
+                    >
+                        <div class="flex items-center">
+                            <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-yellow-100 dark:bg-yellow-900">
+                                <svg
+                                    class="h-6 w-6 text-yellow-600 dark:text-yellow-400"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+                                    />
+                                </svg>
+                            </div>
+                            <div class="ml-4">
+                                <h4 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                                    Gestionar Moviments
+                                </h4>
+                                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                    Visualitzar i editar moviments bancaris
+                                </p>
+                            </div>
+                        </div>
+                        <div class="mt-4 flex items-center text-sm font-medium text-yellow-600 dark:text-yellow-400">
+                            Veure moviments
+                            <svg
+                                class="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M9 5l7 7-7 7"
+                                />
+                            </svg>
+                        </div>
+                    </Link>
+
                     <!-- Import Categories from KMyMoney Card -->
                     <Link
                         :href="route('maintenance.categories.import')"
@@ -251,6 +299,54 @@ import { Head, Link } from '@inertiajs/vue3';
                         </div>
                         <div class="mt-4 flex items-center text-sm font-medium text-orange-600 dark:text-orange-400">
                             Importar categories
+                            <svg
+                                class="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M9 5l7 7-7 7"
+                                />
+                            </svg>
+                        </div>
+                    </Link>
+
+                    <!-- Import Movements Card -->
+                    <Link
+                        :href="route('maintenance.movements.import')"
+                        class="group relative overflow-hidden rounded-lg bg-white p-6 shadow-sm transition-all hover:shadow-md dark:bg-gray-800"
+                    >
+                        <div class="flex items-center">
+                            <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-teal-100 dark:bg-teal-900">
+                                <svg
+                                    class="h-6 w-6 text-teal-600 dark:text-teal-400"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                                    />
+                                </svg>
+                            </div>
+                            <div class="ml-4">
+                                <h4 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                                    Importar Moviments
+                                </h4>
+                                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                    Importar moviments bancaris
+                                </p>
+                            </div>
+                        </div>
+                        <div class="mt-4 flex items-center text-sm font-medium text-teal-600 dark:text-teal-400">
+                            Importar moviments
                             <svg
                                 class="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1"
                                 fill="none"

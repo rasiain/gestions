@@ -37,11 +37,6 @@ class CompteCorrentRequest extends FormRequest
                 'string',
                 'max:200',
             ],
-            'bank_type' => [
-                'nullable',
-                'string',
-                'in:caixa_enginyers,caixabank,kmymoney',
-            ],
             'ordre' => [
                 'nullable',
                 'integer',
@@ -75,7 +70,6 @@ class CompteCorrentRequest extends FormRequest
             'entitat.required' => 'L\'entitat bancària és obligatòria.',
             'entitat.string' => 'L\'entitat bancària ha de ser text.',
             'entitat.max' => 'L\'entitat bancària no pot superar els :max caràcters.',
-            'bank_type.in' => 'El tipus de banc ha de ser: Caixa d\'Enginyers, CaixaBank o KMyMoney.',
             'ordre.integer' => 'L\'ordre ha de ser un número enter.',
             'ordre.min' => 'L\'ordre no pot ser negatiu.',
             'ordre.max' => 'L\'ordre no pot superar :max.',
