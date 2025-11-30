@@ -40,6 +40,11 @@ Els comptes corrents són els comptes bancaris gestionats per l'aplicació. Cada
   - Obligatori
   - Màxim 200 caràcters
 
+- **Tipus de Banc**: Tipus de banc per importació de moviments
+  - Opcional
+  - Valors: `caixa_enginyers`, `caixabank`, `kmymoney`
+  - Necessari per poder importar moviments bancaris
+
 - **Ordre**: Ordre de visualització
   - Opcional
   - Valor entre 0 i 255
@@ -59,6 +64,7 @@ CREATE TABLE g_comptes_corrents (
     compte_corrent VARCHAR(24) NOT NULL UNIQUE,
     nom VARCHAR(100) NULL,
     entitat VARCHAR(200) NOT NULL,
+    bank_type VARCHAR(20) NULL COMMENT 'Tipus de banc per importació',
     ordre TINYINT UNSIGNED NOT NULL DEFAULT 0,
     created_at TIMESTAMP,
     updated_at TIMESTAMP
@@ -96,6 +102,7 @@ CREATE TABLE g_compte_corrent_titular (
 'compte_corrent' => ['required', 'string', 'max:24', 'unique:g_comptes_corrents,compte_corrent'],
 'nom' => ['nullable', 'string', 'max:100'],
 'entitat' => ['required', 'string', 'max:200'],
+'bank_type' => ['nullable', 'string', 'in:caixa_enginyers,caixabank,kmymoney'],
 'ordre' => ['nullable', 'integer', 'min:0', 'max:255'],
 'titular_ids' => ['nullable', 'array'],
 'titular_ids.*' => ['integer', 'exists:g_titulars,id'],
@@ -124,7 +131,10 @@ $compteCorrent->titulars()->sync($request->input('titular_ids', []));
 ### Components
 - Taula amb llista de comptes corrents
 - Columna amb noms dels titulars associats
-- Modal per crear/editar amb checkboxes per seleccionar titulars
+- Columna amb tipus de banc (badge de colors)
+- Modal per crear/editar amb:
+  - Checkboxes per seleccionar titulars
+  - Select per tipus de banc
 - Botons d'acció (editar, eliminar)
 
 ### Interfície TypeScript
@@ -134,6 +144,7 @@ interface CompteCorrent {
     compte_corrent: string;
     nom: string | null;
     entitat: string;
+    bank_type: string | null;
     ordre: number;
     titulars: Titular[];
     created_at: string;
