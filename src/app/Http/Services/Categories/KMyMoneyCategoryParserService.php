@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Services;
+namespace App\Http\Services\Categories;
 
 use Illuminate\Support\Facades\Log;
 
@@ -90,6 +90,7 @@ class KMyMoneyCategoryParserService
         $parts = explode(':', $hierarchy);
         $reconstructedParts = [];
 
+        // First pass: reconstruct the full path by resolving references
         foreach ($parts as $index => $part) {
             $part = trim($part);
 
@@ -97,9 +98,9 @@ class KMyMoneyCategoryParserService
                 continue;
             }
 
-            // If this is not the first part, check if the parent exists in our name map
-            // This handles cases like "Sou Marta:Dietes" where "Sou Marta" was previously
-            // defined as "Sous:Sou Marta"
+            // If this is the first part and it exists in our name map, use the full path
+            // This handles cases like "PARKINGS:APARCAMENT" where "PARKINGS" was previously
+            // defined as "Serveis:PARKINGS"
             if ($index === 0 && isset($this->nameToFullPathMap[$part])) {
                 // This part was previously seen as a full category path
                 // Use the full path as the base
@@ -108,20 +109,23 @@ class KMyMoneyCategoryParserService
                 // Add this part to the reconstructed path
                 $reconstructedParts[] = $part;
             }
+        }
 
-            // Normalize: uppercase and trim
-            $normalizedName = mb_strtoupper($part, 'UTF-8');
+        // Second pass: create all categories in the reconstructed path
+        for ($i = 0; $i < count($reconstructedParts); $i++) {
+            $part = $reconstructedParts[$i];
 
-            // Determine parent path for this category
-            $parentPath = count($reconstructedParts) > 1
-                ? implode(':', array_slice($reconstructedParts, 0, count($reconstructedParts) - 1))
+            // Get the segments up to and including current position
+            $currentPathSegments = array_slice($reconstructedParts, 0, $i + 1);
+            $fullPath = implode(':', $currentPathSegments);
+
+            // Determine parent path
+            $parentPath = $i > 0
+                ? implode(':', array_slice($currentPathSegments, 0, $i))
                 : null;
 
-            // Create full path for this category using reconstructed parts
-            $fullPath = implode(':', $reconstructedParts);
-
-            // Determine the level based on the full reconstructed path
-            $level = count($reconstructedParts) - 1;
+            // Normalize name: uppercase and trim
+            $normalizedName = mb_strtoupper($part, 'UTF-8');
 
             // Check if category already exists in tree
             if (!isset($categories[$fullPath])) {
@@ -131,13 +135,13 @@ class KMyMoneyCategoryParserService
                     'type' => $type, // I or E
                     'parent_path' => $parentPath,
                     'full_path' => $fullPath,
-                    'level' => $level,
+                    'level' => $i,
                 ];
-
-                // Map the category name (last segment) to its full path
-                // This allows us to find "Sou Marta" even when referenced without "Sous:" prefix
-                $this->nameToFullPathMap[$part] = $fullPath;
             }
+
+            // Map the category name (last segment) to its full path
+            // This allows future references to find this category by its short name
+            $this->nameToFullPathMap[$part] = $fullPath;
         }
     }
 

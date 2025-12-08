@@ -22,13 +22,15 @@ class CategoriaController extends Controller
         $compteCorrentId = $request->input('compte_corrent_id', $comptesCorrents->first()?->id);
 
         // Get categories filtered by compte_corrent_id
-        // Sorting is handled automatically by the model's relationships and scopes
         $categories = [];
         if ($compteCorrentId) {
-            $categories = Categoria::with('fills.fills')
-                ->perCompteCorrent($compteCorrentId)
-                ->arrel()
+            // Load all categories for this compte corrent
+            $allCategories = Categoria::perCompteCorrent($compteCorrentId)
+                ->orderBy('nom')
                 ->get();
+
+            // Build hierarchical structure with all levels
+            $categories = $this->buildCategoryTree($allCategories, null);
         }
 
         return Inertia::render('Categories/Index', [
@@ -36,6 +38,33 @@ class CategoriaController extends Controller
             'comptesCorrents' => $comptesCorrents,
             'selectedCompteCorrentId' => $compteCorrentId,
         ]);
+    }
+
+    /**
+     * Build a hierarchical category tree from a flat collection.
+     * This method recursively builds the entire tree structure, supporting unlimited depth.
+     *
+     * @param \Illuminate\Database\Eloquent\Collection $categories All categories
+     * @param int|null $parentId Parent category ID (null for root categories)
+     * @return array Hierarchical tree structure
+     */
+    private function buildCategoryTree($categories, $parentId = null)
+    {
+        $tree = [];
+
+        foreach ($categories as $category) {
+            if ($category->categoria_pare_id === $parentId) {
+                // Convert to array to add children
+                $categoryArray = $category->toArray();
+
+                // Recursively get all children at any depth
+                $categoryArray['fills'] = $this->buildCategoryTree($categories, $category->id);
+
+                $tree[] = $categoryArray;
+            }
+        }
+
+        return $tree;
     }
 
     /**

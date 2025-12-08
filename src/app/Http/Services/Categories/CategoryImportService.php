@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Services;
+namespace App\Http\Services\Categories;
 
 use App\Models\Categoria;
 use App\Models\CompteCorrent;
@@ -9,6 +9,36 @@ use Illuminate\Support\Facades\Log;
 
 class CategoryImportService
 {
+    /**
+     * Ensure root categories (Ingressos and Despeses) exist for a compte corrent.
+     * Creates them if they don't exist.
+     *
+     * @param int $compteCorrentId Compte corrent ID
+     * @return void
+     */
+    public function ensureRootCategories(int $compteCorrentId): void
+    {
+        $rootCategories = ['Ingressos', 'Despeses'];
+
+        foreach ($rootCategories as $index => $categoryName) {
+            $existing = Categoria::where('compte_corrent_id', $compteCorrentId)
+                ->where('nom', $categoryName)
+                ->whereNull('categoria_pare_id')
+                ->first();
+
+            if (!$existing) {
+                Categoria::create([
+                    'compte_corrent_id' => $compteCorrentId,
+                    'nom' => $categoryName,
+                    'categoria_pare_id' => null,
+                    'ordre' => $index,
+                ]);
+
+                Log::info("Created root category '{$categoryName}' for compte corrent {$compteCorrentId}");
+            }
+        }
+    }
+
     /**
      * Validate categories before import
      *
@@ -29,17 +59,15 @@ class CategoryImportService
             return ['valid' => false, 'errors' => $errors, 'warnings' => $warnings];
         }
 
+        // Ensure root categories exist
+        $this->ensureRootCategories($compteCorrentId);
+
         // Get root category (Ingressos or Despeses)
         $rootCategoryName = $rootType === 'I' ? 'Ingressos' : 'Despeses';
         $rootCategory = Categoria::where('compte_corrent_id', $compteCorrentId)
             ->where('nom', $rootCategoryName)
             ->whereNull('categoria_pare_id')
             ->first();
-
-        if (!$rootCategory) {
-            $errors[] = "No s'ha trobat la categoria arrel '{$rootCategoryName}' per aquest compte corrent.";
-            return ['valid' => false, 'errors' => $errors, 'warnings' => $warnings];
-        }
 
         // Load existing categories for this compte and root type
         $existingCategories = Categoria::where('compte_corrent_id', $compteCorrentId)
@@ -103,16 +131,15 @@ class CategoryImportService
         DB::beginTransaction();
 
         try {
+            // Ensure root categories exist
+            $this->ensureRootCategories($compteCorrentId);
+
             // Get root category
             $rootCategoryName = $rootType === 'I' ? 'Ingressos' : 'Despeses';
             $rootCategory = Categoria::where('compte_corrent_id', $compteCorrentId)
                 ->where('nom', $rootCategoryName)
                 ->whereNull('categoria_pare_id')
                 ->first();
-
-            if (!$rootCategory) {
-                throw new \Exception("No s'ha trobat la categoria arrel '{$rootCategoryName}'");
-            }
 
             // Sort categories by level to ensure parents are created before children
             usort($parsedCategories, fn($a, $b) => $a['level'] <=> $b['level']);

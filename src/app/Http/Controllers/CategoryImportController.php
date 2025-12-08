@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Services\KMyMoneyCategoryParserService;
-use App\Http\Services\CategoryImportService;
+use App\Http\Services\Categories\CategoryDeletionService;
+use App\Http\Services\Categories\CategoryImportService;
 use App\Http\Services\DataProcess\FileParserService;
+use App\Http\Services\Categories\KMyMoneyCategoryParserService;
 use App\Models\CompteCorrent;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -17,6 +19,7 @@ class CategoryImportController extends Controller
     public function __construct(
         private KMyMoneyCategoryParserService $categoryParser,
         private CategoryImportService $categoryImporter,
+        private CategoryDeletionService $categoryDeletion,
         private FileParserService $fileParser
     ) {
     }
@@ -169,6 +172,61 @@ class CategoryImportController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error important les categories',
+                'error' => config('app.debug') ? $e->getMessage() : 'Error intern del servidor',
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete imported categories for a specific compte corrent or all
+     */
+    public function deleteImported(Request $request): JsonResponse
+    {
+        $request->validate([
+            'compte_corrent_id' => 'nullable|integer|exists:g_comptes_corrents,id',
+            'confirmed' => 'required|boolean|accepted',
+        ]);
+
+        try {
+            $compteCorrentId = $request->input('compte_corrent_id');
+
+            DB::beginTransaction();
+
+            if ($compteCorrentId) {
+                // Delete for specific compte corrent
+                $result = $this->categoryDeletion->deleteForCompteCorrent($compteCorrentId);
+
+                DB::commit();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => "S'han eliminat {$result['deleted_count']} categories del compte seleccionat",
+                    'data' => $result,
+                ]);
+            } else {
+                // Delete all categories globally
+                $result = $this->categoryDeletion->deleteAll();
+
+                DB::commit();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => "S'han eliminat {$result['deleted_count']} categories de tots els comptes i s'ha reiniciat l'autoincrement",
+                    'data' => $result,
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            Log::error('Error deleting imported categories', [
+                'error' => $e->getMessage(),
+                'compte_corrent_id' => $request->input('compte_corrent_id'),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error eliminant les categories',
                 'error' => config('app.debug') ? $e->getMessage() : 'Error intern del servidor',
             ], 500);
         }

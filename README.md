@@ -20,6 +20,7 @@ Aplicació Laravel per a la gestió financera personal amb Vue 3, Inertia.js i T
 - **[Gestió de Titulars](docs/gestio-titulars.md)** - Persones associades als comptes corrents
 - **[Gestió de Comptes Corrents](docs/gestio-comptes-corrents.md)** - Comptes bancaris amb titulars
 - **[Gestió de Categories](docs/gestio-categories.md)** - Categories jeràrquiques per compte corrent
+- **[Importació de Categories des de KMyMoney](docs/importacio-categories.md)** - Importar categories des de fitxers QIF
 - **[Processament de fitxers de dades](docs/processament-dades.md)** - Importar i processar fitxers Excel/CSV
 
 ## Convencions de Codi

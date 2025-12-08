@@ -47,6 +47,9 @@ const isParsed = ref<boolean>(false);
 const parsedData = ref<ParsedData | null>(null);
 const errorMessage = ref<string>('');
 const successMessage = ref<string>('');
+const showDeleteModal = ref<boolean>(false);
+const isDeleting = ref<boolean>(false);
+const deleteConfirmed = ref<boolean>(false);
 
 const handleFileChange = (event: Event) => {
     const target = event.target as HTMLInputElement;
@@ -156,6 +159,55 @@ const renderCategoryTree = (categories: CategoryNode[], indent: number = 0): str
     });
     return result;
 };
+
+const openDeleteModal = () => {
+    showDeleteModal.value = true;
+    deleteConfirmed.value = false;
+    errorMessage.value = '';
+    successMessage.value = '';
+};
+
+const closeDeleteModal = () => {
+    showDeleteModal.value = false;
+    deleteConfirmed.value = false;
+};
+
+const deleteImportedCategories = async () => {
+    if (!deleteConfirmed.value) {
+        errorMessage.value = 'Has de confirmar l\'acció per continuar';
+        return;
+    }
+
+    isDeleting.value = true;
+    errorMessage.value = '';
+    successMessage.value = '';
+
+    try {
+        const response = await axios.delete('/maintenance/categories/import', {
+            data: {
+                compte_corrent_id: selectedCompteCorrent.value,
+                confirmed: true,
+            },
+        });
+
+        successMessage.value = response.data.message;
+        closeDeleteModal();
+
+        // Reset form if deleting for specific account
+        if (selectedCompteCorrent.value) {
+            resetForm();
+        }
+    } catch (error: any) {
+        if (error.response?.data) {
+            errorMessage.value = error.response.data.message || 'Error eliminant les categories';
+        } else {
+            errorMessage.value = 'Error de xarxa';
+        }
+        console.error('Error deleting categories:', error);
+    } finally {
+        isDeleting.value = false;
+    }
+};
 </script>
 
 <template>
@@ -240,6 +292,13 @@ const renderCategoryTree = (categories: CategoryNode[], indent: number = 0): str
                                     class="inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600"
                                 >
                                     Netejar
+                                </button>
+                                <button
+                                    @click="openDeleteModal"
+                                    type="button"
+                                    class="inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700"
+                                >
+                                    Eliminar categories importades
                                 </button>
                             </div>
 
@@ -352,6 +411,87 @@ const renderCategoryTree = (categories: CategoryNode[], indent: number = 0): str
                         </div>
                         <div v-else class="text-sm text-red-600 dark:text-red-400">
                             No es pot importar per errors de validació
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Delete Confirmation Modal -->
+                <div
+                    v-if="showDeleteModal"
+                    class="fixed inset-0 z-50 overflow-y-auto"
+                    aria-labelledby="modal-title"
+                    role="dialog"
+                    aria-modal="true"
+                >
+                    <div class="flex min-h-screen items-end justify-center px-4 pb-20 pt-4 text-center sm:block sm:p-0">
+                        <!-- Background overlay -->
+                        <div
+                            class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+                            aria-hidden="true"
+                            @click="closeDeleteModal"
+                        ></div>
+
+                        <!-- Modal panel -->
+                        <div class="inline-block transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-left align-bottom shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:align-middle">
+                            <div class="bg-white dark:bg-gray-800 px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                                <div class="sm:flex sm:items-start">
+                                    <div class="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/20 sm:mx-0 sm:h-10 sm:w-10">
+                                        <svg class="h-6 w-6 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                                        </svg>
+                                    </div>
+                                    <div class="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left">
+                                        <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-gray-100" id="modal-title">
+                                            Eliminar categories importades
+                                        </h3>
+                                        <div class="mt-2">
+                                            <p class="text-sm text-gray-500 dark:text-gray-400">
+                                                <span v-if="selectedCompteCorrent">
+                                                    Aquesta acció eliminarà totes les categories importades per al compte corrent seleccionat, excepte les categories arrel "Ingressos" i "Despeses".
+                                                </span>
+                                                <span v-else class="font-semibold text-red-600 dark:text-red-400">
+                                                    ⚠️ PERILL: Aquesta acció eliminarà totes les categories importades de TOTS els comptes corrents, excepte les categories arrel "Ingressos" i "Despeses". A més, es reiniciarà l'autoincrement de la taula al valor mínim.
+                                                </span>
+                                            </p>
+                                            <p class="mt-2 text-sm font-semibold text-red-600 dark:text-red-400">
+                                                Aquesta acció no es pot desfer.
+                                            </p>
+
+                                            <!-- Confirmation Checkbox -->
+                                            <div class="mt-4">
+                                                <label class="flex items-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        v-model="deleteConfirmed"
+                                                        class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
+                                                    />
+                                                    <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                                                        Confirmo que vull eliminar les categories
+                                                    </span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                                <button
+                                    @click="deleteImportedCategories"
+                                    :disabled="!deleteConfirmed || isDeleting"
+                                    type="button"
+                                    class="inline-flex w-full justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed sm:ml-3 sm:w-auto"
+                                >
+                                    <span v-if="isDeleting">Eliminant...</span>
+                                    <span v-else>Eliminar</span>
+                                </button>
+                                <button
+                                    @click="closeDeleteModal"
+                                    type="button"
+                                    class="mt-3 inline-flex w-full justify-center rounded-md bg-white dark:bg-gray-600 px-3 py-2 text-sm font-semibold text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-500 hover:bg-gray-50 dark:hover:bg-gray-500 sm:mt-0 sm:w-auto"
+                                >
+                                    Cancel·lar
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

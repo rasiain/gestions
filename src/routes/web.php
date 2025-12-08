@@ -60,6 +60,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/maintenance/categories/import', [CategoryImportController::class, 'index'])->name('maintenance.categories.import');
     Route::post('/maintenance/categories/import/parse', [CategoryImportController::class, 'parse'])->name('maintenance.categories.import.parse');
     Route::post('/maintenance/categories/import', [CategoryImportController::class, 'import'])->name('maintenance.categories.import.store');
+    Route::delete('/maintenance/categories/import', [CategoryImportController::class, 'deleteImported'])->name('maintenance.categories.import.delete');
 
     // Maintenance - Movement Import
     Route::get('/maintenance/movements/import', [MovementImportController::class, 'index'])->name('maintenance.movements.import');
