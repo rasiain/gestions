@@ -15,6 +15,11 @@ class MovementImportService
     private array $categoryCache = [];
 
     /**
+     * Preloaded categories for the current compte corrent.
+     */
+    private array $preloadedCategories = [];
+
+    /**
      * Process parsed movements: generate hashes, detect duplicates, calculate balances, match categories.
      *
      * @param array $parsedMovements
@@ -65,9 +70,16 @@ class MovementImportService
         }
 
         // Step 5: Match categories (for QIF with category paths)
+        // Preload all categories for this compte corrent to avoid repeated DB queries
+        $this->preloadCategories($compteCorrentId);
+
         foreach ($result['movements'] as &$movement) {
             if (isset($movement['categoria_path']) && $movement['categoria_path']) {
-                $movement['categoria_id'] = $this->matchCategoryPath($movement['categoria_path'], $compteCorrentId);
+                $movement['categoria_id'] = $this->matchCategoryPath(
+                    $movement['categoria_path'],
+                    $compteCorrentId,
+                    $movement['import']
+                );
             } else {
                 $movement['categoria_id'] = null;
             }
@@ -86,18 +98,33 @@ class MovementImportService
      */
     private function findLastMovementIndex(array $movements, int $compteCorrentId): array
     {
-        // Search from end to beginning for efficiency
+        // Extract all hashes from movements
+        $fileHashes = array_column($movements, 'hash');
+
+        // Get all matching movements from DB
+        // For large files, split into chunks to avoid SQL limits
+        $dbMovements = collect();
+        $chunks = array_chunk($fileHashes, 1000);
+
+        foreach ($chunks as $chunk) {
+            $results = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)
+                ->whereIn('hash', $chunk)
+                ->get();
+
+            $dbMovements = $dbMovements->merge($results);
+        }
+
+        // Index by hash for fast lookup
+        $dbMovements = $dbMovements->keyBy('hash');
+
+        // Search from end to beginning for the last match
         for ($i = count($movements) - 1; $i >= 0; $i--) {
             $hash = $movements[$i]['hash'];
 
-            $dbMovement = MovimentCompteCorrent::where('hash', $hash)
-                ->where('compte_corrent_id', $compteCorrentId)
-                ->first();
-
-            if ($dbMovement) {
+            if (isset($dbMovements[$hash])) {
                 return [
                     'index' => $i,
-                    'movement' => $dbMovement,
+                    'movement' => $dbMovements[$hash],
                     'found' => true,
                 ];
             }
@@ -277,21 +304,48 @@ class MovementImportService
     }
 
     /**
+     * Preload all categories for a compte corrent into memory.
+     *
+     * @param int $compteCorrentId
+     * @return void
+     */
+    private function preloadCategories(int $compteCorrentId): void
+    {
+        if (isset($this->preloadedCategories[$compteCorrentId])) {
+            return; // Already preloaded
+        }
+
+        $categories = Categoria::where('compte_corrent_id', $compteCorrentId)
+            ->get(['id', 'nom', 'categoria_pare_id'])
+            ->map(function ($cat) {
+                return [
+                    'id' => $cat->id,
+                    'nom' => mb_strtoupper($cat->nom, 'UTF-8'),
+                    'categoria_pare_id' => $cat->categoria_pare_id,
+                ];
+            })
+            ->toArray();
+
+        $this->preloadedCategories[$compteCorrentId] = $categories;
+    }
+
+    /**
      * Match category path to existing category ID.
      * Uses caching to avoid repeated DB queries.
      *
      * @param string $categoryPath
      * @param int $compteCorrentId
+     * @param float $import Movement amount (negative for expenses, positive for income)
      * @return int|null
      */
-    public function matchCategoryPath(string $categoryPath, int $compteCorrentId): ?int
+    public function matchCategoryPath(string $categoryPath, int $compteCorrentId, float $import): ?int
     {
         $cacheKey = "{$compteCorrentId}:{$categoryPath}";
         if (isset($this->categoryCache[$cacheKey])) {
             return $this->categoryCache[$cacheKey];
         }
 
-        $result = $this->performCategoryLookup($categoryPath, $compteCorrentId);
+        $result = $this->performCategoryLookup($categoryPath, $compteCorrentId, $import);
         $this->categoryCache[$cacheKey] = $result;
         return $result;
     }
@@ -301,9 +355,10 @@ class MovementImportService
      *
      * @param string $categoryPath
      * @param int $compteCorrentId
+     * @param float $import Movement amount (negative for expenses, positive for income)
      * @return int|null
      */
-    private function performCategoryLookup(string $categoryPath, int $compteCorrentId): ?int
+    private function performCategoryLookup(string $categoryPath, int $compteCorrentId, float $import): ?int
     {
         if (empty($categoryPath)) {
             return null;
@@ -311,39 +366,90 @@ class MovementImportService
 
         // Remove leading/trailing colons
         $categoryPath = trim($categoryPath, ':');
+
+        // Try multiple strategies to find the category
+        // 1. Try as-is (exact path from QIF)
+        $result = $this->traverseCategoryPath($categoryPath, $compteCorrentId);
+        if ($result !== null) {
+            return $result;
+        }
+
+        // 2. Try prefixing based on movement amount
+        // Negative amounts = Despeses, Positive amounts = Ingressos
+        if ($import < 0) {
+            // Try Despeses first for negative amounts (expenses)
+            $result = $this->traverseCategoryPath('Despeses:' . $categoryPath, $compteCorrentId);
+            if ($result !== null) {
+                return $result;
+            }
+
+            // Fallback: try Ingressos (in case of refunds or corrections)
+            $result = $this->traverseCategoryPath('Ingressos:' . $categoryPath, $compteCorrentId);
+            if ($result !== null) {
+                return $result;
+            }
+        } else {
+            // Try Ingressos first for positive amounts (income)
+            $result = $this->traverseCategoryPath('Ingressos:' . $categoryPath, $compteCorrentId);
+            if ($result !== null) {
+                return $result;
+            }
+
+            // Fallback: try Despeses (in case of corrections)
+            $result = $this->traverseCategoryPath('Despeses:' . $categoryPath, $compteCorrentId);
+            if ($result !== null) {
+                return $result;
+            }
+        }
+
+        // If all strategies fail, log warning
+        Log::warning('Category not found after trying all strategies', [
+            'original_path' => $categoryPath,
+            'compte_corrent_id' => $compteCorrentId,
+            'import' => $import,
+        ]);
+
+        return null;
+    }
+
+    /**
+     * Traverse category path and return the final category ID.
+     *
+     * @param string $categoryPath
+     * @param int $compteCorrentId
+     * @return int|null
+     */
+    private function traverseCategoryPath(string $categoryPath, int $compteCorrentId): ?int
+    {
         $parts = explode(':', $categoryPath);
+
+        // Use preloaded categories if available
+        $categories = $this->preloadedCategories[$compteCorrentId] ?? [];
 
         $currentParentId = null;
 
-        foreach ($parts as $index => $name) {
+        foreach ($parts as $name) {
             $name = trim($name);
             if (empty($name)) {
                 continue;
             }
 
-            $query = Categoria::where('compte_corrent_id', $compteCorrentId)
-                ->whereRaw('UPPER(nom) = ?', [mb_strtoupper($name, 'UTF-8')]);
+            $nameUpper = mb_strtoupper($name, 'UTF-8');
 
-            if ($index === 0) {
-                // Root level - should be null parent
-                $query->whereNull('categoria_pare_id');
-            } else {
-                // Child level
-                $query->where('categoria_pare_id', $currentParentId);
+            // Search in preloaded categories
+            $category = null;
+            foreach ($categories as $cat) {
+                if ($cat['nom'] === $nameUpper && $cat['categoria_pare_id'] === $currentParentId) {
+                    $category = $cat;
+                    break;
+                }
             }
-
-            $category = $query->first();
 
             if (!$category) {
-                Log::warning('Category not found in path', [
-                    'path' => $categoryPath,
-                    'missing_part' => $name,
-                    'parent_id' => $currentParentId,
-                ]);
-                return null;
+                return null; // Path not found, return null quietly
             }
 
-            $currentParentId = $category->id;
+            $currentParentId = $category['id'];
         }
 
         return $currentParentId;
@@ -359,6 +465,7 @@ class MovementImportService
     public function import(array $movements, int $compteCorrentId): array
     {
         $created = 0;
+        $skipped = 0;
         $errors = [];
 
         DB::beginTransaction();
@@ -368,15 +475,21 @@ class MovementImportService
                 $chunks = array_chunk($movements, 100);
                 foreach ($chunks as $chunk) {
                     foreach ($chunk as $movement) {
-                        $this->createMovement($movement, $compteCorrentId);
-                        $created++;
+                        if ($this->createMovement($movement, $compteCorrentId)) {
+                            $created++;
+                        } else {
+                            $skipped++;
+                        }
                     }
                 }
             } else {
                 // For smaller files, insert one by one for better error handling
                 foreach ($movements as $movement) {
-                    $this->createMovement($movement, $compteCorrentId);
-                    $created++;
+                    if ($this->createMovement($movement, $compteCorrentId)) {
+                        $created++;
+                    } else {
+                        $skipped++;
+                    }
                 }
             }
 
@@ -385,10 +498,12 @@ class MovementImportService
             Log::info('Movement import completed', [
                 'compte_corrent_id' => $compteCorrentId,
                 'created' => $created,
+                'skipped' => $skipped,
             ]);
 
             return [
                 'created' => $created,
+                'skipped' => $skipped,
                 'errors' => $errors,
             ];
         } catch (\Exception $e) {
@@ -409,10 +524,19 @@ class MovementImportService
      *
      * @param array $movement
      * @param int $compteCorrentId
-     * @return void
+     * @return bool True if created, false if skipped (duplicate)
      */
-    private function createMovement(array $movement, int $compteCorrentId): void
+    private function createMovement(array $movement, int $compteCorrentId): bool
     {
+        // Check if movement already exists
+        $exists = MovimentCompteCorrent::where('hash', $movement['hash'])
+            ->where('compte_corrent_id', $compteCorrentId)
+            ->exists();
+
+        if ($exists) {
+            return false; // Skip duplicate
+        }
+
         MovimentCompteCorrent::create([
             'data_moviment' => $movement['data_moviment'],
             'concepte' => $movement['concepte'],
@@ -424,5 +548,7 @@ class MovementImportService
             'compte_corrent_id' => $compteCorrentId,
             'categoria_id' => $movement['categoria_id'] ?? null,
         ]);
+
+        return true;
     }
 }

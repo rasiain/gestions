@@ -21,25 +21,32 @@ Sistema d'importació de moviments bancaris des de tres formats diferents: fitxe
 - Mostra el tipus de banc deduït
 
 ### Pujada i Anàlisi de Fitxer
-- Suport per XLS, XLSX, CSV, TXT, QIF (màxim 10MB)
+- Suport per XLS, XLSX, CSV, TXT, QIF (màxim 100MB)
 - Endpoint `/maintenance/movements/import/parse` per analitzar
 - Retorna previsualització amb estadístiques i validacions
+- **Optimització per fitxers grans**: Limita la previsualització als últims 100 moviments (més recents primer)
+- **Selector de tipus d'importació**: El front mostra només el tipus corresponent al compte + KMyMoney (QIF)
 
 ### Previsualització de Moviments
-- Mostra els primers 50 moviments (per rendiment)
-- Estadístiques: duplicats, a importar, hash trobat
+- Mostra els últims 100 moviments (més recents primer) per rendiment
+- Per fitxers grans (>100 moviments), mostra un missatge informatiu indicant que es mostren només els últims 100
+- Estadístiques: duplicats, a importar, hash trobat, total de moviments
 - Advertència crítica si no es troba hash a la BD
 - Errors de validació de saldos (bloqueig d'importació)
 - Taula editable amb columna de concepte
 
 ### Modes d'Importació
-- **from_beginning**: Importa tots els moviments nous
-- **from_last_db**: Continua des de l'últim registre a la BD
+- **Selecció obligatòria**: L'usuari ha de triar el mode abans d'analitzar el fitxer
+- **from_beginning**: Importa tots els moviments del fitxer
+- **from_last_db**: Continua des de l'última data a la BD
+- Flux simplificat en un sol pas: selecciona mode → analitza → importa
 
 ### Importació Final
 - Endpoint `/maintenance/movements/import` per executar
 - Inserció en transaccions amb chunks de 100 registres
-- Retorna estadístiques de creació
+- Detecció de duplicats per hash durant la inserció
+- Retorna estadístiques (created, skipped)
+- Missatge informatiu mostra els duplicats saltats
 
 ## Tipus de Banc
 
@@ -135,23 +142,32 @@ Si hi ha errors de validació:
 
 Les categories en QIF usen paths separats per `:`:
 ```
-Ingressos:Salari
-Despeses:Llar:Electricitat
+Compres:Compres Alimentació
+Sous:Sou Ricard
 ```
 
-### Algoritme de Navegació
+**Important**: KMyMoney exporta categories sense el prefix root (Ingressos/Despeses).
 
-1. Divideix el path per `:`
-2. Comença des de l'arrel (`categoria_pare_id = NULL`)
-3. Per cada nivell:
-   - Busca categoria amb `nom` coincident (case-insensitive)
-   - Dins del `categoria_pare_id` actual
-   - Navega al següent nivell
+### Algoritme de Navegació amb Estratègies Múltiples
+
+1. **Prova directa**: Busca el path tal com ve del QIF
+2. **Prova amb prefix segons signe**:
+   - Si `import < 0` (despesa): prova `Despeses:{path}`, després `Ingressos:{path}`
+   - Si `import > 0` (ingrés): prova `Ingressos:{path}`, després `Despeses:{path}`
+3. **Navegació jeràrquica**:
+   - Divideix el path per `:`
+   - Comença des de l'arrel (`categoria_pare_id = NULL`)
+   - Per cada nivell:
+     - Busca categoria amb `nom` coincident (case-insensitive, uppercase)
+     - Dins del `categoria_pare_id` actual
+     - Navega al següent nivell
 4. Retorna l'ID de la categoria final o `NULL`
 
-### Cache
+### Precàrrega i Cache
 
-Utilitza un array en memòria per evitar consultes repetides del mateix path.
+- **Precàrrega**: Totes les categories del compte es carreguen en memòria (`preloadCategories()`)
+- **Cache de paths**: Array en memòria per evitar consultes repetides del mateix path
+- Optimització per fitxers grans amb milers de moviments
 
 ## Base de Dades
 
@@ -298,16 +314,23 @@ if (!str_starts_with($category, '[') && !str_ends_with($category, ']')) {
   - Tolerància: ±0.01€
   - Retorna array d'errors
 
-- `matchCategoryPath(string $path, int $compteCorrentId): ?int`
-  - Navega l'arbre de categories
-  - Cache en memòria
-  - Case-insensitive matching
+- `matchCategoryPath(string $path, int $compteCorrentId, float $import): ?int`
+  - Prova múltiples estratègies segons el signe de l'import
+  - Navega l'arbre de categories jeràrquicament
+  - Cache en memòria per paths repetits
+  - Case-insensitive matching (uppercase)
   - Retorna categoria_id o NULL
 
 - `import(array $movements, int $compteCorrentId): array`
   - Inserció en transacció DB
   - Chunks de 100 registres per >500 moviments
+  - Comprovació de duplicats per hash abans d'inserir
   - Retorna estadístiques (created, skipped, errors)
+
+- `createMovement(array $movement, int $compteCorrentId): bool`
+  - Comprova si el hash ja existeix abans d'inserir
+  - Retorna true si s'ha creat, false si s'ha saltat (duplicat)
+  - Evita errors de constraint violation
 
 ## Validació
 
@@ -317,7 +340,7 @@ if (!str_starts_with($category, '[') && !str_ends_with($category, ']')) {
 
 **Regles**:
 ```php
-'file' => ['required', 'file', 'mimes:xls,xlsx,csv,txt,qif', 'max:10240'],
+'file' => ['required', 'file', 'mimes:xls,xlsx,csv,txt,qif', 'max:102400'], // 100MB
 'compte_corrent_id' => ['required', 'integer', 'exists:g_comptes_corrents,id'],
 'bank_type' => ['required', 'string', 'in:caixa_enginyers,caixabank,kmymoney'],
 'import_mode' => ['nullable', 'string', 'in:from_beginning,from_last_db'],
@@ -419,8 +442,8 @@ interface ParsedData {
 
 **Computed Properties**:
 - `selectedCompte`: Obté el compte seleccionat
-- `bankTypeLabel`: Converteix codi a etiqueta llegible
-- `displayedMovements`: Limita a 50 moviments per rendiment
+- `bankTypeOptions`: Mostra només el tipus del compte + KMyMoney
+- `displayedMovements`: Limita els moviments mostrats per rendiment
 
 **Funcions principals**:
 - `parseFile()`: Envia fitxer a `/maintenance/movements/import/parse`
@@ -469,25 +492,31 @@ Route::post('/maintenance/movements/import',
 ## Flux d'Ús
 
 1. **Anar a importació**: `/maintenance/movements/import`
-2. **Seleccionar compte**: El tipus de banc es dedueix i mostra automàticament del nom de l'entitat
-3. **Pujar fitxer**: Segons el format del tipus de banc deduït
-5. **Analitzar**: Botó "Analitzar fitxer"
-6. **Revisar previsualització**:
-   - Estadístiques de duplicats
-   - Errors de validació de saldos (si n'hi ha, no es pot importar)
+2. **Seleccionar compte**: El frontend mostra automàticament el tipus deduït del compte
+3. **Seleccionar tipus d'importació**: Tria entre el tipus del compte o KMyMoney (QIF)
+4. **Pujar fitxer**: Formats XLS, XLSX, CSV, TXT, QIF (màx 100MB)
+5. **Seleccionar mode d'importació**: from_beginning o from_last_db (obligatori)
+6. **Analitzar**: Botó "Analitzar fitxer" (ara en un sol pas)
+7. **Revisar previsualització**:
+   - Estadístiques: total, duplicats, a importar
+   - Errors de validació de saldos (bloquegen importació)
    - Advertència si no es troba hash
-   - Editar conceptes si cal
-7. **Seleccionar mode**: from_beginning o from_last_db
+   - Editar conceptes/categories si cal
 8. **Importar**: Botó "Confirmar i importar moviments"
-9. **Veure resultats**: Missatge amb moviments creats
+9. **Veure resultats**: Missatge amb moviments creats i duplicats saltats
 
 ## Consideracions Tècniques
 
 ### Rendiment
 
-- Mostra només 50 moviments a la UI (limitat amb `slice`)
-- Inserció en chunks de 100 registres per fitxers grans (>500)
-- Cache de paths de categories per evitar consultes repetides
+- **Optimitzacions per fitxers grans** (desembre 2024):
+  - Previsualització limitada als últims 100 moviments (més recents primer) per evitar problemes de memòria
+  - Inserció en chunks de 100 registres per fitxers grans (>500)
+  - Cache de paths de categories per evitar consultes repetides
+  - `findLastMovementIndex()`: Una sola consulta amb `whereIn()` en chunks de 1000 hashes en lloc de N consultes individuals
+  - `performCategoryLookup()`: Precàrrega de totes les categories en memòria per evitar consultes repetides
+  - **Configuració Nginx**: Timeouts augmentats a 300s per permetre processar fitxers grans
+  - Aquestes millores permeten processar fitxers amb milers de moviments (>13.000) sense problemes de timeout o memòria
 
 ### Transaccions
 
@@ -515,6 +544,47 @@ src/storage/dades-banc-prova/
 ```
 
 Aquests fitxers estan ignorats per Git (`.gitignore`).
+
+## Configuració d'Infraestructura
+
+### Nginx
+
+Per permetre la càrrega i processament de fitxers grans, la configuració de Nginx ([docker/nginx/default.conf](../docker/nginx/default.conf)) inclou:
+
+```nginx
+# Increase timeouts for large file uploads and processing
+client_max_body_size 100M;
+client_body_timeout 300s;
+client_header_timeout 300s;
+send_timeout 300s;
+proxy_read_timeout 300s;
+
+location ~ \.php$ {
+    # ... altres directives ...
+
+    # Increase FastCGI timeouts for large file processing
+    fastcgi_read_timeout 300s;
+    fastcgi_send_timeout 300s;
+    fastcgi_connect_timeout 300s;
+    fastcgi_buffering off;
+}
+```
+
+Aquests valors permeten:
+- Fitxers de fins a 100MB
+- Temps de processament de fins a 5 minuts
+- Càrrega i resposta sense problemes per fitxers amb milers de moviments
+
+### PHP
+
+La configuració PHP ([docker/php/local.ini](../docker/php/local.ini)) estableix:
+
+```ini
+upload_max_filesize=100M
+post_max_size=100M
+memory_limit=512M
+max_execution_time=600
+```
 
 ## Millores Futures
 

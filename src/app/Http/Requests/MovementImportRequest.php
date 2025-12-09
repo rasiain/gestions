@@ -26,7 +26,8 @@ class MovementImportRequest extends FormRequest
                 'required',
                 'file',
                 'mimes:xls,xlsx,csv,txt,qif',
-                'max:10240', // 10MB
+                'mimetypes:application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,application/octet-stream',
+                'max:102400', // 100MB
             ],
             'compte_corrent_id' => [
                 'required',
@@ -74,7 +75,7 @@ class MovementImportRequest extends FormRequest
         return [
             'file.required' => 'El fitxer és obligatori.',
             'file.mimes' => 'Format de fitxer no vàlid. Formats acceptats: XLS, XLSX, CSV, TXT, QIF.',
-            'file.max' => 'El fitxer no pot superar 10MB.',
+            'file.max' => 'El fitxer no pot superar 100MB.',
             'compte_corrent_id.required' => 'El compte corrent és obligatori.',
             'compte_corrent_id.exists' => 'El compte corrent seleccionat no existeix.',
             'bank_type.required' => 'El tipus de banc és obligatori.',

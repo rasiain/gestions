@@ -45,15 +45,17 @@ class MovementImportController extends Controller
     public function parse(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'file' => 'required|file|mimes:xls,xlsx,csv,txt,qif|max:10240',
+            'file' => 'required|file|mimes:xls,xlsx,csv,txt,qif|mimetypes:application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,application/octet-stream|max:102400',
             'compte_corrent_id' => 'required|integer|exists:g_comptes_corrents,id',
             'bank_type' => 'required|string|in:caixa_enginyers,caixabank,kmymoney',
+            'import_mode' => 'nullable|string|in:from_beginning,from_last_db',
         ]);
 
         try {
             $file = $request->file('file');
             $compteCorrentId = $validated['compte_corrent_id'];
             $bankType = $validated['bank_type'];
+            $importMode = $validated['import_mode'] ?? null;
 
             // Parse file based on bank type
             if ($bankType === 'kmymoney') {
@@ -72,7 +74,14 @@ class MovementImportController extends Controller
             }
 
             // Process movements through import service
-            $result = $this->importService->processMovements($parsedMovements, $compteCorrentId);
+            $result = $this->importService->processMovements($parsedMovements, $compteCorrentId, $importMode);
+
+            // Log for debugging
+            Log::info('After processMovements', [
+                'to_import_count' => $result['to_import_count'],
+                'movements_count' => count($result['movements']),
+                'import_mode' => $importMode,
+            ]);
 
             // Check for balance validation errors
             if (isset($result['balance_validation_failed']) && $result['balance_validation_failed']) {
@@ -83,6 +92,23 @@ class MovementImportController extends Controller
                         'errors' => $result['errors'],
                     ],
                 ], 422);
+            }
+
+            // Limit movements in preview to avoid memory/timeout issues with large files
+            // Show last 100 movements (most recent) for preview
+            $totalMovements = count($result['movements']);
+            $previewLimit = 100;
+
+            if ($totalMovements > $previewLimit) {
+                // Reverse to show most recent first, then take the limit
+                $result['movements'] = array_slice(array_reverse($result['movements']), 0, $previewLimit);
+                $result['preview_limited'] = true;
+                $result['total_movements'] = $totalMovements;
+            } else {
+                // Reverse to show most recent first
+                $result['movements'] = array_reverse($result['movements']);
+                $result['preview_limited'] = false;
+                $result['total_movements'] = $totalMovements;
             }
 
             return response()->json([
@@ -168,9 +194,14 @@ class MovementImportController extends Controller
             // Import to database
             $stats = $this->importService->import($result['movements'], $compteCorrentId);
 
+            $message = sprintf('S\'han importat %d moviments correctament', $stats['created']);
+            if ($stats['skipped'] > 0) {
+                $message .= sprintf(' (%d duplicats saltats)', $stats['skipped']);
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => sprintf('S\'han importat %d moviments correctament', $stats['created']),
+                'message' => $message,
                 'data' => [
                     'stats' => $stats,
                 ],

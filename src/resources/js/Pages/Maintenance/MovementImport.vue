@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import axios from 'axios';
 
 interface CompteCorrent {
@@ -34,6 +34,8 @@ interface ParsedData {
     requires_import_mode_selection?: boolean;
     errors?: string[];
     balance_validation_failed?: boolean;
+    preview_limited?: boolean;
+    total_movements?: number;
 }
 
 interface Props {
@@ -44,6 +46,7 @@ const props = defineProps<Props>();
 
 const selectedFile = ref<File | null>(null);
 const selectedCompteCorrent = ref<number | null>(null);
+const selectedBankType = ref<string | null>(null);
 const selectedImportMode = ref<string | null>(null);
 const isProcessing = ref<boolean>(false);
 const isParsed = ref<boolean>(false);
@@ -57,14 +60,39 @@ const selectedCompte = computed(() => {
     return props.comptesCorrents.find(c => c.id === selectedCompteCorrent.value);
 });
 
-const bankTypeLabel = computed(() => {
-    if (!selectedCompte.value?.bank_type) return '';
-    const labels: Record<string, string> = {
-        'caixa_enginyers': 'Caixa d\'Enginyers',
-        'caixabank': 'CaixaBank',
-        'kmymoney': 'KMyMoney'
-    };
-    return labels[selectedCompte.value.bank_type] || selectedCompte.value.bank_type;
+const bankTypeLabels: Record<string, string> = {
+    'caixa_enginyers': 'Caixa d\'Enginyers',
+    'caixabank': 'CaixaBank',
+    'kmymoney': 'KMyMoney (QIF)'
+};
+
+const bankTypeOptions = computed(() => {
+    const options = [];
+
+    // Add the bank type of the selected account if it exists
+    if (selectedCompte.value?.bank_type) {
+        options.push({
+            value: selectedCompte.value.bank_type,
+            label: bankTypeLabels[selectedCompte.value.bank_type] || selectedCompte.value.bank_type
+        });
+    }
+
+    // Always add KMyMoney option
+    options.push({
+        value: 'kmymoney',
+        label: 'KMyMoney (QIF)'
+    });
+
+    return options;
+});
+
+// Reset bank type selection when account changes
+watch(selectedCompteCorrent, () => {
+    selectedBankType.value = null;
+    isParsed.value = false;
+    parsedData.value = null;
+    editedMovements.value = {};
+    selectedImportMode.value = null;
 });
 
 const handleFileChange = (event: Event) => {
@@ -77,6 +105,16 @@ const handleFileChange = (event: Event) => {
         selectedImportMode.value = null;
         errorMessage.value = '';
         successMessage.value = '';
+
+        // Auto-select bank type based on file extension if not already selected
+        if (!selectedBankType.value) {
+            const fileName = target.files[0].name.toLowerCase();
+            if (fileName.endsWith('.qif')) {
+                selectedBankType.value = 'kmymoney';
+            } else if (selectedCompte.value?.bank_type) {
+                selectedBankType.value = selectedCompte.value.bank_type;
+            }
+        }
     }
 };
 
@@ -91,8 +129,13 @@ const parseFile = async () => {
         return;
     }
 
-    if (!selectedCompte.value?.bank_type) {
-        errorMessage.value = 'El compte corrent seleccionat no té tipus de banc assignat';
+    if (!selectedBankType.value) {
+        errorMessage.value = 'Selecciona el tipus d\'importació';
+        return;
+    }
+
+    if (!selectedImportMode.value) {
+        errorMessage.value = 'Selecciona el mode d\'importació';
         return;
     }
 
@@ -105,7 +148,12 @@ const parseFile = async () => {
         const formData = new FormData();
         formData.append('file', selectedFile.value);
         formData.append('compte_corrent_id', selectedCompteCorrent.value.toString());
-        formData.append('bank_type', selectedCompte.value.bank_type);
+        formData.append('bank_type', selectedBankType.value);
+
+        // Add import mode if selected
+        if (selectedImportMode.value) {
+            formData.append('import_mode', selectedImportMode.value);
+        }
 
         const response = await axios.post('/maintenance/movements/import/parse', formData, {
             headers: {
@@ -131,12 +179,7 @@ const parseFile = async () => {
 };
 
 const importMovements = async () => {
-    if (!selectedFile.value || !selectedCompteCorrent.value || !selectedCompte.value?.bank_type) {
-        return;
-    }
-
-    if (parsedData.value?.requires_import_mode_selection && !selectedImportMode.value) {
-        errorMessage.value = 'Selecciona un mode d\'importació';
+    if (!selectedFile.value || !selectedCompteCorrent.value || !selectedBankType.value || !selectedImportMode.value) {
         return;
     }
 
@@ -148,7 +191,7 @@ const importMovements = async () => {
         const formData = new FormData();
         formData.append('file', selectedFile.value);
         formData.append('compte_corrent_id', selectedCompteCorrent.value.toString());
-        formData.append('bank_type', selectedCompte.value.bank_type);
+        formData.append('bank_type', selectedBankType.value);
 
         if (selectedImportMode.value) {
             formData.append('import_mode', selectedImportMode.value);
@@ -184,6 +227,7 @@ const importMovements = async () => {
 
 const resetForm = () => {
     selectedFile.value = null;
+    selectedBankType.value = null;
     isParsed.value = false;
     parsedData.value = null;
     editedMovements.value = {};
@@ -266,14 +310,28 @@ const formatDate = (date: string) => {
                                 </select>
                             </div>
 
-                            <!-- Bank Type Display -->
-                            <div v-if="selectedCompte?.bank_type">
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Tipus de banc
+                            <!-- Bank Type Selector -->
+                            <div>
+                                <label for="bank_type" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Tipus d'importació
                                 </label>
-                                <div class="inline-flex items-center rounded-md bg-indigo-50 dark:bg-indigo-900/20 px-3 py-1 text-sm font-medium text-indigo-700 dark:text-indigo-300">
-                                    {{ bankTypeLabel }}
-                                </div>
+                                <select
+                                    id="bank_type"
+                                    v-model="selectedBankType"
+                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                >
+                                    <option :value="null">Selecciona el format del fitxer</option>
+                                    <option
+                                        v-for="option in bankTypeOptions"
+                                        :key="option.value"
+                                        :value="option.value"
+                                    >
+                                        {{ option.label }}
+                                    </option>
+                                </select>
+                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                    Selecciona el format del fitxer que vols importar (pot ser diferent del banc del compte)
+                                </p>
                             </div>
 
                             <!-- File Input -->
@@ -289,7 +347,41 @@ const formatDate = (date: string) => {
                                     class="block w-full text-sm text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer bg-gray-50 dark:bg-gray-700"
                                 />
                                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                    Formats suportats: .xls, .xlsx, .csv, .txt, .qif (Màxim: 10MB)
+                                    Formats suportats: .xls, .xlsx, .csv, .txt, .qif (Màxim: 100MB)
+                                </p>
+                            </div>
+
+                            <!-- Import Mode Selection -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Mode d'importació
+                                </label>
+                                <div class="space-y-2">
+                                    <label class="flex items-center">
+                                        <input
+                                            type="radio"
+                                            v-model="selectedImportMode"
+                                            value="from_beginning"
+                                            class="mr-2"
+                                        />
+                                        <span class="text-sm text-gray-700 dark:text-gray-300">
+                                            Importar des del principi del fitxer
+                                        </span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input
+                                            type="radio"
+                                            v-model="selectedImportMode"
+                                            value="from_last_db"
+                                            class="mr-2"
+                                        />
+                                        <span class="text-sm text-gray-700 dark:text-gray-300">
+                                            Importar des de l'última data a la base de dades
+                                        </span>
+                                    </label>
+                                </div>
+                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                    Si no s'ha importat res abans, tria "des del principi"
                                 </p>
                             </div>
 
@@ -297,7 +389,7 @@ const formatDate = (date: string) => {
                             <div class="flex gap-3">
                                 <button
                                     @click="parseFile"
-                                    :disabled="!selectedFile || !selectedCompteCorrent || !selectedCompte?.bank_type || isProcessing"
+                                    :disabled="!selectedFile || !selectedCompteCorrent || !selectedBankType || !selectedImportMode || isProcessing"
                                     class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <span v-if="isProcessing">Analitzant...</span>
@@ -335,41 +427,6 @@ const formatDate = (date: string) => {
                     </div>
                 </div>
 
-                <!-- Import Mode Selection -->
-                <div
-                    v-if="isParsed && parsedData?.requires_import_mode_selection"
-                    class="overflow-hidden bg-yellow-50 dark:bg-yellow-900/20 shadow-sm sm:rounded-lg border-2 border-yellow-200 dark:border-yellow-800"
-                >
-                    <div class="p-6">
-                        <h3 class="text-lg font-medium text-yellow-900 dark:text-yellow-100 mb-4">
-                            ⚠️ Selecciona el mode d'importació
-                        </h3>
-                        <div class="space-y-3">
-                            <label class="flex items-center">
-                                <input
-                                    type="radio"
-                                    v-model="selectedImportMode"
-                                    value="from_beginning"
-                                    class="mr-2"
-                                />
-                                <span class="text-sm text-yellow-900 dark:text-yellow-100">
-                                    Importar des del principi del fitxer
-                                </span>
-                            </label>
-                            <label class="flex items-center">
-                                <input
-                                    type="radio"
-                                    v-model="selectedImportMode"
-                                    value="from_last_db"
-                                    class="mr-2"
-                                />
-                                <span class="text-sm text-yellow-900 dark:text-yellow-100">
-                                    Importar des de l'última data a la base de dades
-                                </span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
 
                 <!-- Preview Section -->
                 <div
@@ -442,6 +499,17 @@ const formatDate = (date: string) => {
                             </div>
                         </div>
 
+                        <!-- Preview limit info -->
+                        <div
+                            v-if="parsedData.preview_limited"
+                            class="mb-4 rounded-md bg-blue-50 dark:bg-blue-900/20 p-4 border border-blue-200 dark:border-blue-800"
+                        >
+                            <p class="text-sm text-blue-800 dark:text-blue-200">
+                                ℹ️ Mostrant els últims 100 moviments de {{ parsedData.total_movements }} totals (ordenats dels més recents als més antics).
+                                Tots els moviments s'importaran quan confirmis.
+                            </p>
+                        </div>
+
                         <!-- Movements Table -->
                         <div v-if="parsedData.movements && parsedData.movements.length > 0" class="mb-6 overflow-x-auto">
                             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -456,7 +524,7 @@ const formatDate = (date: string) => {
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                    <tr v-for="(movement, index) in parsedData.movements.slice(0, 50)" :key="index">
+                                    <tr v-for="(movement, index) in parsedData.movements" :key="index">
                                         <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                                             {{ formatDate(movement.data_moviment) }}
                                         </td>
@@ -483,9 +551,6 @@ const formatDate = (date: string) => {
                                     </tr>
                                 </tbody>
                             </table>
-                            <p v-if="parsedData.movements.length > 50" class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                                Mostrant els primers 50 de {{ parsedData.movements.length }} moviments
-                            </p>
                         </div>
 
                         <!-- Import Button -->
