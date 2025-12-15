@@ -368,35 +368,35 @@ class MovementImportService
         $categoryPath = trim($categoryPath, ':');
 
         // Try multiple strategies to find the category
-        // 1. Try as-is (exact path from QIF)
-        $result = $this->traverseCategoryPath($categoryPath, $compteCorrentId);
+        // 1. Try as-is (exact path from QIF) - search only, don't create
+        $result = $this->traverseCategoryPath($categoryPath, $compteCorrentId, false);
         if ($result !== null) {
             return $result;
         }
 
-        // 2. Try prefixing based on movement amount
-        // Negative amounts = Despeses, Positive amounts = Ingressos
+        // 2. Try prefixing based on movement amount - create if needed
+        // Negative amounts = DESPESES, Positive amounts = INGRESSOS
         if ($import < 0) {
-            // Try Despeses first for negative amounts (expenses)
-            $result = $this->traverseCategoryPath('Despeses:' . $categoryPath, $compteCorrentId);
+            // Try DESPESES first for negative amounts (expenses) - create if needed
+            $result = $this->traverseCategoryPath('DESPESES:' . $categoryPath, $compteCorrentId, true);
             if ($result !== null) {
                 return $result;
             }
 
-            // Fallback: try Ingressos (in case of refunds or corrections)
-            $result = $this->traverseCategoryPath('Ingressos:' . $categoryPath, $compteCorrentId);
+            // Fallback: try INGRESSOS (in case of refunds or corrections) - create if needed
+            $result = $this->traverseCategoryPath('INGRESSOS:' . $categoryPath, $compteCorrentId, true);
             if ($result !== null) {
                 return $result;
             }
         } else {
-            // Try Ingressos first for positive amounts (income)
-            $result = $this->traverseCategoryPath('Ingressos:' . $categoryPath, $compteCorrentId);
+            // Try INGRESSOS first for positive amounts (income) - create if needed
+            $result = $this->traverseCategoryPath('INGRESSOS:' . $categoryPath, $compteCorrentId, true);
             if ($result !== null) {
                 return $result;
             }
 
-            // Fallback: try Despeses (in case of corrections)
-            $result = $this->traverseCategoryPath('Despeses:' . $categoryPath, $compteCorrentId);
+            // Fallback: try DESPESES (in case of corrections) - create if needed
+            $result = $this->traverseCategoryPath('DESPESES:' . $categoryPath, $compteCorrentId, true);
             if ($result !== null) {
                 return $result;
             }
@@ -414,12 +414,14 @@ class MovementImportService
 
     /**
      * Traverse category path and return the final category ID.
+     * Creates categories automatically if they don't exist (when $createIfNotExists is true).
      *
      * @param string $categoryPath
      * @param int $compteCorrentId
+     * @param bool $createIfNotExists Whether to create categories if they don't exist
      * @return int|null
      */
-    private function traverseCategoryPath(string $categoryPath, int $compteCorrentId): ?int
+    private function traverseCategoryPath(string $categoryPath, int $compteCorrentId, bool $createIfNotExists = false): ?int
     {
         $parts = explode(':', $categoryPath);
 
@@ -445,11 +447,45 @@ class MovementImportService
                 }
             }
 
+            // If category doesn't exist
             if (!$category) {
-                return null; // Path not found, return null quietly
-            }
+                // Return null if we shouldn't create it
+                if (!$createIfNotExists) {
+                    return null;
+                }
 
-            $currentParentId = $category['id'];
+                // Get max ordre for siblings
+                $maxOrdre = Categoria::where('compte_corrent_id', $compteCorrentId)
+                    ->where('categoria_pare_id', $currentParentId)
+                    ->max('ordre') ?? -1;
+
+                // Create new category
+                $newCategory = Categoria::create([
+                    'compte_corrent_id' => $compteCorrentId,
+                    'nom' => $nameUpper,
+                    'categoria_pare_id' => $currentParentId,
+                    'ordre' => $maxOrdre + 1,
+                ]);
+
+                Log::info('Created category automatically during movement import', [
+                    'categoria_id' => $newCategory->id,
+                    'nom' => $nameUpper,
+                    'pare_id' => $currentParentId,
+                    'path' => $categoryPath,
+                ]);
+
+                // Add to preloaded cache
+                $categories[] = [
+                    'id' => $newCategory->id,
+                    'nom' => $nameUpper,
+                    'categoria_pare_id' => $currentParentId,
+                ];
+                $this->preloadedCategories[$compteCorrentId] = $categories;
+
+                $currentParentId = $newCategory->id;
+            } else {
+                $currentParentId = $category['id'];
+            }
         }
 
         return $currentParentId;

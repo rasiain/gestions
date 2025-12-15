@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import CategoryTreeNode from '@/Components/CategoryTreeNode.vue';
+import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
 
@@ -294,27 +295,16 @@ const isCategoryExpanded = (categoriaId: number) => {
 
                                 <!-- Categoria Pare -->
                                 <div>
-                                    <label
-                                        for="categoria_pare_id"
-                                        class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                                    >
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                         Categoria Pare (opcional)
                                     </label>
-                                    <select
-                                        id="categoria_pare_id"
+                                    <CategoryTreeSelect
+                                        :categories="allCategories"
                                         v-model="form.categoria_pare_id"
-                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
-                                    >
-                                        <option :value="null">Cap (categoria arrel)</option>
-                                        <option
-                                            v-for="cat in allCategories"
-                                            :key="cat.id"
-                                            :value="cat.id"
-                                            :disabled="!!(isEditing && editingCategoria && cat.id === editingCategoria.id)"
-                                        >
-                                            {{ '—'.repeat(cat.level) }} {{ cat.nom }}
-                                        </option>
-                                    </select>
+                                        :allow-none="true"
+                                        placeholder="Cap (categoria arrel)"
+                                        :disabled-id="isEditing && editingCategoria ? editingCategoria.id : undefined"
+                                    />
                                     <p v-if="form.errors.categoria_pare_id" class="mt-1 text-sm text-red-600 dark:text-red-400">
                                         {{ form.errors.categoria_pare_id }}
                                     </p>

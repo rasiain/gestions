@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\MovementImportRequest;
-use App\Http\Services\DataProcess\FileParserService;
+use App\Http\Services\ImportFiles\FileParserService;
 use App\Http\Services\ImportFiles\CaixaEnginyersParserService;
 use App\Http\Services\ImportFiles\CaixaBankParserService;
 use App\Http\Services\ImportFiles\KMyMoneyMovementParserService;

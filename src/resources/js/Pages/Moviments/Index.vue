@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
@@ -50,7 +51,7 @@ interface PaginatedMoviments {
 
 interface Filters {
     search: string | null;
-    categoria_id: number | null;
+    categoria_id: number | null | 'none';
     data_inici: string | null;
     data_fi: string | null;
     tipus: 'ingressos' | 'despeses' | null;
@@ -272,7 +273,7 @@ const getImportClass = (import_val: number): string => {
                         <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
                             Filtres
                         </h3>
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             <!-- Search -->
                             <div>
                                 <label for="search" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -287,25 +288,16 @@ const getImportClass = (import_val: number): string => {
                                 />
                             </div>
 
-                            <!-- Categoria -->
-                            <div>
-                                <label for="categoria_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            <!-- Categoria - full width on both columns -->
+                            <div class="lg:col-span-2">
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Categoria
                                 </label>
-                                <select
-                                    id="categoria_id"
+                                <CategoryTreeSelect
+                                    :categories="categories"
                                     v-model="filterForm.categoria_id"
-                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
-                                >
-                                    <option :value="null">Totes les categories</option>
-                                    <option
-                                        v-for="categoria in categories"
-                                        :key="categoria.id"
-                                        :value="categoria.id"
-                                    >
-                                        {{ categoria.nom }}
-                                    </option>
-                                </select>
+                                    :allow-none="true"
+                                />
                             </div>
 
                             <!-- Tipus -->
@@ -565,23 +557,15 @@ const getImportClass = (import_val: number): string => {
 
                                 <!-- Categoria -->
                                 <div>
-                                    <label for="categoria_id_modal" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                         Categoria (opcional)
                                     </label>
-                                    <select
-                                        id="categoria_id_modal"
+                                    <CategoryTreeSelect
+                                        :categories="categories"
                                         v-model="form.categoria_id"
-                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
-                                    >
-                                        <option :value="null">Sense categoria</option>
-                                        <option
-                                            v-for="categoria in categories"
-                                            :key="categoria.id"
-                                            :value="categoria.id"
-                                        >
-                                            {{ categoria.nom }}
-                                        </option>
-                                    </select>
+                                        :allow-none="true"
+                                        placeholder="Selecciona una categoria..."
+                                    />
                                     <p v-if="form.errors.categoria_id" class="mt-1 text-sm text-red-600 dark:text-red-400">
                                         {{ form.errors.categoria_id }}
                                     </p>

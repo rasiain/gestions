@@ -46,7 +46,11 @@ class MovimentCompteCorrentController extends Controller
         }
 
         if ($filters['categoria_id']) {
-            $query->where('categoria_id', $filters['categoria_id']);
+            if ($filters['categoria_id'] === 'none') {
+                $query->whereNull('categoria_id');
+            } else {
+                $query->where('categoria_id', $filters['categoria_id']);
+            }
         }
 
         if ($filters['data_inici']) {

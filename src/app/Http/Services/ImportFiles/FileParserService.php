@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Services\DataProcess;
+namespace App\Http\Services\ImportFiles;
 
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;

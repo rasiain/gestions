@@ -29,11 +29,6 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // Data file processor page
-    Route::get('/data/process', function () {
-        return Inertia::render('DataFileProcessor');
-    })->name('data.process');
-
     // Titulars management
     Route::resource('titulars', TitularController::class)->only([
         'index', 'store', 'update', 'destroy'
@@ -55,12 +50,6 @@ Route::middleware('auth')->group(function () {
     Route::resource('moviments', MovimentCompteCorrentController::class)->only([
         'index', 'store', 'update', 'destroy'
     ]);
-
-    // Maintenance - Category Import
-    Route::get('/maintenance/categories/import', [CategoryImportController::class, 'index'])->name('maintenance.categories.import');
-    Route::post('/maintenance/categories/import/parse', [CategoryImportController::class, 'parse'])->name('maintenance.categories.import.parse');
-    Route::post('/maintenance/categories/import', [CategoryImportController::class, 'import'])->name('maintenance.categories.import.store');
-    Route::delete('/maintenance/categories/import', [CategoryImportController::class, 'deleteImported'])->name('maintenance.categories.import.delete');
 
     // Maintenance - Movement Import
     Route::get('/maintenance/movements/import', [MovementImportController::class, 'index'])->name('maintenance.movements.import');

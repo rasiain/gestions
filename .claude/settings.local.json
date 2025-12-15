@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(docker compose exec:*)"
+      "Bash(docker compose exec:*)",
+      "Bash(docker compose logs:*)",
+      "Bash(sips:*)",
+      "Bash(iconutil -c ico:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []

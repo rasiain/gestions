@@ -1,0 +1,13 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <clipPath id="circle-clip">
+      <circle cx="100" cy="100" r="100"/>
+    </clipPath>
+  </defs>
+
+  <!-- Fons de color verd -->
+  <circle cx="100" cy="100" r="100" fill="#dcfce7"/>
+
+  <!-- Imatge del cadernera -->
+  <image href="/logo.jpg" x="0" y="0" width="200" height="200" clip-path="url(#circle-clip)"/>
+</svg>
