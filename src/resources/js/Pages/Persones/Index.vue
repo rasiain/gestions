@@ -3,7 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 
-interface Titular {
+interface Persona {
     id: number;
     nom: string;
     cognoms: string;
@@ -12,14 +12,14 @@ interface Titular {
 }
 
 interface Props {
-    titulars: Titular[];
+    persones: Persona[];
 }
 
 const props = defineProps<Props>();
 
 const showModal = ref(false);
 const isEditing = ref(false);
-const editingTitular = ref<Titular | null>(null);
+const editingPersona = ref<Persona | null>(null);
 
 const form = useForm({
     nom: '',
@@ -28,16 +28,16 @@ const form = useForm({
 
 const openCreateModal = () => {
     isEditing.value = false;
-    editingTitular.value = null;
+    editingPersona.value = null;
     form.reset();
     showModal.value = true;
 };
 
-const openEditModal = (titular: Titular) => {
+const openEditModal = (persona: Persona) => {
     isEditing.value = true;
-    editingTitular.value = titular;
-    form.nom = titular.nom;
-    form.cognoms = titular.cognoms;
+    editingPersona.value = persona;
+    form.nom = persona.nom;
+    form.cognoms = persona.cognoms;
     showModal.value = true;
 };
 
@@ -45,35 +45,35 @@ const closeModal = () => {
     showModal.value = false;
     form.reset();
     isEditing.value = false;
-    editingTitular.value = null;
+    editingPersona.value = null;
 };
 
 const submit = () => {
-    if (isEditing.value && editingTitular.value) {
-        form.put(route('titulars.update', editingTitular.value.id), {
+    if (isEditing.value && editingPersona.value) {
+        form.put(route('persones.update', editingPersona.value.id), {
             onSuccess: () => closeModal(),
         });
     } else {
-        form.post(route('titulars.store'), {
+        form.post(route('persones.store'), {
             onSuccess: () => closeModal(),
         });
     }
 };
 
-const deleteTitular = (titular: Titular) => {
-    if (confirm(`Estàs segur que vols eliminar el titular "${titular.nom} ${titular.cognoms}"?`)) {
-        router.delete(route('titulars.destroy', titular.id));
+const deletePersona = (persona: Persona) => {
+    if (confirm(`Estàs segur que vols eliminar la persona "${persona.nom} ${persona.cognoms}"?`)) {
+        router.delete(route('persones.destroy', persona.id));
     }
 };
 </script>
 
 <template>
-    <Head title="Titulars de Comptes Corrents" />
+    <Head title="Persones" />
 
     <AuthenticatedLayout>
         <template #header>
             <h2 class="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200">
-                Titulars de Comptes Corrents
+                Persones
             </h2>
         </template>
 
@@ -85,10 +85,10 @@ const deleteTitular = (titular: Titular) => {
                         <div class="mb-6 flex items-center justify-between">
                             <div>
                                 <h3 class="text-lg font-medium">
-                                    Llistat de Titulars
+                                    Llistat de Persones
                                 </h3>
                                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                                    Gestiona els titulars dels comptes corrents
+                                    Gestiona les persones (titulars de comptes, propietaris, etc.)
                                 </p>
                             </div>
                             <button
@@ -108,12 +108,12 @@ const deleteTitular = (titular: Titular) => {
                                         d="M12 6v6m0 0v6m0-6h6m-6 0H6"
                                     />
                                 </svg>
-                                Afegir Titular
+                                Afegir Persona
                             </button>
                         </div>
 
                         <!-- Table -->
-                        <div v-if="titulars.length > 0" class="overflow-x-auto">
+                        <div v-if="persones.length > 0" class="overflow-x-auto">
                             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                 <thead class="bg-gray-50 dark:bg-gray-700">
                                     <tr>
@@ -136,25 +136,25 @@ const deleteTitular = (titular: Titular) => {
                                 </thead>
                                 <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
                                     <tr
-                                        v-for="titular in titulars"
-                                        :key="titular.id"
+                                        v-for="persona in persones"
+                                        :key="persona.id"
                                         class="hover:bg-gray-50 dark:hover:bg-gray-700"
                                     >
                                         <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
-                                            {{ titular.nom }}
+                                            {{ persona.nom }}
                                         </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
-                                            {{ titular.cognoms }}
+                                            {{ persona.cognoms }}
                                         </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                                             <button
-                                                @click="openEditModal(titular)"
+                                                @click="openEditModal(persona)"
                                                 class="mr-3 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
                                             >
                                                 Editar
                                             </button>
                                             <button
-                                                @click="deleteTitular(titular)"
+                                                @click="deletePersona(persona)"
                                                 class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
                                             >
                                                 Eliminar
@@ -181,10 +181,10 @@ const deleteTitular = (titular: Titular) => {
                                 />
                             </svg>
                             <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
-                                No hi ha titulars
+                                No hi ha persones
                             </h3>
                             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                                Comença afegint el primer titular.
+                                Comença afegint la primera persona.
                             </p>
                             <div class="mt-6">
                                 <button
@@ -204,7 +204,7 @@ const deleteTitular = (titular: Titular) => {
                                             d="M12 6v6m0 0v6m0-6h6m-6 0H6"
                                         />
                                     </svg>
-                                    Afegir Titular
+                                    Afegir Persona
                                 </button>
                             </div>
                         </div>
@@ -241,7 +241,7 @@ const deleteTitular = (titular: Titular) => {
                                 class="mb-4 text-lg font-medium leading-6 text-gray-900 dark:text-gray-100"
                                 id="modal-title"
                             >
-                                {{ isEditing ? 'Editar Titular' : 'Nou Titular' }}
+                                {{ isEditing ? 'Editar Persona' : 'Nova Persona' }}
                             </h3>
 
                             <div class="space-y-4">

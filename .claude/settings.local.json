@@ -5,7 +5,8 @@
       "Bash(docker compose logs:*)",
       "Bash(sips:*)",
       "Bash(iconutil -c ico:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(php artisan:*)"
     ],
     "deny": [],
     "ask": []

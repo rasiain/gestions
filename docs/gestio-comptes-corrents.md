@@ -2,7 +2,7 @@
 
 ## Descripció
 
-Els comptes corrents són els comptes bancaris gestionats per l'aplicació. Cada compte corrent pot tenir múltiples titulars associats i les seves pròpies categories d'ingressos i despeses.
+Els comptes corrents són els comptes bancaris gestionats per l'aplicació. Cada compte corrent pot tenir múltiples titulars (persones) associats i les seves pròpies categories d'ingressos i despeses.
 
 ## Funcionalitats
 
@@ -46,8 +46,8 @@ Els comptes corrents són els comptes bancaris gestionats per l'aplicació. Cada
   - Valor entre 0 i 255
   - Per defecte: 0
 
-- **Titulars**: Titulars associats al compte
-  - Relació many-to-many amb la taula `g_titulars`
+- **Titulars**: Persones associades al compte com a titulars
+  - Relació many-to-many amb la taula `g_persones`
   - Es poden seleccionar múltiples titulars via checkboxes
 
 ## Base de Dades
@@ -76,7 +76,7 @@ CREATE TABLE g_compte_corrent_titular (
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
     FOREIGN KEY (compte_corrent_id) REFERENCES g_comptes_corrents(id) ON DELETE CASCADE,
-    FOREIGN KEY (titular_id) REFERENCES g_titulars(id) ON DELETE CASCADE
+    FOREIGN KEY (titular_id) REFERENCES g_persones(id) ON DELETE CASCADE
 );
 ```
 
@@ -85,7 +85,7 @@ CREATE TABLE g_compte_corrent_titular (
 **Ubicació**: `app/Models/CompteCorrent.php`
 
 ### Relacions
-- `titulars()`: Relació many-to-many amb Titular via taula pivot `g_compte_corrent_titular`
+- `titulars()`: Relació many-to-many amb Persona via taula pivot `g_compte_corrent_titular`
 - `categories()`: Relació one-to-many amb Categoria, ordenada per `ordre`
 
 ### Accessors
@@ -106,7 +106,7 @@ CREATE TABLE g_compte_corrent_titular (
 'entitat' => ['required', 'string', 'max:200'],
 'ordre' => ['nullable', 'integer', 'min:0', 'max:255'],
 'titular_ids' => ['nullable', 'array'],
-'titular_ids.*' => ['integer', 'exists:g_titulars,id'],
+'titular_ids.*' => ['integer', 'exists:g_persones,id'],
 ```
 
 ## Controller
@@ -143,7 +143,7 @@ interface CompteCorrent {
     nom: string | null;
     entitat: string;
     ordre: number;
-    titulars: Titular[];
+    titulars: Persona[];
     created_at: string;
     updated_at: string;
 }

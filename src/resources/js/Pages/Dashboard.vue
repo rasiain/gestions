@@ -70,10 +70,10 @@ import { Head, Link } from '@inertiajs/vue3';
                                 → Comptes Corrents
                             </Link>
                             <Link
-                                :href="route('titulars.index')"
+                                :href="route('persones.index')"
                                 class="block text-sm text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
                             >
-                                → Titulars
+                                → Persones
                             </Link>
                             <Link
                                 :href="route('categories.index')"

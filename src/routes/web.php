@@ -6,7 +6,7 @@ use App\Http\Controllers\CompteCorrentController;
 use App\Http\Controllers\MovementImportController;
 use App\Http\Controllers\MovimentCompteCorrentController;
 use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\TitularController;
+use App\Http\Controllers\PersonaController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -29,8 +29,8 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    // Titulars management
-    Route::resource('titulars', TitularController::class)->only([
+    // Persones management
+    Route::resource('persones', PersonaController::class)->only([
         'index', 'store', 'update', 'destroy'
     ]);
 

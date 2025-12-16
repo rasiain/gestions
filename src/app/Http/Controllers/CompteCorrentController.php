@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\CompteCorrentRequest;
 use App\Models\CompteCorrent;
-use App\Models\Titular;
+use App\Models\Persona;
 use Inertia\Inertia;
 
 class CompteCorrentController extends Controller
@@ -19,7 +19,7 @@ class CompteCorrentController extends Controller
             ->orderBy('entitat')
             ->get();
 
-        $titulars = Titular::orderBy('cognoms')
+        $titulars = Persona::orderBy('cognoms')
             ->orderBy('nom')
             ->get();
 

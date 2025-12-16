@@ -35,11 +35,11 @@ class CompteCorrent extends Model
     ];
 
     /**
-     * Get the titulars associated with this compte corrent.
+     * Get the titulars (persones) associated with this compte corrent.
      */
     public function titulars()
     {
-        return $this->belongsToMany(Titular::class, 'g_compte_corrent_titular', 'compte_corrent_id', 'titular_id')
+        return $this->belongsToMany(Persona::class, 'g_compte_corrent_titular', 'compte_corrent_id', 'titular_id')
             ->withTimestamps();
     }
 

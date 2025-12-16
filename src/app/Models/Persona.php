@@ -4,14 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class Titular extends Model
+class Persona extends Model
 {
     /**
      * The table associated with the model.
      *
      * @var string
      */
-    protected $table = 'g_titulars';
+    protected $table = 'g_persones';
 
     /**
      * The attributes that are mass assignable.
@@ -24,7 +24,7 @@ class Titular extends Model
     ];
 
     /**
-     * Get the comptes corrents associated with this titular.
+     * Get the comptes corrents associated with this persona (as titular).
      */
     public function comptesCorrents()
     {
