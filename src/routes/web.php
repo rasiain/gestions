@@ -3,10 +3,12 @@
 use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\CategoryImportController;
 use App\Http\Controllers\CompteCorrentController;
+use App\Http\Controllers\ImmobleController;
 use App\Http\Controllers\MovementImportController;
 use App\Http\Controllers\MovimentCompteCorrentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PersonaController;
+use App\Http\Controllers\ProveidorController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -31,6 +33,16 @@ Route::middleware('auth')->group(function () {
 
     // Persones management
     Route::resource('persones', PersonaController::class)->only([
+        'index', 'store', 'update', 'destroy'
+    ]);
+
+    // Immobles management
+    Route::resource('immobles', ImmobleController::class)->only([
+        'index', 'store', 'update', 'destroy'
+    ]);
+
+    // Proveidors management
+    Route::resource('proveidors', ProveidorController::class)->only([
         'index', 'store', 'update', 'destroy'
     ]);
 
