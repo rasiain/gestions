@@ -27,7 +27,7 @@ import { Head, Link } from '@inertiajs/vue3';
                 </div>
 
                 <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                    <!-- Gestions bancàries Card with all sub-links -->
+                    <!-- Gestions bancàries Card -->
                     <div class="rounded-lg bg-white p-6 shadow-sm dark:bg-gray-800">
                         <div class="flex items-center">
                             <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
@@ -68,12 +68,6 @@ import { Head, Link } from '@inertiajs/vue3';
                                 class="block text-sm text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
                             >
                                 → Comptes Corrents
-                            </Link>
-                            <Link
-                                :href="route('persones.index')"
-                                class="block text-sm text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
-                            >
-                                → Persones
                             </Link>
                             <Link
                                 :href="route('categories.index')"
@@ -123,6 +117,51 @@ import { Head, Link } from '@inertiajs/vue3';
                             <p class="text-sm italic text-gray-400 dark:text-gray-600">
                                 Properament disponible
                             </p>
+                        </div>
+                    </div>
+
+                    <!-- Configuració Card -->
+                    <div class="rounded-lg bg-white p-6 shadow-sm dark:bg-gray-800">
+                        <div class="flex items-center">
+                            <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900">
+                                <svg
+                                    class="h-6 w-6 text-purple-600 dark:text-purple-400"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                                    />
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                    />
+                                </svg>
+                            </div>
+                            <div class="ml-4">
+                                <h4 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                                    Configuració
+                                </h4>
+                                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                    Paràmetres generals de l'aplicació
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Sub-links -->
+                        <div class="mt-4 ml-16 space-y-2 border-l-2 border-purple-200 dark:border-purple-800 pl-4">
+                            <Link
+                                :href="route('persones.index')"
+                                class="block text-sm text-gray-600 hover:text-purple-600 dark:text-gray-400 dark:hover:text-purple-400 transition-colors"
+                            >
+                                → Persones
+                            </Link>
                         </div>
                     </div>
                 </div>
