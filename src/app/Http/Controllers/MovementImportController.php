@@ -45,7 +45,7 @@ class MovementImportController extends Controller
     public function parse(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'file' => 'required|file|mimes:xls,xlsx,csv,txt,qif|mimetypes:application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,application/octet-stream|max:102400',
+            'file' => 'required|file|mimes:xls,xlsx,csv,txt,qif,html|mimetypes:application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,text/html,application/octet-stream|max:102400',
             'compte_corrent_id' => 'required|integer|exists:g_comptes_corrents,id',
             'bank_type' => 'required|string|in:caixa_enginyers,caixabank,kmymoney',
             'import_mode' => 'nullable|string|in:from_beginning,from_last_db',
@@ -100,13 +100,12 @@ class MovementImportController extends Controller
             $previewLimit = 100;
 
             if ($totalMovements > $previewLimit) {
-                // Reverse to show most recent first, then take the limit
-                $result['movements'] = array_slice(array_reverse($result['movements']), 0, $previewLimit);
+                // Keep original file order, just limit the preview
+                $result['movements'] = array_slice($result['movements'], 0, $previewLimit);
                 $result['preview_limited'] = true;
                 $result['total_movements'] = $totalMovements;
             } else {
-                // Reverse to show most recent first
-                $result['movements'] = array_reverse($result['movements']);
+                // Keep original file order
                 $result['preview_limited'] = false;
                 $result['total_movements'] = $totalMovements;
             }
@@ -144,7 +143,6 @@ class MovementImportController extends Controller
             $compteCorrentId = $validated['compte_corrent_id'];
             $bankType = $validated['bank_type'];
             $importMode = $validated['import_mode'] ?? null;
-            $editedMovements = $validated['edited_movements'] ?? [];
 
             // Parse file (same as parse endpoint)
             if ($bankType === 'kmymoney') {
@@ -172,23 +170,6 @@ class MovementImportController extends Controller
                         'errors' => $result['errors'],
                     ],
                 ], 422);
-            }
-
-            // Apply user edits to movements
-            if (!empty($editedMovements)) {
-                foreach ($editedMovements as $index => $edits) {
-                    if (isset($result['movements'][$index])) {
-                        if (isset($edits['data_moviment'])) {
-                            $result['movements'][$index]['data_moviment'] = $edits['data_moviment'];
-                        }
-                        if (isset($edits['concepte'])) {
-                            $result['movements'][$index]['concepte'] = $edits['concepte'];
-                        }
-                        if (isset($edits['categoria_id'])) {
-                            $result['movements'][$index]['categoria_id'] = $edits['categoria_id'];
-                        }
-                    }
-                }
             }
 
             // Import to database
@@ -221,4 +202,5 @@ class MovementImportController extends Controller
             ], 500);
         }
     }
+
 }

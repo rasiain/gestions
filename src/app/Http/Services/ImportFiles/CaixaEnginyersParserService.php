@@ -8,7 +8,7 @@ class CaixaEnginyersParserService extends AbstractMovementParserService
 {
     /**
      * Parse Caixa d'Enginyers XLS file.
-     * Column structure: [0]=data operació, [1]=concepte, [2]=data valor (ignore), [3]=import, [4]=saldo
+     * Column structure: [0]=null, [1]=data operació, [2]=concepte, [3]=data valor (ignore), [4]=import, [5]=saldo
      *
      * @param array $rows Parsed XLS rows
      * @param int $compteCorrentId
@@ -26,16 +26,17 @@ class CaixaEnginyersParserService extends AbstractMovementParserService
             }
 
             // Detect header row (contains "Data" or "Moviment" or similar)
+            // Check index 1 since index 0 is always null
             if (!$headerFound) {
-                $firstCell = mb_strtoupper(trim($row[0] ?? ''), 'UTF-8');
-                if (str_contains($firstCell, 'DATA') || str_contains($firstCell, 'MOVIMENT')) {
+                $secondCell = mb_strtoupper(trim($row[1] ?? ''), 'UTF-8');
+                if (str_contains($secondCell, 'DATA') || str_contains($secondCell, 'OPERACIÓ')) {
                     $headerFound = true;
                 }
                 continue;
             }
 
-            // Validate row has at least 5 columns
-            if (count($row) < 5) {
+            // Validate row has at least 6 columns (index 0-5)
+            if (count($row) < 6) {
                 Log::warning('CaixaEnginyers: Row with insufficient columns', [
                     'row_index' => $index,
                     'columns' => count($row),
@@ -43,24 +44,30 @@ class CaixaEnginyersParserService extends AbstractMovementParserService
                 continue;
             }
 
-            // Parse columns
-            $dataMoviment = trim($row[0] ?? '');
-            $concepte = trim($row[1] ?? '');
-            $importStr = trim($row[3] ?? '');
-            $saldoStr = trim($row[4] ?? '');
+            // Parse columns (shifted by 1 due to null at index 0)
+            $dataMoviment = trim($row[1] ?? '');
+            $concepte = trim($row[2] ?? '');
+            $importStr = trim($row[4] ?? '');
+            $saldoStr = trim($row[5] ?? '');
 
             // Skip if essential fields are empty
             if (empty($dataMoviment) || empty($importStr)) {
                 continue;
             }
 
+            // Validate saldo
+            if (!$this->isValidSaldo($saldoStr, $index)) {
+                continue;
+            }
+
             try {
+                $trimmedConcept = $this->trimConcept($concepte);
                 $movements[] = [
                     'data_moviment' => $this->normalizeDate($dataMoviment),
-                    'concepte' => $this->trimConcept($concepte),
+                    'concepte' => $trimmedConcept,
                     'import' => $this->normalizeAmount($importStr),
                     'saldo_posterior' => !empty($saldoStr) ? $this->normalizeAmount($saldoStr) : null,
-                    'notes' => null,
+                    'notes' => $trimmedConcept, // Default notes to concept
                     'categoria_path' => null,
                 ];
             } catch (\Exception $e) {
@@ -74,6 +81,44 @@ class CaixaEnginyersParserService extends AbstractMovementParserService
         }
 
         return $movements;
+    }
+
+    /**
+     * Validate that saldo is a valid positive number.
+     *
+     * @param string $saldoStr
+     * @param int $rowIndex
+     * @return bool
+     */
+    private function isValidSaldo(string $saldoStr, int $rowIndex): bool
+    {
+        // Empty saldo is valid (optional field)
+        if (empty($saldoStr)) {
+            return true;
+        }
+
+        if (!$this->conteNumeros($saldoStr)){
+            return false;
+        }
+
+        try {
+            $saldoValue = $this->normalizeAmount($saldoStr);
+            if ($saldoValue < 0) {
+                Log::warning('CaixaEnginyers: Invalid saldo (negative)', [
+                    'row_index' => $rowIndex,
+                    'saldo' => $saldoStr,
+                ]);
+                return false;
+            }
+            return true;
+        } catch (\Exception $e) {
+            Log::warning('CaixaEnginyers: Invalid saldo format', [
+                'row_index' => $rowIndex,
+                'saldo' => $saldoStr,
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
     }
 
     /**

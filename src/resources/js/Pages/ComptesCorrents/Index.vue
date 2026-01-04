@@ -16,6 +16,7 @@ interface CompteCorrent {
     entitat: string;
     ordre: number;
     titulars: Titular[];
+    saldo_actual: number | null;
     created_at: string;
     updated_at: string;
 }
@@ -86,6 +87,14 @@ const getTitularsNames = (titulars: Titular[]): string => {
     if (titulars.length === 0) return 'Sense titulars';
     return titulars.map(t => `${t.nom} ${t.cognoms}`).join(', ');
 };
+
+const formatSaldo = (saldo: number | null): string => {
+    if (saldo === null) return '-';
+    return new Intl.NumberFormat('ca-ES', {
+        style: 'currency',
+        currency: 'EUR',
+    }).format(saldo);
+};
 </script>
 
 <template>
@@ -99,7 +108,7 @@ const getTitularsNames = (titulars: Titular[]): string => {
         </template>
 
         <div class="py-12">
-            <div class="mx-auto max-w-7xl sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-screen-2xl sm:px-6 lg:px-8">
                 <div class="overflow-hidden bg-white shadow-sm dark:bg-gray-800 sm:rounded-lg">
                     <div class="p-6 text-gray-900 dark:text-gray-100">
                         <!-- Header with Add Button -->
@@ -159,6 +168,11 @@ const getTitularsNames = (titulars: Titular[]): string => {
                                             Titulars
                                         </th>
                                         <th
+                                            class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300"
+                                        >
+                                            Saldo Actual
+                                        </th>
+                                        <th
                                             class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300"
                                         >
                                             Ordre
@@ -187,6 +201,12 @@ const getTitularsNames = (titulars: Titular[]): string => {
                                         </td>
                                         <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                                             {{ getTitularsNames(compte.titulars) }}
+                                        </td>
+                                        <td
+                                            class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium"
+                                            :class="compte.saldo_actual !== null && compte.saldo_actual < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'"
+                                        >
+                                            {{ formatSaldo(compte.saldo_actual) }}
                                         </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                                             {{ compte.ordre }}

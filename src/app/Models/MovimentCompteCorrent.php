@@ -21,6 +21,7 @@ class MovimentCompteCorrent extends Model
     protected $fillable = [
         'data_moviment',
         'concepte',
+        'concepte_original',
         'import',
         'saldo_posterior',
         'hash',
@@ -110,7 +111,7 @@ class MovimentCompteCorrent extends Model
 
     /**
      * Generate hash for duplicate detection.
-     * Hash is based on: date + concept + amount + account
+     * Hash is based on: date + amount + account (concept excluded to handle bank format variations)
      *
      * @param string $dataMoviment
      * @param string $concepte
@@ -120,10 +121,12 @@ class MovimentCompteCorrent extends Model
      */
     public static function generateHash(string $dataMoviment, string $concepte, float $import, int $compteCorrentId): string
     {
+        // Concept is kept as parameter for backwards compatibility but not used in hash
+        // This allows matching movements from different sources (KMyMoney, bank exports)
+        // that have slight variations in concept text
         $data = sprintf(
-            '%s|%s|%.2f|%d',
+            '%s|%.2f|%d',
             $dataMoviment,
-            trim($concepte),
             $import,
             $compteCorrentId
         );

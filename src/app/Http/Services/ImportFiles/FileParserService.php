@@ -208,12 +208,7 @@ class FileParserService
         ]);
 
         while (($row = fgetcsv($handle, 0, $detectedDelimiter)) !== false) {
-            $processedRow = array_map(function ($cell) {
-                $cell = trim($cell ?? '');
-                return $cell === '' ? null : $cell;
-            }, $row);
-
-            $rows[] = $processedRow;
+            $rows[] = $this->processCsvRow($row);
         }
 
         fclose($handle);
@@ -264,14 +259,40 @@ class FileParserService
         }
 
         foreach ($xpath->query('.//tr', $table) as $tr) {
-            $row = [];
-            foreach ($xpath->query('./th|./td', $tr) as $cell) {
-                $text = trim($cell->textContent);
-                $row[] = $text === '' ? null : $text;
-            }
-            $rows[] = $row;
+            $rows[] = $this->extractTableRow($xpath, $tr);
         }
 
         return $rows;
+    }
+
+    /**
+     * Process a single CSV row: trim cells and convert empty strings to null.
+     *
+     * @param array $row
+     * @return array
+     */
+    private function processCsvRow(array $row): array
+    {
+        return array_map(function ($cell) {
+            $cell = trim($cell ?? '');
+            return $cell === '' ? null : $cell;
+        }, $row);
+    }
+
+    /**
+     * Extract cells from an HTML table row.
+     *
+     * @param \DOMXPath $xpath
+     * @param \DOMElement $tr
+     * @return array
+     */
+    private function extractTableRow(\DOMXPath $xpath, \DOMElement $tr): array
+    {
+        $row = [];
+        foreach ($xpath->query('./th|./td', $tr) as $cell) {
+            $text = trim($cell->textContent);
+            $row[] = $text === '' ? null : $text;
+        }
+        return $row;
     }
 }

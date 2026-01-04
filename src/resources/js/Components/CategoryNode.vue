@@ -72,7 +72,7 @@ const select = () => {
 <template>
     <div>
         <div
-            @click="select"
+            @click.stop="select"
             :style="indentStyle"
             :class="[
                 'py-2 pr-3 rounded-md transition-colors flex items-center gap-2',

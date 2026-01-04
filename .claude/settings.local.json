@@ -7,7 +7,9 @@
       "Bash(iconutil -c ico:*)",
       "Bash(ls:*)",
       "Bash(php artisan:*)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(npm run build:*)",
+      "Bash(docker-compose exec:*)"
     ],
     "deny": [],
     "ask": []

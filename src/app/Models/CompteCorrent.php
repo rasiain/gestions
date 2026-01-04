@@ -35,6 +35,15 @@ class CompteCorrent extends Model
     ];
 
     /**
+     * The accessors to append to the model's array form.
+     *
+     * @var array<int, string>
+     */
+    protected $appends = [
+        'bank_type',
+    ];
+
+    /**
      * Get the titulars (persones) associated with this compte corrent.
      */
     public function titulars()
@@ -49,6 +58,27 @@ class CompteCorrent extends Model
     public function categories()
     {
         return $this->hasMany(Categoria::class, 'compte_corrent_id')->orderBy('ordre');
+    }
+
+    /**
+     * Get the moviments associated with this compte corrent.
+     */
+    public function moviments()
+    {
+        return $this->hasMany(MovimentCompteCorrent::class, 'compte_corrent_id');
+    }
+
+    /**
+     * Get the current balance (saldo_posterior from the most recent movement).
+     */
+    public function getSaldoActualAttribute(): ?float
+    {
+        $lastMoviment = $this->moviments()
+            ->orderByDesc('data_moviment')
+            ->orderByDesc('id')
+            ->first();
+
+        return $lastMoviment?->saldo_posterior;
     }
 
     /**

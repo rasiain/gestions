@@ -105,7 +105,7 @@ const getCategoryPath = (categoryId: number): string => {
 </script>
 
 <template>
-    <div class="category-tree-select">
+    <div class="category-tree-select" @click.stop>
         <!-- Selected value display -->
         <div class="mb-2 text-sm text-gray-600 dark:text-gray-400">
             <span v-if="modelValue === null">{{ placeholder }}</span>
@@ -119,7 +119,7 @@ const getCategoryPath = (categoryId: number): string => {
         <div class="border border-gray-300 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-700 max-h-96 overflow-y-auto">
             <!-- All categories option -->
             <div
-                @click="selectCategory(null)"
+                @click.stop="selectCategory(null)"
                 :class="[
                     'px-3 py-2 cursor-pointer rounded-md transition-colors mb-1',
                     isSelected(null)
@@ -133,7 +133,7 @@ const getCategoryPath = (categoryId: number): string => {
             <!-- No category option -->
             <div
                 v-if="allowNone"
-                @click="selectCategory('none')"
+                @click.stop="selectCategory('none')"
                 :class="[
                     'px-3 py-2 cursor-pointer rounded-md transition-colors mb-2',
                     isSelected('none')

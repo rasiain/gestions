@@ -2,7 +2,7 @@ services:
   app:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: laravel-app
     restart: unless-stopped
     ports:
@@ -10,6 +10,10 @@ services:
     volumes:
       - ./src:/var/www/html
       - ./docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+      - ./docker/php/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
+    environment:
+      - XDEBUG_MODE=debug
+      - XDEBUG_CONFIG=client_host=host.docker.internal
     networks:
       - laravel-network
     depends_on:

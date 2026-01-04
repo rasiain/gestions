@@ -140,4 +140,9 @@ abstract class AbstractMovementParserService
 
         return $concept;
     }
+
+    protected function conteNumeros(string $amount): bool
+    {
+        return preg_match('/[-+]?\d*\.?\d+/', $amount);
+    }
 }

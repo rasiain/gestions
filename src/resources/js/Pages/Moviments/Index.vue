@@ -26,6 +26,8 @@ interface MovimentCompteCorrent {
     compte_corrent_id: number;
     data_moviment: string;
     concepte: string;
+    concepte_original: string | null;
+    notes: string | null;
     import: number;
     saldo_posterior: number | null;
     categoria_id: number | null;
@@ -84,6 +86,7 @@ const form = useForm({
     compte_corrent_id: props.selectedCompteCorrentId,
     data_moviment: '',
     concepte: '',
+    notes: '' as string | null,
     import: 0 as number | string,
     saldo_posterior: null as number | string | null,
     categoria_id: null as number | null,
@@ -143,6 +146,7 @@ const openEditModal = (moviment: MovimentCompteCorrent) => {
     form.compte_corrent_id = moviment.compte_corrent_id;
     form.data_moviment = moviment.data_moviment;
     form.concepte = moviment.concepte;
+    form.notes = moviment.notes;
     form.import = moviment.import;
     form.saldo_posterior = moviment.saldo_posterior;
     form.categoria_id = moviment.categoria_id;
@@ -219,7 +223,7 @@ const getImportClass = (import_val: number): string => {
         </template>
 
         <div class="py-12">
-            <div class="mx-auto max-w-7xl sm:px-6 lg:px-8 space-y-6">
+            <div class="mx-auto max-w-screen-2xl sm:px-6 lg:px-8 space-y-6">
                 <!-- Compte Corrent Selector & Stats -->
                 <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg dark:bg-gray-800">
                     <div class="p-6">
@@ -514,6 +518,22 @@ const getImportClass = (import_val: number): string => {
                                     />
                                     <p v-if="form.errors.concepte" class="mt-1 text-sm text-red-600 dark:text-red-400">
                                         {{ form.errors.concepte }}
+                                    </p>
+                                </div>
+
+                                <!-- Notes -->
+                                <div>
+                                    <label for="notes" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Notes (opcional)
+                                    </label>
+                                    <textarea
+                                        id="notes"
+                                        v-model="form.notes"
+                                        rows="3"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                    <p v-if="form.errors.notes" class="mt-1 text-sm text-red-600 dark:text-red-400">
+                                        {{ form.errors.notes }}
                                     </p>
                                 </div>
 

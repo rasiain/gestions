@@ -51,7 +51,6 @@ const selectedImportMode = ref<string | null>(null);
 const isProcessing = ref<boolean>(false);
 const isParsed = ref<boolean>(false);
 const parsedData = ref<ParsedData | null>(null);
-const editedMovements = ref<Record<number, Partial<Movement>>>({});
 const errorMessage = ref<string>('');
 const successMessage = ref<string>('');
 
@@ -91,7 +90,6 @@ watch(selectedCompteCorrent, () => {
     selectedBankType.value = null;
     isParsed.value = false;
     parsedData.value = null;
-    editedMovements.value = {};
     selectedImportMode.value = null;
 });
 
@@ -101,7 +99,6 @@ const handleFileChange = (event: Event) => {
         selectedFile.value = target.files[0];
         isParsed.value = false;
         parsedData.value = null;
-        editedMovements.value = {};
         selectedImportMode.value = null;
         errorMessage.value = '';
         successMessage.value = '';
@@ -197,11 +194,6 @@ const importMovements = async () => {
             formData.append('import_mode', selectedImportMode.value);
         }
 
-        // Add edited movements
-        if (Object.keys(editedMovements.value).length > 0) {
-            formData.append('edited_movements', JSON.stringify(editedMovements.value));
-        }
-
         const response = await axios.post('/maintenance/movements/import', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
@@ -230,22 +222,10 @@ const resetForm = () => {
     selectedBankType.value = null;
     isParsed.value = false;
     parsedData.value = null;
-    editedMovements.value = {};
     selectedImportMode.value = null;
     errorMessage.value = '';
     const fileInput = document.getElementById('file-upload') as HTMLInputElement;
     if (fileInput) fileInput.value = '';
-};
-
-const handleMovementEdit = (index: number, field: keyof Movement, value: any) => {
-    if (!editedMovements.value[index]) {
-        editedMovements.value[index] = {};
-    }
-    editedMovements.value[index][field] = value;
-};
-
-const getEditedValue = (index: number, field: keyof Movement, originalValue: any) => {
-    return editedMovements.value[index]?.[field] ?? originalValue;
 };
 
 const formatCurrency = (amount: number) => {
@@ -259,6 +239,7 @@ const formatDate = (date: string) => {
     const [year, month, day] = date.split('-');
     return `${day}/${month}/${year}`;
 };
+
 </script>
 
 <template>
@@ -280,7 +261,7 @@ const formatDate = (date: string) => {
         </template>
 
         <div class="py-12">
-            <div class="mx-auto max-w-7xl sm:px-6 lg:px-8 space-y-6">
+            <div class="mx-auto max-w-screen-2xl sm:px-6 lg:px-8 space-y-6">
                 <!-- Upload Section -->
                 <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg dark:bg-gray-800">
                     <div class="p-6">
@@ -342,12 +323,12 @@ const formatDate = (date: string) => {
                                 <input
                                     id="file-upload"
                                     type="file"
-                                    accept=".xls,.xlsx,.csv,.txt,.qif"
+                                    accept=".xls,.xlsx,.csv,.txt,.qif,.html"
                                     @change="handleFileChange"
                                     class="block w-full text-sm text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer bg-gray-50 dark:bg-gray-700"
                                 />
                                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                    Formats suportats: .xls, .xlsx, .csv, .txt, .qif (Màxim: 100MB)
+                                    Formats suportats: .xls, .xlsx, .csv, .txt, .qif, .html (Màxim: 100MB)
                                 </p>
                             </div>
 
@@ -529,12 +510,7 @@ const formatDate = (date: string) => {
                                             {{ formatDate(movement.data_moviment) }}
                                         </td>
                                         <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
-                                            <input
-                                                type="text"
-                                                :value="getEditedValue(index, 'concepte', movement.concepte)"
-                                                @input="(e) => handleMovementEdit(index, 'concepte', (e.target as HTMLInputElement).value)"
-                                                class="w-full rounded border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-xs"
-                                            />
+                                            {{ movement.concepte }}
                                         </td>
                                         <td class="px-3 py-2 whitespace-nowrap text-sm text-right" :class="movement.import >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
                                             {{ formatCurrency(movement.import) }}
@@ -545,8 +521,8 @@ const formatDate = (date: string) => {
                                         <td class="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
                                             {{ movement.categoria_path || '-' }}
                                         </td>
-                                        <td class="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
-                                            {{ movement.notes || '-' }}
+                                        <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100 max-w-xs truncate">
+                                            {{ movement.notes }}
                                         </td>
                                     </tr>
                                 </tbody>
@@ -593,5 +569,6 @@ const formatDate = (date: string) => {
                 </div>
             </div>
         </div>
+
     </AuthenticatedLayout>
 </template>

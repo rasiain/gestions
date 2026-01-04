@@ -115,50 +115,26 @@ class KMyMoneyMovementParserService extends AbstractMovementParserService
             return null;
         }
 
-        // Skip Opening Balance with T=0 (technical records)
-        $payee = $transaction['payee'] ?? '';
+        // Skip Opening Balance transactions
         $amount = $this->normalizeAmount($transaction['amount']);
-        if (str_contains($payee, 'Opening Balance') && abs($amount) < 0.01) {
-            Log::debug('KMyMoney: Skipping Opening Balance with zero amount', [
-                'line_number' => $lineNumber,
-            ]);
+        if ($this->isOpeningBalance($transaction, $amount, $lineNumber)) {
             return null;
         }
 
         // Process category
-        $categoryPath = null;
-        if (isset($transaction['category'])) {
-            $category = trim($transaction['category']);
-
-            // Ignore categories with [brackets] (account names, not categories)
-            if (!str_starts_with($category, '[') && !str_ends_with($category, ']')) {
-                $categoryPath = $category;
-            }
-        }
+        $categoryPath = $this->extractCategoryPath($transaction);
 
         // Build concept from payee and/or memo
-        $concept = '';
-        if (!empty($transaction['payee'])) {
-            $concept = $transaction['payee'];
-        }
-        if (!empty($transaction['memo']) && empty($concept)) {
-            $concept = $transaction['memo'];
-        } elseif (!empty($transaction['memo'])) {
-            // If both exist, payee is more important for concept
-            $concept = $transaction['payee'];
-        }
-
-        if (empty($concept)) {
-            $concept = 'MOVIMENT SENSE CONCEPTE';
-        }
+        $concept = $this->buildConcept($transaction);
+        $trimmedConcept = $this->trimConcept($concept);
 
         try {
             return [
                 'data_moviment' => $this->normalizeDate($transaction['date']),
-                'concepte' => $this->trimConcept($concept),
+                'concepte' => $trimmedConcept,
                 'import' => $amount,
                 'saldo_posterior' => null, // QIF doesn't have balance
-                'notes' => $transaction['memo'] ?? null,
+                'notes' => $transaction['memo'] ?? $trimmedConcept, // Default notes to memo or concept
                 'categoria_path' => $categoryPath,
             ];
         } catch (\Exception $e) {
@@ -169,6 +145,72 @@ class KMyMoneyMovementParserService extends AbstractMovementParserService
             ]);
             return null;
         }
+    }
+
+    /**
+     * Check if transaction is an Opening Balance record.
+     *
+     * @param array $transaction
+     * @param float $amount
+     * @param int $lineNumber
+     * @return bool
+     */
+    private function isOpeningBalance(array $transaction, float $amount, int $lineNumber): bool
+    {
+        $payee = $transaction['payee'] ?? '';
+
+        if (str_contains($payee, 'Opening Balance') && abs($amount) < 0.01) {
+            Log::debug('KMyMoney: Skipping Opening Balance with zero amount', [
+                'line_number' => $lineNumber,
+            ]);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Extract category path from transaction.
+     *
+     * @param array $transaction
+     * @return string|null
+     */
+    private function extractCategoryPath(array $transaction): ?string
+    {
+        if (!isset($transaction['category'])) {
+            return null;
+        }
+
+        $category = trim($transaction['category']);
+
+        // Ignore categories with [brackets] (account names, not categories)
+        if (str_starts_with($category, '[') && str_ends_with($category, ']')) {
+            return null;
+        }
+
+        return $category;
+    }
+
+    /**
+     * Build concept from payee and memo.
+     *
+     * @param array $transaction
+     * @return string
+     */
+    private function buildConcept(array $transaction): string
+    {
+        $payee = $transaction['payee'] ?? '';
+        $memo = $transaction['memo'] ?? '';
+
+        if (!empty($payee)) {
+            return $payee;
+        }
+
+        if (!empty($memo)) {
+            return $memo;
+        }
+
+        return 'MOVIMENT SENSE CONCEPTE';
     }
 
     /**

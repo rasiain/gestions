@@ -75,8 +75,8 @@ const form = useForm({
 });
 
 const valorCadastral = computed(() => {
-    const sol = form.valor_sol || 0;
-    const construccio = form.valor_construccio || 0;
+    const sol = Number(form.valor_sol) || 0;
+    const construccio = Number(form.valor_construccio) || 0;
     return sol + construccio;
 });
 
@@ -153,7 +153,7 @@ const formatNumber = (value: number | null, suffix: string = ''): string => {
         </template>
 
         <div class="py-12">
-            <div class="mx-auto max-w-7xl sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-screen-2xl sm:px-6 lg:px-8">
                 <div class="overflow-hidden bg-white shadow-sm dark:bg-gray-800 sm:rounded-lg">
                     <div class="p-6 text-gray-900 dark:text-gray-100">
                         <!-- Header with Add Button -->

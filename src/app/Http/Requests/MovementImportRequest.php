@@ -25,8 +25,8 @@ class MovementImportRequest extends FormRequest
             'file' => [
                 'required',
                 'file',
-                'mimes:xls,xlsx,csv,txt,qif',
-                'mimetypes:application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,application/octet-stream',
+                'mimes:xls,xlsx,csv,txt,qif,html',
+                'mimetypes:application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,text/html,application/octet-stream',
                 'max:102400', // 100MB
             ],
             'compte_corrent_id' => [
@@ -44,24 +44,6 @@ class MovementImportRequest extends FormRequest
                 'string',
                 'in:from_beginning,from_last_db',
             ],
-            'edited_movements' => [
-                'nullable',
-                'array',
-            ],
-            'edited_movements.*.data_moviment' => [
-                'nullable',
-                'date_format:Y-m-d',
-            ],
-            'edited_movements.*.concepte' => [
-                'nullable',
-                'string',
-                'max:255',
-            ],
-            'edited_movements.*.categoria_id' => [
-                'nullable',
-                'integer',
-                'exists:g_categories,id',
-            ],
         ];
     }
 
@@ -74,16 +56,13 @@ class MovementImportRequest extends FormRequest
     {
         return [
             'file.required' => 'El fitxer és obligatori.',
-            'file.mimes' => 'Format de fitxer no vàlid. Formats acceptats: XLS, XLSX, CSV, TXT, QIF.',
+            'file.mimes' => 'Format de fitxer no vàlid. Formats acceptats: XLS, XLSX, CSV, TXT, QIF, HTML.',
             'file.max' => 'El fitxer no pot superar 100MB.',
             'compte_corrent_id.required' => 'El compte corrent és obligatori.',
             'compte_corrent_id.exists' => 'El compte corrent seleccionat no existeix.',
             'bank_type.required' => 'El tipus de banc és obligatori.',
             'bank_type.in' => 'Tipus de banc no vàlid.',
             'import_mode.in' => 'Mode d\'importació no vàlid.',
-            'edited_movements.*.data_moviment.date_format' => 'Format de data incorrecte.',
-            'edited_movements.*.concepte.max' => 'El concepte no pot superar 255 caràcters.',
-            'edited_movements.*.categoria_id.exists' => 'La categoria seleccionada no existeix.',
         ];
     }
 }

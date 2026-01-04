@@ -15,6 +15,7 @@ Aplicació Laravel per a la gestió financera personal amb Vue 3, Inertia.js i T
 ### Configuració inicial
 - **[Configurar un Laravel de zero que contingui Vue i Inertia](docs/laravel-vue-inertia-setup.md)**
 - **[Crear usuaris](docs/crear-usuaris.md)** - Com i quan crear usuaris a l'aplicació
+- **[Guia d'ús d'Xdebug](docs/XDEBUG_GUIDE.md)** - Debugging pas a pas amb VSCode
 
 ### Funcionalitats
 - **[Gestió de Persones](docs/gestio-persones.md)** - Persones amb diferents rols (titulars de comptes, propietaris, etc.)

@@ -25,22 +25,16 @@ class CaixaBankParserService extends AbstractMovementParserService
                 continue;
             }
 
-            // Detect header row (contains "Data" or "Moviment" or "Import" or similar)
+            // Detect header row
             if (!$headerFound) {
-                $firstCell = mb_strtoupper(trim($row[0] ?? ''), 'UTF-8');
-                $thirdCell = mb_strtoupper(trim($row[2] ?? ''), 'UTF-8');
-                if (str_contains($firstCell, 'DATA') || str_contains($thirdCell, 'MOVIMENT') || str_contains($thirdCell, 'CONCEPTE')) {
+                if ($this->isHeaderRow($row)) {
                     $headerFound = true;
                 }
                 continue;
             }
 
-            // Validate row has at least 6 columns
-            if (count($row) < 6) {
-                Log::warning('CaixaBank: Row with insufficient columns', [
-                    'row_index' => $index,
-                    'columns' => count($row),
-                ]);
+            // Validate row has minimum required columns
+            if (!$this->hasMinimumColumns($row, $index)) {
                 continue;
             }
 
@@ -56,13 +50,8 @@ class CaixaBankParserService extends AbstractMovementParserService
                 continue;
             }
 
-            // Combine concept and notes if both present
-            $fullConcepte = $concepte;
-            if (!empty($notes) && !empty($concepte)) {
-                $fullConcepte = $concepte . ' - ' . $notes;
-            } elseif (!empty($notes)) {
-                $fullConcepte = $notes;
-            }
+            // Combine concept and notes
+            $fullConcepte = $this->buildFullConcept($concepte, $notes);
 
             try {
                 $movements[] = [
@@ -84,6 +73,61 @@ class CaixaBankParserService extends AbstractMovementParserService
         }
 
         return $movements;
+    }
+
+    /**
+     * Check if row is a header row.
+     *
+     * @param array $row
+     * @return bool
+     */
+    private function isHeaderRow(array $row): bool
+    {
+        $firstCell = mb_strtoupper(trim($row[0] ?? ''), 'UTF-8');
+        $thirdCell = mb_strtoupper(trim($row[2] ?? ''), 'UTF-8');
+
+        return str_contains($firstCell, 'DATA')
+            || str_contains($thirdCell, 'MOVIMENT')
+            || str_contains($thirdCell, 'CONCEPTE');
+    }
+
+    /**
+     * Validate row has minimum required columns.
+     *
+     * @param array $row
+     * @param int $rowIndex
+     * @return bool
+     */
+    private function hasMinimumColumns(array $row, int $rowIndex): bool
+    {
+        if (count($row) < 6) {
+            Log::warning('CaixaBank: Row with insufficient columns', [
+                'row_index' => $rowIndex,
+                'columns' => count($row),
+            ]);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Build full concept from concept and notes.
+     *
+     * @param string $concepte
+     * @param string $notes
+     * @return string
+     */
+    private function buildFullConcept(string $concepte, string $notes): string
+    {
+        if (!empty($notes) && !empty($concepte)) {
+            return $concepte . ' - ' . $notes;
+        }
+
+        if (!empty($notes)) {
+            return $notes;
+        }
+
+        return $concepte;
     }
 
     /**

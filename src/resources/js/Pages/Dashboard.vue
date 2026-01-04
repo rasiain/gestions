@@ -16,7 +16,7 @@ import { Head, Link } from '@inertiajs/vue3';
         </template>
 
         <div class="py-12">
-            <div class="mx-auto max-w-7xl sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-screen-2xl sm:px-6 lg:px-8">
                 <div class="mb-6">
                     <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
                         Accions Ràpides

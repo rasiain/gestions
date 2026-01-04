@@ -36,6 +36,10 @@ class MovimentCompteCorrentRequest extends FormRequest
                 'string',
                 'max:255',
             ],
+            'notes' => [
+                'nullable',
+                'string',
+            ],
             'import' => [
                 'required',
                 'numeric',

@@ -17,7 +17,11 @@ class CompteCorrentController extends Controller
         $comptesCorrents = CompteCorrent::with('titulars')
             ->orderBy('ordre')
             ->orderBy('entitat')
-            ->get();
+            ->get()
+            ->map(function ($compte) {
+                $compte->saldo_actual = $compte->saldo_actual;
+                return $compte;
+            });
 
         $titulars = Persona::orderBy('cognoms')
             ->orderBy('nom')
