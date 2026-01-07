@@ -47,7 +47,6 @@ const props = defineProps<Props>();
 const selectedFile = ref<File | null>(null);
 const selectedCompteCorrent = ref<number | null>(null);
 const selectedBankType = ref<string | null>(null);
-const selectedImportMode = ref<string | null>(null);
 const isProcessing = ref<boolean>(false);
 const isParsed = ref<boolean>(false);
 const parsedData = ref<ParsedData | null>(null);
@@ -90,7 +89,6 @@ watch(selectedCompteCorrent, () => {
     selectedBankType.value = null;
     isParsed.value = false;
     parsedData.value = null;
-    selectedImportMode.value = null;
 });
 
 const handleFileChange = (event: Event) => {
@@ -99,7 +97,6 @@ const handleFileChange = (event: Event) => {
         selectedFile.value = target.files[0];
         isParsed.value = false;
         parsedData.value = null;
-        selectedImportMode.value = null;
         errorMessage.value = '';
         successMessage.value = '';
 
@@ -131,11 +128,6 @@ const parseFile = async () => {
         return;
     }
 
-    if (!selectedImportMode.value) {
-        errorMessage.value = 'Selecciona el mode d\'importació';
-        return;
-    }
-
     isProcessing.value = true;
     errorMessage.value = '';
     successMessage.value = '';
@@ -146,11 +138,6 @@ const parseFile = async () => {
         formData.append('file', selectedFile.value);
         formData.append('compte_corrent_id', selectedCompteCorrent.value.toString());
         formData.append('bank_type', selectedBankType.value);
-
-        // Add import mode if selected
-        if (selectedImportMode.value) {
-            formData.append('import_mode', selectedImportMode.value);
-        }
 
         const response = await axios.post('/maintenance/movements/import/parse', formData, {
             headers: {
@@ -176,7 +163,7 @@ const parseFile = async () => {
 };
 
 const importMovements = async () => {
-    if (!selectedFile.value || !selectedCompteCorrent.value || !selectedBankType.value || !selectedImportMode.value) {
+    if (!selectedFile.value || !selectedCompteCorrent.value || !selectedBankType.value) {
         return;
     }
 
@@ -189,10 +176,6 @@ const importMovements = async () => {
         formData.append('file', selectedFile.value);
         formData.append('compte_corrent_id', selectedCompteCorrent.value.toString());
         formData.append('bank_type', selectedBankType.value);
-
-        if (selectedImportMode.value) {
-            formData.append('import_mode', selectedImportMode.value);
-        }
 
         const response = await axios.post('/maintenance/movements/import', formData, {
             headers: {
@@ -222,7 +205,6 @@ const resetForm = () => {
     selectedBankType.value = null;
     isParsed.value = false;
     parsedData.value = null;
-    selectedImportMode.value = null;
     errorMessage.value = '';
     const fileInput = document.getElementById('file-upload') as HTMLInputElement;
     if (fileInput) fileInput.value = '';
@@ -252,10 +234,10 @@ const formatDate = (date: string) => {
                     Importar Moviments Bancaris
                 </h2>
                 <Link
-                    :href="route('dashboard')"
+                    :href="route('moviments.index')"
                     class="inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600"
                 >
-                    ← Tornar al Dashboard
+                    ← Tornar a Moviments
                 </Link>
             </div>
         </template>
@@ -332,49 +314,15 @@ const formatDate = (date: string) => {
                                 </p>
                             </div>
 
-                            <!-- Import Mode Selection -->
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Mode d'importació
-                                </label>
-                                <div class="space-y-2">
-                                    <label class="flex items-center">
-                                        <input
-                                            type="radio"
-                                            v-model="selectedImportMode"
-                                            value="from_beginning"
-                                            class="mr-2"
-                                        />
-                                        <span class="text-sm text-gray-700 dark:text-gray-300">
-                                            Importar des del principi del fitxer
-                                        </span>
-                                    </label>
-                                    <label class="flex items-center">
-                                        <input
-                                            type="radio"
-                                            v-model="selectedImportMode"
-                                            value="from_last_db"
-                                            class="mr-2"
-                                        />
-                                        <span class="text-sm text-gray-700 dark:text-gray-300">
-                                            Importar des de l'última data a la base de dades
-                                        </span>
-                                    </label>
-                                </div>
-                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                    Si no s'ha importat res abans, tria "des del principi"
-                                </p>
-                            </div>
-
                             <!-- Action Buttons -->
                             <div class="flex gap-3">
                                 <button
                                     @click="parseFile"
-                                    :disabled="!selectedFile || !selectedCompteCorrent || !selectedBankType || !selectedImportMode || isProcessing"
+                                    :disabled="!selectedFile || !selectedCompteCorrent || !selectedBankType || isProcessing"
                                     class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <span v-if="isProcessing">Analitzant...</span>
-                                    <span v-else>Analitzar fitxer</span>
+                                    <span v-else">Analitzar fitxer</span>
                                 </button>
                                 <button
                                     @click="resetForm"
@@ -533,7 +481,7 @@ const formatDate = (date: string) => {
                         <div v-if="parsedData.movements && parsedData.movements.length > 0">
                             <button
                                 @click="importMovements"
-                                :disabled="isProcessing || (parsedData.requires_import_mode_selection && !selectedImportMode)"
+                                :disabled="isProcessing"
                                 class="inline-flex justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <span v-if="isProcessing">Important...</span>

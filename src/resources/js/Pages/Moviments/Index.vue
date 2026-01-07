@@ -373,13 +373,21 @@ const getImportClass = (import_val: number): string => {
                             <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
                                 Llistat de Moviments
                             </h3>
-                            <button
-                                @click="openCreateModal"
-                                :disabled="!selectedCompte"
-                                class="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Afegir Moviment
-                            </button>
+                            <div class="flex gap-3">
+                                <Link
+                                    :href="route('maintenance.movements.import')"
+                                    class="inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600"
+                                >
+                                    Importar Moviments
+                                </Link>
+                                <button
+                                    @click="openCreateModal"
+                                    :disabled="!selectedCompte"
+                                    class="inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Afegir Moviment
+                                </button>
+                            </div>
                         </div>
 
                         <div v-if="moviments.data.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">

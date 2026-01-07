@@ -39,11 +39,6 @@ class MovementImportRequest extends FormRequest
                 'string',
                 'in:caixa_enginyers,caixabank,kmymoney',
             ],
-            'import_mode' => [
-                'nullable',
-                'string',
-                'in:from_beginning,from_last_db',
-            ],
         ];
     }
 
@@ -62,7 +57,6 @@ class MovementImportRequest extends FormRequest
             'compte_corrent_id.exists' => 'El compte corrent seleccionat no existeix.',
             'bank_type.required' => 'El tipus de banc és obligatori.',
             'bank_type.in' => 'Tipus de banc no vàlid.',
-            'import_mode.in' => 'Mode d\'importació no vàlid.',
         ];
     }
 }

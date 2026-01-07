@@ -75,12 +75,6 @@ import { Head, Link } from '@inertiajs/vue3';
                             >
                                 → Categories
                             </Link>
-                            <Link
-                                :href="route('maintenance.movements.import')"
-                                class="block text-sm text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
-                            >
-                                → Importar Moviments
-                            </Link>
                         </div>
                     </div>
 

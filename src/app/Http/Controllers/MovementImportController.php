@@ -9,6 +9,7 @@ use App\Http\Services\ImportFiles\CaixaBankParserService;
 use App\Http\Services\ImportFiles\KMyMoneyMovementParserService;
 use App\Http\Services\MovementImportService;
 use App\Models\CompteCorrent;
+use App\Models\MovimentCompteCorrent;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -48,14 +49,16 @@ class MovementImportController extends Controller
             'file' => 'required|file|mimes:xls,xlsx,csv,txt,qif,html|mimetypes:application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,text/html,application/octet-stream|max:102400',
             'compte_corrent_id' => 'required|integer|exists:g_comptes_corrents,id',
             'bank_type' => 'required|string|in:caixa_enginyers,caixabank,kmymoney',
-            'import_mode' => 'nullable|string|in:from_beginning,from_last_db',
         ]);
 
         try {
             $file = $request->file('file');
             $compteCorrentId = $validated['compte_corrent_id'];
             $bankType = $validated['bank_type'];
-            $importMode = $validated['import_mode'] ?? null;
+
+            // Determine import mode automatically based on existing movements
+            $hasExistingMovements = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)->exists();
+            $importMode = $hasExistingMovements ? 'from_last_db' : 'from_beginning';
 
             // Parse file based on bank type
             if ($bankType === 'kmymoney') {
@@ -142,7 +145,10 @@ class MovementImportController extends Controller
             $file = $request->file('file');
             $compteCorrentId = $validated['compte_corrent_id'];
             $bankType = $validated['bank_type'];
-            $importMode = $validated['import_mode'] ?? null;
+
+            // Determine import mode automatically based on existing movements
+            $hasExistingMovements = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)->exists();
+            $importMode = $hasExistingMovements ? 'from_last_db' : 'from_beginning';
 
             // Parse file (same as parse endpoint)
             if ($bankType === 'kmymoney') {

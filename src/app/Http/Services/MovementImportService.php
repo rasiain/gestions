@@ -3,6 +3,7 @@
 namespace App\Http\Services;
 
 use App\Models\MovimentCompteCorrent;
+use App\Models\MovimentConcepte;
 use App\Models\Categoria;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -610,9 +611,9 @@ class MovementImportService
         $skipped = 0;
         $errors = [];
 
-        // Reverse movements array so oldest movements get lowest IDs
-        // This ensures proper display order when sorted by date DESC + ID DESC
-        $movements = array_reverse($movements);
+        // Import movements in file order (oldest first)
+        // When sorted by date DESC + ID DESC, movements from same day will show newest first
+        // because newer movements will have higher IDs
 
         DB::beginTransaction();
         try {
@@ -685,11 +686,13 @@ class MovementImportService
 
         // Store original concept
         $concepteOriginal = $movement['concepte'];
-        $concepte = $concepteOriginal;
         $categoriaId = $movement['categoria_id'] ?? null;
         $notes = $movement['notes'] ?? $concepteOriginal; // Use original concept as notes fallback
 
-        // Search for previous movement with same original concept to reuse manual edits
+        // Find or create concept in g_moviments_conceptes table
+        $concepteModel = MovimentConcepte::findOrCreateByConcepte($concepteOriginal);
+
+        // Search for previous movement with same original concept to reuse manual category assignment
         $previousMovement = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)
             ->where('concepte_original', $concepteOriginal)
             ->orderBy('data_moviment', 'desc')
@@ -697,13 +700,12 @@ class MovementImportService
             ->first();
 
         if ($previousMovement) {
-            // Reuse manually edited concept and category from previous movement
-            $concepte = $previousMovement->concepte;
+            // Reuse manually assigned category from previous movement
             $categoriaId = $previousMovement->categoria_id ?? $categoriaId;
 
             Log::info('Movement concept matched with previous movement', [
                 'concepte_original' => $concepteOriginal,
-                'concepte_reused' => $concepte,
+                'concepte_id' => $concepteModel->id,
                 'categoria_id' => $categoriaId,
                 'previous_movement_id' => $previousMovement->id,
             ]);
@@ -711,7 +713,7 @@ class MovementImportService
 
         MovimentCompteCorrent::create([
             'data_moviment' => $movement['data_moviment'],
-            'concepte' => $concepte,
+            'concepte_id' => $concepteModel->id,
             'concepte_original' => $concepteOriginal,
             'import' => $movement['import'],
             'saldo_posterior' => $movement['saldo_posterior'],

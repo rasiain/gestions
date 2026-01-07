@@ -6,6 +6,7 @@ use App\Http\Requests\MovimentCompteCorrentRequest;
 use App\Models\Categoria;
 use App\Models\CompteCorrent;
 use App\Models\MovimentCompteCorrent;
+use App\Models\MovimentConcepte;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -37,12 +38,14 @@ class MovimentCompteCorrentController extends Controller
         ];
 
         // Base query
-        $query = MovimentCompteCorrent::with(['categoria', 'compteCorrent'])
+        $query = MovimentCompteCorrent::with(['categoria', 'compteCorrent', 'concepte'])
             ->where('compte_corrent_id', $compteCorrentId);
 
         // Apply filters
         if ($filters['search']) {
-            $query->where('concepte', 'LIKE', '%' . $filters['search'] . '%');
+            $query->whereHas('concepte', function ($q) use ($filters) {
+                $q->where('concepte', 'LIKE', '%' . $filters['search'] . '%');
+            });
         }
 
         if ($filters['categoria_id']) {
@@ -71,7 +74,26 @@ class MovimentCompteCorrentController extends Controller
         $moviments = $query->orderBy('data_moviment', 'desc')
             ->orderBy('id', 'desc')
             ->paginate(50)
-            ->withQueryString();
+            ->withQueryString()
+            ->through(function ($moviment) {
+                // Transform concepte relation to string for frontend
+                return [
+                    'id' => $moviment->id,
+                    'compte_corrent_id' => $moviment->compte_corrent_id,
+                    'data_moviment' => $moviment->data_moviment->format('Y-m-d'),
+                    'concepte' => $moviment->concepte?->concepte,
+                    'concepte_original' => $moviment->concepte_original,
+                    'notes' => $moviment->notes,
+                    'import' => $moviment->import,
+                    'saldo_posterior' => $moviment->saldo_posterior,
+                    'categoria_id' => $moviment->categoria_id,
+                    'hash_moviment' => $moviment->hash,
+                    'created_at' => $moviment->created_at,
+                    'updated_at' => $moviment->updated_at,
+                    'categoria' => $moviment->categoria,
+                    'compte_corrent' => $moviment->compteCorrent,
+                ];
+            });
 
         // Get categories for the selected compte for the filter dropdown
         $categories = $compteCorrentId
@@ -113,6 +135,10 @@ class MovimentCompteCorrentController extends Controller
 
         DB::beginTransaction();
         try {
+            // Find or create concept
+            $concepteText = $validated['concepte'];
+            $concepteModel = MovimentConcepte::findOrCreateByConcepte($concepteText);
+
             // Generate hash
             $hash = hash('sha256',
                 $validated['data_moviment'] . '|' .
@@ -120,7 +146,11 @@ class MovimentCompteCorrentController extends Controller
                 $validated['compte_corrent_id']
             );
 
-            $validated['hash_moviment'] = $hash;
+            // Replace concepte text with concepte_id
+            unset($validated['concepte']);
+            $validated['concepte_id'] = $concepteModel->id;
+            $validated['concepte_original'] = $concepteText;
+            $validated['hash'] = $hash;
 
             MovimentCompteCorrent::create($validated);
 
@@ -144,6 +174,19 @@ class MovimentCompteCorrentController extends Controller
 
         DB::beginTransaction();
         try {
+            // Find or create concept
+            $concepteText = $validated['concepte'];
+            $concepteModel = MovimentConcepte::findOrCreateByConcepte($concepteText);
+
+            // Replace concepte text with concepte_id
+            unset($validated['concepte']);
+            $validated['concepte_id'] = $concepteModel->id;
+
+            // Update concepte_original if it changed
+            if ($concepteText !== $moviment->concepte_original) {
+                $validated['concepte_original'] = $concepteText;
+            }
+
             // Recalculate hash if critical fields changed
             if (
                 $validated['data_moviment'] !== $moviment->data_moviment->format('Y-m-d') ||
@@ -155,7 +198,7 @@ class MovimentCompteCorrentController extends Controller
                     $validated['import'] . '|' .
                     $validated['compte_corrent_id']
                 );
-                $validated['hash_moviment'] = $hash;
+                $validated['hash'] = $hash;
             }
 
             $moviment->update($validated);

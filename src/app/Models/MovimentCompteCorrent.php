@@ -20,7 +20,7 @@ class MovimentCompteCorrent extends Model
      */
     protected $fillable = [
         'data_moviment',
-        'concepte',
+        'concepte_id',
         'concepte_original',
         'import',
         'saldo_posterior',
@@ -51,6 +51,14 @@ class MovimentCompteCorrent extends Model
     public function compteCorrent()
     {
         return $this->belongsTo(CompteCorrent::class, 'compte_corrent_id');
+    }
+
+    /**
+     * Get the concept associated with this movement.
+     */
+    public function concepte()
+    {
+        return $this->belongsTo(MovimentConcepte::class, 'concepte_id');
     }
 
     /**
