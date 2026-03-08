@@ -1,0 +1,7 @@
+src/vendor/
+src/node_modules/
+.git/
+*.log
+.env
+.env.*
+!.env.example

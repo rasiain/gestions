@@ -55,19 +55,10 @@ COPY docker/nginx/default.conf /etc/nginx/sites-available/default
 # Copy supervisor configuration
 COPY docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Copy application files
-COPY src/ .
+# Note: composer install and npm install are run after the container starts,
+# since ./src is mounted as a volume and overwrites this directory at runtime.
 
-# Install Laravel dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction
-
-# Note: npm install and build are done manually after container starts
-# This avoids dependency conflicts during image build
-
-# Set permissions
-RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 755 /var/www/html/storage \
-    && chmod -R 755 /var/www/html/bootstrap/cache
+# Permissions are set at runtime via entrypoint, since ./src is volume-mounted
 
 EXPOSE 80
 
