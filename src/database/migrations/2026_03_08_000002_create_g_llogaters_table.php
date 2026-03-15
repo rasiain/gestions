@@ -13,7 +13,6 @@ return new class extends Migration
             $table->string('nom', 50);
             $table->string('cognoms', 100);
             $table->string('identificador', 20)->nullable();
-            $table->foreignId('lloguer_id')->constrained('g_lloguers')->cascadeOnDelete();
             $table->timestamps();
         });
     }
@@ -23,3 +22,4 @@ return new class extends Migration
         Schema::dropIfExists('g_llogaters');
     }
 };
+

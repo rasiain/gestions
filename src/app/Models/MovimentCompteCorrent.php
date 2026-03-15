@@ -26,6 +26,7 @@ class MovimentCompteCorrent extends Model
         'saldo_posterior',
         'hash',
         'conciliat',
+        'exclou_lloguer',
         'notes',
         'compte_corrent_id',
         'categoria_id',
@@ -41,6 +42,7 @@ class MovimentCompteCorrent extends Model
         'import' => 'decimal:2',
         'saldo_posterior' => 'decimal:2',
         'conciliat' => 'boolean',
+        'exclou_lloguer' => 'boolean',
         'compte_corrent_id' => 'integer',
         'categoria_id' => 'integer',
     ];

@@ -114,6 +114,57 @@ import { Head, Link } from '@inertiajs/vue3';
                         </div>
                     </div>
 
+                    <!-- Lloguers Card -->
+                    <div class="rounded-lg bg-white p-6 shadow-sm dark:bg-gray-800">
+                        <div class="flex items-center">
+                            <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900">
+                                <svg
+                                    class="h-6 w-6 text-amber-600 dark:text-amber-400"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                                    />
+                                </svg>
+                            </div>
+                            <div class="ml-4">
+                                <h4 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                                    Lloguers
+                                </h4>
+                                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                    Gestió d'immobles i llogaters
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Sub-links -->
+                        <div class="mt-4 ml-16 space-y-2 border-l-2 border-amber-200 dark:border-amber-800 pl-4">
+                            <Link
+                                :href="route('lloguers.index')"
+                                class="block text-sm text-gray-600 hover:text-amber-600 dark:text-gray-400 dark:hover:text-amber-400 transition-colors"
+                            >
+                                → Lloguers
+                            </Link>
+                            <Link
+                                :href="route('immobles.index')"
+                                class="block text-sm text-gray-600 hover:text-amber-600 dark:text-gray-400 dark:hover:text-amber-400 transition-colors"
+                            >
+                                → Immobles
+                            </Link>
+                            <Link
+                                :href="route('llogaters.index')"
+                                class="block text-sm text-gray-600 hover:text-amber-600 dark:text-gray-400 dark:hover:text-amber-400 transition-colors"
+                            >
+                                → Llogaters
+                            </Link>
+                        </div>
+                    </div>
+
                     <!-- Configuració Card -->
                     <div class="rounded-lg bg-white p-6 shadow-sm dark:bg-gray-800">
                         <div class="flex items-center">
@@ -155,12 +206,6 @@ import { Head, Link } from '@inertiajs/vue3';
                                 class="block text-sm text-gray-600 hover:text-purple-600 dark:text-gray-400 dark:hover:text-purple-400 transition-colors"
                             >
                                 → Persones
-                            </Link>
-                            <Link
-                                :href="route('immobles.index')"
-                                class="block text-sm text-gray-600 hover:text-purple-600 dark:text-gray-400 dark:hover:text-purple-400 transition-colors"
-                            >
-                                → Immobles
                             </Link>
                             <Link
                                 :href="route('proveidors.index')"

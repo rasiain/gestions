@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Llogater extends Model
 {
@@ -13,11 +13,10 @@ class Llogater extends Model
         'nom',
         'cognoms',
         'identificador',
-        'lloguer_id',
     ];
 
-    public function lloguer(): BelongsTo
+    public function contractes(): BelongsToMany
     {
-        return $this->belongsTo(Lloguer::class);
+        return $this->belongsToMany(Contracte::class, 'g_contracte_llogater');
     }
 }

@@ -12,8 +12,14 @@ class Lloguer extends Model
 
     protected $fillable = [
         'nom',
+        'acronim',
         'immoble_id',
         'compte_corrent_id',
+        'base_euros',
+    ];
+
+    protected $casts = [
+        'base_euros' => 'decimal:2',
     ];
 
     public function immoble(): BelongsTo
@@ -26,8 +32,8 @@ class Lloguer extends Model
         return $this->belongsTo(CompteCorrent::class);
     }
 
-    public function llogaters(): HasMany
+    public function contractes(): HasMany
     {
-        return $this->hasMany(Llogater::class);
+        return $this->hasMany(Contracte::class);
     }
 }

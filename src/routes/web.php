@@ -4,6 +4,9 @@ use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\CategoryImportController;
 use App\Http\Controllers\CompteCorrentController;
 use App\Http\Controllers\ImmobleController;
+use App\Http\Controllers\LlogaterController;
+use App\Http\Controllers\ContracteController;
+use App\Http\Controllers\LloguerController;
 use App\Http\Controllers\MovementImportController;
 use App\Http\Controllers\MovimentCompteCorrentController;
 use App\Http\Controllers\ProfileController;
@@ -41,6 +44,22 @@ Route::middleware('auth')->group(function () {
         'index', 'store', 'update', 'destroy'
     ]);
 
+    // Lloguers management
+    Route::resource('lloguers', LloguerController::class)->only([
+        'index', 'store', 'update', 'destroy'
+    ]);
+    Route::get('/lloguers/{lloguer}/moviments', [LloguerController::class, 'moviments'])->name('lloguers.moviments');
+
+    // Contractes management
+    Route::resource('contractes', ContracteController::class)->only([
+        'store', 'update', 'destroy'
+    ]);
+
+    // Llogaters management
+    Route::resource('llogaters', LlogaterController::class)->only([
+        'index', 'store', 'update', 'destroy'
+    ]);
+
     // Proveidors management
     Route::resource('proveidors', ProveidorController::class)->only([
         'index', 'store', 'update', 'destroy'
@@ -62,6 +81,7 @@ Route::middleware('auth')->group(function () {
     Route::resource('moviments', MovimentCompteCorrentController::class)->only([
         'index', 'store', 'update', 'destroy'
     ]);
+    Route::patch('/moviments/{moviment}/exclou-lloguer', [MovimentCompteCorrentController::class, 'toggleExclou'])->name('moviments.toggle-exclou');
 
     // Maintenance - Movement Import
     Route::get('/maintenance/movements/import', [MovementImportController::class, 'index'])->name('maintenance.movements.import');

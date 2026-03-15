@@ -7,6 +7,7 @@ use App\Models\Categoria;
 use App\Models\CompteCorrent;
 use App\Models\MovimentCompteCorrent;
 use App\Models\MovimentConcepte;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -212,6 +213,16 @@ class MovimentCompteCorrentController extends Controller
                 ->withErrors(['error' => 'Error actualitzant el moviment: ' . $e->getMessage()])
                 ->withInput();
         }
+    }
+
+    /**
+     * Toggle exclou_lloguer flag on a movement.
+     */
+    public function toggleExclou(MovimentCompteCorrent $moviment): JsonResponse
+    {
+        $moviment->update(['exclou_lloguer' => !$moviment->exclou_lloguer]);
+
+        return response()->json(['exclou_lloguer' => $moviment->exclou_lloguer]);
     }
 
     /**

@@ -10,6 +10,7 @@ return new class extends Migration
     {
         Schema::create('g_contractes', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('lloguer_id')->constrained('g_lloguers')->cascadeOnDelete();
             $table->date('data_inici');
             $table->date('data_fi')->nullable();
             $table->timestamps();
