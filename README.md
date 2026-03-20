@@ -47,10 +47,9 @@ Gestió d'immobles en règim de lloguer: propietats, contractes, llogaters i seg
 dcb          # docker compose build (aprofita caché)
 dc up -d     # docker compose up en segon pla
 
-# Dins el contenidor
-docker exec -it laravel-app bash
-php artisan migrate          # aplicar migracions pendents
-npm run build                # compilar assets frontend (Vite)
+# Migracions i assets (des de fora del contenidor)
+docker compose exec app php artisan migrate   # aplicar migracions pendents
+docker compose exec app npm run build         # compilar assets frontend (Vite)
 ```
 
 > **Nota**: Vite NO s'executa via Supervisor. Cal compilar manualment amb `npm run build` cada cop que es modifiquen fitxers Vue/TS/CSS.

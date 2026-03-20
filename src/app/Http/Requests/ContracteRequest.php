@@ -19,6 +19,9 @@ class ContracteRequest extends FormRequest
             'data_fi'     => ['nullable', 'date', 'after_or_equal:data_inici'],
             'llogater_ids' => ['nullable', 'array'],
             'llogater_ids.*' => ['integer', 'exists:g_llogaters,id'],
+            // Camps opcionals per tancar el contracte anterior en crear-ne un de nou
+            'tancar_contracte_anterior_id' => ['nullable', 'integer', 'exists:g_contractes,id'],
+            'data_fi_anterior' => ['nullable', 'required_with:tancar_contracte_anterior_id', 'date'],
         ];
     }
 

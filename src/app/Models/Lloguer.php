@@ -16,10 +16,13 @@ class Lloguer extends Model
         'immoble_id',
         'compte_corrent_id',
         'base_euros',
+        'proveidor_gestoria_id',
+        'gestoria_percentatge',
     ];
 
     protected $casts = [
-        'base_euros' => 'decimal:2',
+        'base_euros'           => 'decimal:2',
+        'gestoria_percentatge' => 'decimal:2',
     ];
 
     public function immoble(): BelongsTo
@@ -35,5 +38,10 @@ class Lloguer extends Model
     public function contractes(): HasMany
     {
         return $this->hasMany(Contracte::class);
+    }
+
+    public function gestoria(): BelongsTo
+    {
+        return $this->belongsTo(Proveidor::class, 'proveidor_gestoria_id');
     }
 }

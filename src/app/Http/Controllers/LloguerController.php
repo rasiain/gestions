@@ -8,6 +8,7 @@ use App\Models\Immoble;
 use App\Models\Llogater;
 use App\Models\Lloguer;
 use App\Models\MovimentCompteCorrent;
+use App\Models\Proveidor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -19,8 +20,11 @@ class LloguerController extends Controller
         $lloguers = Lloguer::with([
                 'immoble',
                 'compteCorrent',
+                'gestoria',
                 'contractes' => function ($q) {
-                    $q->whereNull('data_fi')->orWhere('data_fi', '>=', now()->toDateString());
+                    $q->where(function ($q2) {
+                        $q2->whereNull('data_fi')->orWhere('data_fi', '>', now()->toDateString());
+                    })->orderBy('data_inici', 'desc');
                 },
                 'contractes.llogaters',
             ])
@@ -42,7 +46,13 @@ class LloguerController extends Controller
                         'id'  => $lloguer->compteCorrent->id,
                         'nom' => $lloguer->compteCorrent->nom,
                     ] : null,
-                    'base_euros'       => $lloguer->base_euros,
+                    'base_euros'            => $lloguer->base_euros,
+                    'proveidor_gestoria_id' => $lloguer->proveidor_gestoria_id,
+                    'gestoria_percentatge'  => $lloguer->gestoria_percentatge,
+                    'gestoria'              => $lloguer->gestoria ? [
+                        'id'             => $lloguer->gestoria->id,
+                        'nom_rao_social' => $lloguer->gestoria->nom_rao_social,
+                    ] : null,
                     'contracte_actiu'  => $contracteActiu ? [
                         'id'          => $contracteActiu->id,
                         'lloguer_id'  => $lloguer->id,
@@ -61,12 +71,14 @@ class LloguerController extends Controller
         $immobles = Immoble::orderBy('adreca')->get(['id', 'adreca']);
         $comptesCorrents = CompteCorrent::orderBy('nom')->get(['id', 'nom']);
         $llogaters = Llogater::orderBy('cognoms')->orderBy('nom')->get(['id', 'nom', 'cognoms']);
+        $proveidors = Proveidor::orderBy('nom_rao_social')->get(['id', 'nom_rao_social']);
 
         return Inertia::render('Lloguers/Index', [
             'lloguers'        => $lloguers,
             'immobles'        => $immobles,
             'comptesCorrents' => $comptesCorrents,
             'llogaters'       => $llogaters,
+            'proveidors'      => $proveidors,
         ]);
     }
 
@@ -99,7 +111,7 @@ class LloguerController extends Controller
         $page    = max(1, $request->integer('page', 1));
         $perPage = 30;
 
-        $query = MovimentCompteCorrent::with('concepte')
+        $query = MovimentCompteCorrent::with(['concepte', 'despesa', 'ingres.linies'])
             ->where('compte_corrent_id', $lloguer->compte_corrent_id)
             ->orderBy('data_moviment', 'desc')
             ->orderBy('id', 'desc');
@@ -107,12 +119,32 @@ class LloguerController extends Controller
         $total    = $query->count();
         $moviments = $query->skip(($page - 1) * $perPage)->take($perPage)->get()
             ->map(fn($m) => [
-                'id'             => $m->id,
-                'data_moviment'  => $m->data_moviment->toDateString(),
-                'concepte'       => $m->concepte?->concepte ?? $m->concepte_original ?? '',
-                'import'         => $m->import,
+                'id'              => $m->id,
+                'data_moviment'   => $m->data_moviment->toDateString(),
+                'concepte'        => $m->concepte?->concepte ?? $m->concepte_original ?? '',
+                'import'          => $m->import,
                 'saldo_posterior' => $m->saldo_posterior,
-                'exclou_lloguer' => $m->exclou_lloguer,
+                'exclou_lloguer'  => $m->exclou_lloguer,
+                'despesa'         => $m->despesa ? [
+                    'id'           => $m->despesa->id,
+                    'lloguer_id'   => $m->despesa->lloguer_id,
+                    'categoria'    => $m->despesa->categoria,
+                    'proveidor_id' => $m->despesa->proveidor_id,
+                    'notes'        => $m->despesa->notes,
+                ] : null,
+                'ingres'          => $m->ingres ? [
+                    'id'              => $m->ingres->id,
+                    'lloguer_id'      => $m->ingres->lloguer_id,
+                    'base_lloguer'    => $m->ingres->base_lloguer,
+                    'gestoria_import' => $m->ingres->gestoria_import,
+                    'linies'          => $m->ingres->linies->map(fn($l) => [
+                        'id'           => $l->id,
+                        'tipus'        => $l->tipus,
+                        'descripcio'   => $l->descripcio,
+                        'import'       => $l->import,
+                        'proveidor_id' => $l->proveidor_id,
+                    ])->toArray(),
+                ] : null,
             ]);
 
         return response()->json([

@@ -13,6 +13,11 @@ interface CompteCorrent {
     nom: string;
 }
 
+interface Proveidor {
+    id: number;
+    nom_rao_social: string;
+}
+
 interface LlogaterBasic {
     id: number;
     nom: string;
@@ -37,6 +42,9 @@ interface Lloguer {
     compte_corrent_id: number;
     compte_corrent: CompteCorrent | null;
     base_euros: string | null;
+    proveidor_gestoria_id: number | null;
+    gestoria_percentatge: string | null;
+    gestoria: Proveidor | null;
     contracte_actiu: ContracteActiu | null;
 }
 
@@ -45,6 +53,7 @@ interface Props {
     immobles: Immoble[];
     comptesCorrents: CompteCorrent[];
     llogaters: LlogaterBasic[];
+    proveidors: Proveidor[];
 }
 
 const props = defineProps<Props>();
@@ -60,6 +69,8 @@ const lloguerForm = useForm({
     immoble_id: null as number | null,
     compte_corrent_id: null as number | null,
     base_euros: null as number | null,
+    proveidor_gestoria_id: null as number | null,
+    gestoria_percentatge: null as number | null,
 });
 
 const openCreateLloguerModal = () => {
@@ -77,6 +88,8 @@ const openEditLloguerModal = (lloguer: Lloguer) => {
     lloguerForm.immoble_id = lloguer.immoble_id;
     lloguerForm.compte_corrent_id = lloguer.compte_corrent_id;
     lloguerForm.base_euros = lloguer.base_euros ? parseFloat(lloguer.base_euros) : null;
+    lloguerForm.proveidor_gestoria_id = lloguer.proveidor_gestoria_id;
+    lloguerForm.gestoria_percentatge = lloguer.gestoria_percentatge ? parseFloat(lloguer.gestoria_percentatge) : null;
     showLloguerModal.value = true;
 };
 
@@ -117,7 +130,33 @@ const contracteForm = useForm({
     data_inici: '',
     data_fi: '',
     llogater_ids: [] as number[],
+    tancar_contracte_anterior_id: null as number | null,
+    data_fi_anterior: '',
 });
+
+// ── Nou contracte ───────────────────────────────────────────────
+const creantNouContracte = ref(false);
+const dataFiContracteAntic = ref('');
+
+const iniciarNouContracte = () => {
+    const c = selectedLloguer.value?.contracte_actiu;
+    dataFiContracteAntic.value = c?.data_fi ?? new Date().toISOString().split('T')[0];
+    creantNouContracte.value = true;
+    contracteForm.data_inici = '';
+    contracteForm.data_fi = '';
+    contracteForm.llogater_ids = [];
+    contracteForm.clearErrors();
+};
+
+const cancellarNouContracte = () => {
+    creantNouContracte.value = false;
+    dataFiContracteAntic.value = '';
+    const c = selectedLloguer.value?.contracte_actiu;
+    contracteForm.data_inici = c?.data_inici ?? '';
+    contracteForm.data_fi = c?.data_fi ?? '';
+    contracteForm.llogater_ids = c?.llogater_ids ? [...c.llogater_ids] : [];
+    contracteForm.clearErrors();
+};
 
 const selectLloguer = (lloguer: Lloguer) => {
     if (selectedLloguerId.value === lloguer.id) {
@@ -125,6 +164,8 @@ const selectLloguer = (lloguer: Lloguer) => {
         return;
     }
     selectedLloguerId.value = lloguer.id;
+    creantNouContracte.value = false;
+    dataFiContracteAntic.value = '';
     const c = lloguer.contracte_actiu;
     contracteForm.lloguer_id = lloguer.id;
     contracteForm.data_inici = c?.data_inici ?? '';
@@ -156,7 +197,14 @@ const availableLlogaters = computed(() =>
 
 const submitContracte = () => {
     const contracte = selectedLloguer.value?.contracte_actiu;
-    if (contracte) {
+    if (creantNouContracte.value) {
+        contracteForm.tancar_contracte_anterior_id = contracte?.id ?? null;
+        contracteForm.data_fi_anterior = dataFiContracteAntic.value;
+        contracteForm.post(route('contractes.store'), {
+            preserveScroll: true,
+            onSuccess: () => { creantNouContracte.value = false; dataFiContracteAntic.value = ''; },
+        });
+    } else if (contracte) {
         contracteForm.put(route('contractes.update', contracte.id), { preserveScroll: true });
     } else {
         contracteForm.post(route('contractes.store'), { preserveScroll: true });
@@ -172,6 +220,30 @@ const deleteContracte = () => {
 };
 
 // ── Moviments ──────────────────────────────────────────────────
+interface MovimentDespesa {
+    id: number;
+    lloguer_id: number;
+    categoria: string;
+    proveidor_id: number | null;
+    notes: string | null;
+}
+
+interface MovimentIngresLinia {
+    id: number;
+    tipus: string;
+    descripcio: string;
+    import: string;
+    proveidor_id: number | null;
+}
+
+interface MovimentIngres {
+    id: number;
+    lloguer_id: number;
+    base_lloguer: string;
+    gestoria_import: string | null;
+    linies: MovimentIngresLinia[];
+}
+
 interface Moviment {
     id: number;
     data_moviment: string;
@@ -179,6 +251,8 @@ interface Moviment {
     import: string;
     saldo_posterior: string | null;
     exclou_lloguer: boolean;
+    despesa: MovimentDespesa | null;
+    ingres: MovimentIngres | null;
 }
 
 const moviments = ref<Moviment[]>([]);
@@ -213,16 +287,237 @@ const loadMore = () => {
 };
 
 const toggleExclou = async (moviment: Moviment) => {
-    const res = await fetch(`/moviments/${moviment.id}/exclou-lloguer`, {
-        method: 'PATCH',
-        headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': csrfToken(),
-        },
-    });
-    const json = await res.json();
-    moviment.exclou_lloguer = json.exclou_lloguer;
+    const index = moviments.value.findIndex(m => m.id === moviment.id);
+    if (index === -1) return;
+
+    const newValue = !moviments.value[index].exclou_lloguer;
+    // Reemplaça l'element a l'array (garanteix detecció de canvi per Vue)
+    moviments.value[index] = { ...moviments.value[index], exclou_lloguer: newValue };
+
+    try {
+        const res = await fetch(`/moviments/${moviment.id}/exclou-lloguer`, {
+            method: 'PATCH',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken(),
+            },
+        });
+        const json = await res.json();
+        moviments.value[index] = { ...moviments.value[index], exclou_lloguer: !!json.exclou_lloguer };
+    } catch {
+        // Si falla, reverteix
+        moviments.value[index] = { ...moviments.value[index], exclou_lloguer: !newValue };
+    }
+};
+
+// ── Classificació de moviments ─────────────────────────────────
+const showClassificacioModal = ref(false);
+const classificacioMoviment = ref<Moviment | null>(null);
+const classificacioTipus = ref<'despesa' | 'ingres'>('despesa');
+const classificacioSaving = ref(false);
+const classificacioErrors = ref<Record<string, string>>({});
+
+const classificacioDespesa = ref({
+    categoria: '',
+    proveidor_id: null as number | null,
+    notes: '',
+});
+
+const classificacioIngres = ref({
+    base_lloguer: null as number | null,
+    gestoria_import: null as number | null,
+    linies: [] as { tipus: string; descripcio: string; import: number | null; proveidor_id: number | null }[],
+});
+
+const categoriesAmbProveidor = ['compres', 'reparacions'];
+
+const categoriesDespesa = [
+    { value: 'comunitat',   label: 'Comunitat' },
+    { value: 'taxes',       label: 'Taxes' },
+    { value: 'assegurança', label: 'Assegurança' },
+    { value: 'compres',     label: 'Compres' },
+    { value: 'reparacions', label: 'Reparacions' },
+    { value: 'altres',      label: 'Altres' },
+];
+
+const classificacioThisLloguer = (moviment: Moviment) => {
+    if (moviment.despesa?.lloguer_id === selectedLloguerId.value) return { tipus: 'despesa' as const, data: moviment.despesa };
+    if (moviment.ingres?.lloguer_id === selectedLloguerId.value) return { tipus: 'ingres' as const, data: moviment.ingres };
+    return null;
+};
+
+const classificacioAltresLloguer = (moviment: Moviment): boolean => {
+    return (!!moviment.despesa && moviment.despesa.lloguer_id !== selectedLloguerId.value) ||
+           (!!moviment.ingres && moviment.ingres.lloguer_id !== selectedLloguerId.value);
+};
+
+const classificacioLabel = (moviment: Moviment): string => {
+    if (moviment.despesa?.lloguer_id === selectedLloguerId.value) {
+        return categoriesDespesa.find(c => c.value === moviment.despesa!.categoria)?.label ?? moviment.despesa.categoria ?? 'Despesa';
+    }
+    if (moviment.ingres?.lloguer_id === selectedLloguerId.value) return 'Ingrés';
+    return '';
+};
+
+const IVA_RATE = 0.21;
+
+// gestoria_import emmagatzema el TOTAL amb IVA inclòs.
+// A partir del total, descomposem en net i IVA per mostrar-ho a la UI.
+const gestoriaNet = computed(() => {
+    const total = classificacioIngres.value.gestoria_import;
+    if (total === null || total === undefined || isNaN(total)) return null;
+    return parseFloat((total / (1 + IVA_RATE)).toFixed(2));
+});
+
+const gestoriaIva = computed(() => {
+    const total = classificacioIngres.value.gestoria_import;
+    if (total === null || total === undefined || isNaN(total)) return null;
+    return parseFloat((total - total / (1 + IVA_RATE)).toFixed(2));
+});
+
+// Reconciliació: base − gestoria − línies = net calculat vs. import al banc
+const ingresNetCalculat = computed(() => {
+    const base = classificacioIngres.value.base_lloguer ?? 0;
+    const gestoria = classificacioIngres.value.gestoria_import ?? 0;
+    const linies = classificacioIngres.value.linies.reduce((s, l) => s + (l.import ?? 0), 0);
+    return parseFloat((base - gestoria - linies).toFixed(2));
+});
+
+const ingresDiferencia = computed(() => {
+    const importBanc = classificacioMoviment.value ? parseFloat(classificacioMoviment.value.import) : 0;
+    return parseFloat((ingresNetCalculat.value - importBanc).toFixed(2));
+});
+
+const computedGestoriaImport = computed(() => {
+    const lloguer = selectedLloguer.value;
+    if (!lloguer?.gestoria_percentatge || !lloguer?.base_euros) return null;
+    // Calcula el total amb IVA directament
+    const net = parseFloat(lloguer.base_euros) * parseFloat(lloguer.gestoria_percentatge) / 100;
+    return parseFloat((net * (1 + IVA_RATE)).toFixed(2));
+});
+
+const openClassificacioModal = (moviment: Moviment) => {
+    classificacioMoviment.value = moviment;
+    classificacioErrors.value = {};
+
+    const cls = classificacioThisLloguer(moviment);
+    if (cls?.tipus === 'despesa') {
+        classificacioTipus.value = 'despesa';
+        classificacioDespesa.value = {
+            categoria: cls.data.categoria,
+            proveidor_id: cls.data.proveidor_id,
+            notes: cls.data.notes ?? '',
+        };
+    } else if (cls?.tipus === 'ingres') {
+        classificacioTipus.value = 'ingres';
+        classificacioIngres.value = {
+            base_lloguer: parseFloat(cls.data.base_lloguer),
+            gestoria_import: cls.data.gestoria_import ? parseFloat(cls.data.gestoria_import) : null,
+            linies: cls.data.linies.map(l => ({
+                tipus: l.tipus,
+                descripcio: l.descripcio,
+                import: parseFloat(l.import),
+                proveidor_id: l.proveidor_id,
+            })),
+        };
+    } else {
+        classificacioTipus.value = parseFloat(moviment.import) >= 0 ? 'ingres' : 'despesa';
+        classificacioDespesa.value = { categoria: '', proveidor_id: null, notes: '' };
+        classificacioIngres.value = {
+            base_lloguer: selectedLloguer.value?.base_euros ? parseFloat(selectedLloguer.value.base_euros) : null,
+            gestoria_import: computedGestoriaImport.value,
+            linies: [],
+        };
+    }
+
+    showClassificacioModal.value = true;
+};
+
+const closeClassificacioModal = () => {
+    showClassificacioModal.value = false;
+    classificacioMoviment.value = null;
+};
+
+const submitClassificacio = async () => {
+    const moviment = classificacioMoviment.value;
+    if (!moviment || !selectedLloguerId.value) return;
+
+    classificacioErrors.value = {};
+    classificacioSaving.value = true;
+
+    const isEditing = classificacioThisLloguer(moviment) !== null;
+
+    const body: Record<string, unknown> = {
+        tipus: classificacioTipus.value,
+        lloguer_id: selectedLloguerId.value,
+    };
+
+    if (classificacioTipus.value === 'despesa') {
+        body.categoria = classificacioDespesa.value.categoria;
+        body.proveidor_id = categoriesAmbProveidor.includes(classificacioDespesa.value.categoria)
+            ? classificacioDespesa.value.proveidor_id
+            : null;
+        body.notes = classificacioDespesa.value.notes || null;
+    } else {
+        body.base_lloguer = classificacioIngres.value.base_lloguer;
+        body.gestoria_import = classificacioIngres.value.gestoria_import;
+        body.linies = classificacioIngres.value.linies;
+    }
+
+    try {
+        const res = await fetch(`/moviments/${moviment.id}/classificacio`, {
+            method: isEditing ? 'PUT' : 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken(),
+            },
+            body: JSON.stringify(body),
+        });
+
+        const json = await res.json();
+
+        if (!res.ok) {
+            if (json.errors) classificacioErrors.value = json.errors;
+            else classificacioErrors.value = { general: json.error ?? 'Error desconegut' };
+            return;
+        }
+
+        const index = moviments.value.findIndex(m => m.id === moviment.id);
+        if (index !== -1) {
+            moviments.value[index] = { ...moviments.value[index], despesa: json.despesa, ingres: json.ingres };
+        }
+        closeClassificacioModal();
+    } finally {
+        classificacioSaving.value = false;
+    }
+};
+
+const deleteClassificacio = async (moviment: Moviment) => {
+    if (!confirm('Estàs segur que vols eliminar la classificació?')) return;
+
+    try {
+        const res = await fetch(`/moviments/${moviment.id}/classificacio`, {
+            method: 'DELETE',
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+        });
+        const json = await res.json();
+        if (res.ok) {
+            const index = moviments.value.findIndex(m => m.id === moviment.id);
+            if (index !== -1) {
+                moviments.value[index] = { ...moviments.value[index], despesa: json.despesa, ingres: json.ingres };
+            }
+        }
+    } catch { /* ignore */ }
+};
+
+const addLinia = () => {
+    classificacioIngres.value.linies.push({ tipus: '', descripcio: '', import: null, proveidor_id: null });
+};
+
+const removeLinia = (index: number) => {
+    classificacioIngres.value.linies.splice(index, 1);
 };
 
 watch(selectedLloguerId, (newId) => {
@@ -375,17 +670,61 @@ const formatCurrency = (value: string | null): string => {
                             </div>
                             <div class="flex items-center gap-4">
                                 <button
-                                    v-if="selectedLloguer.contracte_actiu"
+                                    v-if="selectedLloguer.contracte_actiu && !creantNouContracte"
                                     @click="deleteContracte"
                                     class="text-sm text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
                                 >
                                     Eliminar contracte
                                 </button>
                                 <button
+                                    v-if="selectedLloguer.contracte_actiu && !creantNouContracte"
+                                    @click="iniciarNouContracte"
+                                    class="text-sm text-amber-700 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200 font-medium"
+                                >
+                                    + Nou contracte
+                                </button>
+                                <button
                                     @click="selectedLloguerId = null"
                                     class="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                                 >
                                     ✕ Tancar
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Secció de tancament del contracte anterior (mode nou contracte) -->
+                        <div
+                            v-if="creantNouContracte"
+                            class="mb-6 rounded-md border border-amber-300 bg-amber-50 p-4 dark:border-amber-600 dark:bg-amber-900/20"
+                        >
+                            <p class="mb-3 text-sm font-medium text-amber-800 dark:text-amber-200">
+                                Per crear un nou contracte, primer cal tancar l'actual.
+                                <span v-if="selectedLloguer.contracte_actiu?.data_fi">
+                                    La data de finalització registrada és <strong>{{ selectedLloguer.contracte_actiu.data_fi }}</strong>. Confirma o modifica-la:
+                                </span>
+                                <span v-else>
+                                    Introdueix la data de finalització del contracte actual:
+                                </span>
+                            </p>
+                            <div class="flex items-end gap-4">
+                                <div class="flex-1">
+                                    <label for="data_fi_anterior" class="block text-sm font-medium text-amber-700 dark:text-amber-300">
+                                        Data de finalització del contracte actual *
+                                    </label>
+                                    <input
+                                        id="data_fi_anterior"
+                                        v-model="dataFiContracteAntic"
+                                        type="date"
+                                        required
+                                        class="mt-1 block w-full rounded-md border-amber-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-amber-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    @click="cancellarNouContracte"
+                                    class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                                >
+                                    Cancel·lar
                                 </button>
                             </div>
                         </div>
@@ -479,7 +818,7 @@ const formatCurrency = (value: string | null): string => {
                                     :disabled="contracteForm.processing"
                                     class="inline-flex items-center rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50"
                                 >
-                                    {{ selectedLloguer.contracte_actiu ? 'Actualitzar contracte' : 'Crear contracte' }}
+                                    {{ creantNouContracte ? 'Crear nou contracte' : (selectedLloguer.contracte_actiu ? 'Actualitzar contracte' : 'Crear contracte') }}
                                 </button>
                             </div>
                         </form>
@@ -516,22 +855,28 @@ const formatCurrency = (value: string | null): string => {
                                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Concepte</th>
                                         <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Import</th>
                                         <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Saldo</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Classificació</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
                                     <tr
                                         v-for="moviment in moviments"
                                         :key="moviment.id"
-                                        :class="moviment.exclou_lloguer ? 'opacity-40' : ''"
                                         class="transition-opacity"
+                                        :class="[
+                                            moviment.exclou_lloguer && !classificacioAltresLloguer(moviment) ? 'opacity-40' : '',
+                                            classificacioAltresLloguer(moviment) ? 'opacity-50 pointer-events-none select-none bg-gray-100 dark:bg-gray-900/60' : '',
+                                        ]"
                                     >
                                         <td class="px-3 py-3 text-center">
                                             <input
                                                 type="checkbox"
                                                 :checked="moviment.exclou_lloguer"
+                                                :disabled="classificacioAltresLloguer(moviment)"
                                                 @change="toggleExclou(moviment)"
                                                 title="Exclou del lloguer"
                                                 class="rounded border-gray-300 text-red-500 focus:ring-red-400"
+                                                :class="classificacioAltresLloguer(moviment) ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'"
                                             />
                                         </td>
                                         <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
@@ -550,6 +895,32 @@ const formatCurrency = (value: string | null): string => {
                                         </td>
                                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-500 dark:text-gray-400">
                                             {{ moviment.saldo_posterior ? formatCurrency(moviment.saldo_posterior) : '-' }}
+                                        </td>
+                                        <td class="px-4 py-3 text-sm">
+                                            <template v-if="classificacioThisLloguer(moviment)">
+                                                <div class="flex items-center gap-2">
+                                                    <span
+                                                        class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                                                        :class="classificacioThisLloguer(moviment)?.tipus === 'despesa'
+                                                            ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                                                            : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'"
+                                                    >
+                                                        {{ classificacioLabel(moviment) }}
+                                                    </span>
+                                                    <button @click.stop="openClassificacioModal(moviment)" class="text-xs text-amber-600 hover:text-amber-900 dark:text-amber-400">Editar</button>
+                                                    <button @click.stop="deleteClassificacio(moviment)" class="text-xs text-red-500 hover:text-red-800 dark:text-red-400">✕</button>
+                                                </div>
+                                            </template>
+                                            <template v-else-if="classificacioAltresLloguer(moviment)">
+                                                <span class="inline-flex items-center rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-700 dark:text-gray-400 italic">
+                                                    Altre lloguer
+                                                </span>
+                                            </template>
+                                            <template v-else-if="!moviment.exclou_lloguer">
+                                                <button @click.stop="openClassificacioModal(moviment)" class="text-xs text-amber-600 hover:text-amber-900 dark:text-amber-400">
+                                                    + Classificar
+                                                </button>
+                                            </template>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -659,6 +1030,31 @@ const formatCurrency = (value: string | null): string => {
                                     </select>
                                     <p v-if="lloguerForm.errors.compte_corrent_id" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ lloguerForm.errors.compte_corrent_id }}</p>
                                 </div>
+
+                                <div class="sm:col-span-2">
+                                    <label for="proveidor_gestoria_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Gestoria (proveïdor)</label>
+                                    <select
+                                        id="proveidor_gestoria_id"
+                                        v-model="lloguerForm.proveidor_gestoria_id"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    >
+                                        <option :value="null">Sense gestoria</option>
+                                        <option v-for="p in proveidors" :key="p.id" :value="p.id">{{ p.nom_rao_social }}</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label for="gestoria_percentatge" class="block text-sm font-medium text-gray-700 dark:text-gray-300">% Gestoria</label>
+                                    <input
+                                        id="gestoria_percentatge"
+                                        v-model="lloguerForm.gestoria_percentatge"
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        max="100"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -673,6 +1069,253 @@ const formatCurrency = (value: string | null): string => {
                             <button
                                 type="button"
                                 @click="closeLloguerModal"
+                                class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 sm:ml-3 sm:mt-0 sm:w-auto sm:text-sm"
+                            >
+                                Cancel·lar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Classificació Modal -->
+        <div
+            v-if="showClassificacioModal"
+            class="fixed inset-0 z-50 overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+        >
+            <div class="flex min-h-screen items-end justify-center px-4 pb-20 pt-4 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeClassificacioModal"></div>
+                <span class="hidden sm:inline-block sm:h-screen sm:align-middle" aria-hidden="true">&#8203;</span>
+
+                <div class="inline-block transform overflow-hidden rounded-lg bg-white text-left align-bottom shadow-xl transition-all dark:bg-gray-800 sm:my-8 sm:w-full sm:max-w-2xl sm:align-middle">
+                    <form @submit.prevent="submitClassificacio">
+                        <div class="bg-white px-4 pb-4 pt-5 dark:bg-gray-800 sm:p-6 sm:pb-4">
+                            <h3 class="mb-4 text-lg font-medium leading-6 text-gray-900 dark:text-gray-100">
+                                Classificar moviment
+                            </h3>
+                            <p class="mb-4 text-sm text-gray-500 dark:text-gray-400 truncate">
+                                {{ classificacioMoviment?.data_moviment }} — {{ classificacioMoviment?.concepte }}
+                                <span class="font-medium" :class="parseFloat(classificacioMoviment?.import ?? '0') >= 0 ? 'text-green-600' : 'text-red-600'">
+                                    {{ formatCurrency(classificacioMoviment?.import ?? null) }}
+                                </span>
+                            </p>
+
+                            <p v-if="classificacioErrors.general" class="mb-4 text-sm text-red-600 dark:text-red-400">{{ classificacioErrors.general }}</p>
+
+                            <!-- Tipus toggle -->
+                            <div class="mb-6 flex rounded-md shadow-sm" role="group">
+                                <button
+                                    type="button"
+                                    @click="classificacioTipus = 'despesa'"
+                                    class="flex-1 rounded-l-md border px-4 py-2 text-sm font-medium transition-colors"
+                                    :class="classificacioTipus === 'despesa'
+                                        ? 'border-red-500 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                                        : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300'"
+                                >
+                                    Despesa
+                                </button>
+                                <button
+                                    type="button"
+                                    @click="classificacioTipus = 'ingres'"
+                                    class="flex-1 rounded-r-md border-y border-r px-4 py-2 text-sm font-medium transition-colors"
+                                    :class="classificacioTipus === 'ingres'
+                                        ? 'border-green-500 bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                                        : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300'"
+                                >
+                                    Ingrés
+                                </button>
+                            </div>
+
+                            <!-- Despesa fields -->
+                            <div v-if="classificacioTipus === 'despesa'" class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Categoria *</label>
+                                    <select
+                                        v-model="classificacioDespesa.categoria"
+                                        required
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    >
+                                        <option value="">Selecciona una categoria</option>
+                                        <option v-for="cat in categoriesDespesa" :key="cat.value" :value="cat.value">{{ cat.label }}</option>
+                                    </select>
+                                    <p v-if="classificacioErrors['categoria']" class="mt-1 text-sm text-red-600">{{ classificacioErrors['categoria'] }}</p>
+                                </div>
+
+                                <div v-if="categoriesAmbProveidor.includes(classificacioDespesa.categoria)">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Proveïdor</label>
+                                    <select
+                                        v-model="classificacioDespesa.proveidor_id"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    >
+                                        <option :value="null">Sense proveïdor</option>
+                                        <option v-for="p in proveidors" :key="p.id" :value="p.id">{{ p.nom_rao_social }}</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
+                                    <textarea
+                                        v-model="classificacioDespesa.notes"
+                                        rows="2"
+                                        maxlength="500"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    ></textarea>
+                                </div>
+                            </div>
+
+                            <!-- Ingrés fields -->
+                            <div v-else class="space-y-4">
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Base lloguer (€) *</label>
+                                        <input
+                                            v-model="classificacioIngres.base_lloguer"
+                                            type="number"
+                                            step="0.01"
+                                            required
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            Comissió gestoria total (amb IVA, €)
+                                            <span v-if="selectedLloguer?.gestoria_percentatge" class="text-xs text-gray-400 ml-1">
+                                                ({{ selectedLloguer.gestoria_percentatge }}% + IVA 21%)
+                                            </span>
+                                        </label>
+                                        <input
+                                            v-model="classificacioIngres.gestoria_import"
+                                            type="number"
+                                            step="0.01"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        />
+                                        <div v-if="gestoriaNet !== null" class="mt-1 space-y-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                            <div class="flex justify-between">
+                                                <span>Comissió neta</span>
+                                                <span>{{ formatCurrency(gestoriaNet.toString()) }}</span>
+                                            </div>
+                                            <div class="flex justify-between">
+                                                <span>IVA (21%)</span>
+                                                <span>{{ formatCurrency(gestoriaIva!.toString()) }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Línies de despesa -->
+                                <div>
+                                    <div class="flex items-center justify-between mb-2">
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Despeses addicionals</label>
+                                        <button type="button" @click="addLinia" class="text-xs text-amber-600 hover:text-amber-900 dark:text-amber-400">+ Afegir línia</button>
+                                    </div>
+                                    <div v-if="classificacioIngres.linies.length > 0" class="space-y-2">
+                                        <div
+                                            v-for="(linia, idx) in classificacioIngres.linies"
+                                            :key="idx"
+                                            class="grid grid-cols-12 gap-2 items-start rounded-md border border-gray-200 p-2 dark:border-gray-700"
+                                        >
+                                            <div class="col-span-2">
+                                                <input
+                                                    v-model="linia.tipus"
+                                                    type="text"
+                                                    placeholder="Tipus"
+                                                    maxlength="20"
+                                                    required
+                                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-xs"
+                                                />
+                                            </div>
+                                            <div class="col-span-4">
+                                                <input
+                                                    v-model="linia.descripcio"
+                                                    type="text"
+                                                    placeholder="Descripció"
+                                                    maxlength="200"
+                                                    required
+                                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-xs"
+                                                />
+                                            </div>
+                                            <div class="col-span-2">
+                                                <input
+                                                    v-model="linia.import"
+                                                    type="number"
+                                                    step="0.01"
+                                                    placeholder="Import"
+                                                    required
+                                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-xs"
+                                                />
+                                            </div>
+                                            <div class="col-span-3">
+                                                <select
+                                                    v-model="linia.proveidor_id"
+                                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-xs"
+                                                >
+                                                    <option :value="null">Sense proveïdor</option>
+                                                    <option v-for="p in proveidors" :key="p.id" :value="p.id">{{ p.nom_rao_social }}</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-span-1 flex justify-center pt-1">
+                                                <button type="button" @click="removeLinia(idx)" class="text-red-500 hover:text-red-700 text-sm">✕</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p v-else class="text-xs italic text-gray-400">Cap despesa addicional.</p>
+                                </div>
+
+                                <!-- Resum de reconciliació -->
+                                <div class="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm dark:border-gray-700 dark:bg-gray-900/40">
+                                    <div class="space-y-1">
+                                        <div class="flex justify-between text-gray-600 dark:text-gray-400">
+                                            <span>Base lloguer</span>
+                                            <span>{{ formatCurrency((classificacioIngres.base_lloguer ?? 0).toString()) }}</span>
+                                        </div>
+                                        <div v-if="(classificacioIngres.gestoria_import ?? 0) !== 0" class="flex justify-between text-gray-600 dark:text-gray-400">
+                                            <span>− Gestoria (total amb IVA)</span>
+                                            <span class="text-red-600 dark:text-red-400">{{ formatCurrency((classificacioIngres.gestoria_import ?? 0).toString()) }}</span>
+                                        </div>
+                                        <div
+                                            v-for="(linia, idx) in classificacioIngres.linies.filter(l => (l.import ?? 0) !== 0)"
+                                            :key="'res-' + idx"
+                                            class="flex justify-between text-gray-600 dark:text-gray-400"
+                                        >
+                                            <span class="truncate max-w-[60%]">− {{ linia.descripcio || linia.tipus || `Línia ${idx + 1}` }}</span>
+                                            <span class="text-red-600 dark:text-red-400">{{ formatCurrency((linia.import ?? 0).toString()) }}</span>
+                                        </div>
+                                        <div class="mt-1 border-t border-gray-300 pt-1 dark:border-gray-600 flex justify-between font-medium text-gray-800 dark:text-gray-200">
+                                            <span>= Net calculat</span>
+                                            <span>{{ formatCurrency(ingresNetCalculat.toString()) }}</span>
+                                        </div>
+                                        <div class="flex justify-between text-gray-500 dark:text-gray-400">
+                                            <span>Import al banc</span>
+                                            <span>{{ formatCurrency(classificacioMoviment?.import ?? '0') }}</span>
+                                        </div>
+                                        <div
+                                            class="flex justify-between font-semibold border-t border-gray-300 pt-1 dark:border-gray-600"
+                                            :class="ingresDiferencia === 0
+                                                ? 'text-green-600 dark:text-green-400'
+                                                : 'text-amber-600 dark:text-amber-400'"
+                                        >
+                                            <span>Diferència</span>
+                                            <span>{{ ingresDiferencia === 0 ? '✓ Quadra' : formatCurrency(ingresDiferencia.toString()) }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-gray-50 px-4 py-3 dark:bg-gray-700 sm:flex sm:flex-row-reverse sm:px-6">
+                            <button
+                                type="submit"
+                                :disabled="classificacioSaving"
+                                class="inline-flex w-full justify-center rounded-md bg-amber-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm"
+                            >
+                                {{ classificacioSaving ? 'Desant…' : 'Desar classificació' }}
+                            </button>
+                            <button
+                                type="button"
+                                @click="closeClassificacioModal"
                                 class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 sm:ml-3 sm:mt-0 sm:w-auto sm:text-sm"
                             >
                                 Cancel·lar

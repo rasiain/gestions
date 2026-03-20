@@ -8,6 +8,7 @@ use App\Http\Controllers\LlogaterController;
 use App\Http\Controllers\ContracteController;
 use App\Http\Controllers\LloguerController;
 use App\Http\Controllers\MovementImportController;
+use App\Http\Controllers\MovimentClassificacioController;
 use App\Http\Controllers\MovimentCompteCorrentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PersonaController;
@@ -82,6 +83,9 @@ Route::middleware('auth')->group(function () {
         'index', 'store', 'update', 'destroy'
     ]);
     Route::patch('/moviments/{moviment}/exclou-lloguer', [MovimentCompteCorrentController::class, 'toggleExclou'])->name('moviments.toggle-exclou');
+    Route::post('/moviments/{moviment}/classificacio', [MovimentClassificacioController::class, 'store'])->name('moviments.classificacio.store');
+    Route::put('/moviments/{moviment}/classificacio', [MovimentClassificacioController::class, 'update'])->name('moviments.classificacio.update');
+    Route::delete('/moviments/{moviment}/classificacio', [MovimentClassificacioController::class, 'destroy'])->name('moviments.classificacio.destroy');
 
     // Maintenance - Movement Import
     Route::get('/maintenance/movements/import', [MovementImportController::class, 'index'])->name('maintenance.movements.import');

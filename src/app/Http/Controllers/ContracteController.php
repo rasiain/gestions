@@ -4,17 +4,38 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ContracteRequest;
 use App\Models\Contracte;
+use Illuminate\Support\Facades\DB;
 
 class ContracteController extends Controller
 {
     public function store(ContracteRequest $request)
     {
         $validated = $request->validated();
-        $llogaterIds = $validated['llogater_ids'] ?? [];
-        unset($validated['llogater_ids']);
 
-        $contracte = Contracte::create($validated);
-        $contracte->llogaters()->sync($llogaterIds);
+        // Extreure camps especials abans de crear el contracte
+        $tancarId     = $validated['tancar_contracte_anterior_id'] ?? null;
+        $dataFiAnterior = $validated['data_fi_anterior'] ?? null;
+        $llogaterIds  = $validated['llogater_ids'] ?? [];
+        unset($validated['tancar_contracte_anterior_id'], $validated['data_fi_anterior'], $validated['llogater_ids']);
+
+        DB::beginTransaction();
+        try {
+            // Tancar el contracte anterior si s'ha especificat
+            if ($tancarId && $dataFiAnterior) {
+                Contracte::where('id', $tancarId)
+                    ->where('lloguer_id', $validated['lloguer_id'])
+                    ->update(['data_fi' => $dataFiAnterior]);
+            }
+
+            $contracte = Contracte::create($validated);
+            $contracte->llogaters()->sync($llogaterIds);
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()
+                ->withErrors(['error' => 'Error creant el contracte: ' . $e->getMessage()]);
+        }
 
         return redirect()->route('lloguers.index')
             ->with('success', 'Contracte creat correctament.');
