@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, useForm, router } from '@inertiajs/vue3';
+import { Head, useForm, router, Link } from '@inertiajs/vue3';
 import { ref } from 'vue';
 
 interface Titular {
@@ -212,6 +212,12 @@ const formatSaldo = (saldo: number | null): string => {
                                             {{ compte.ordre }}
                                         </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
+                                            <Link
+                                                :href="route('moviments.index', { compte_corrent_id: compte.id })"
+                                                class="mr-3 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                                            >
+                                                Moviments
+                                            </Link>
                                             <button
                                                 @click="openEditModal(compte)"
                                                 class="mr-3 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
