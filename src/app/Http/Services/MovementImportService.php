@@ -311,15 +311,47 @@ class MovementImportService
                 ->flip()
                 ->toArray();
 
-            $toImport = array_filter($movements, function ($mov) use ($existingHashes) {
-                return !isset($existingHashes[$mov['hash']]);
+            $lastDbDate = $lastDbMovement->data_moviment->startOfDay();
+            $skippedBeforeLastDate = 0;
+
+            $toImport = array_filter($movements, function ($mov) use ($existingHashes, $lastDbDate, &$skippedBeforeLastDate) {
+                // If hash matches, skip as duplicate
+                if (isset($existingHashes[$mov['hash']])) {
+                    return false;
+                }
+                // If movement date is strictly before the last DB date and has no hash match,
+                // it likely comes from a different source (e.g. KMyMoney vs bank XLS date mismatch).
+                // Skip it to avoid importing false duplicates with slightly different dates.
+                if (strtotime($mov['data_moviment']) < $lastDbDate->timestamp) {
+                    $skippedBeforeLastDate++;
+                    Log::info('Skipping movement before last DB date (likely source date mismatch)', [
+                        'date' => $mov['data_moviment'],
+                        'import' => $mov['import'],
+                        'hash' => $mov['hash'],
+                    ]);
+                    return false;
+                }
+                return true;
             });
 
             Log::info('Filtering movements by hash', [
                 'total_movements' => count($movements),
                 'existing_hashes_count' => count($existingHashes),
                 'movements_to_import' => count($toImport),
+                'skipped_before_last_date' => $skippedBeforeLastDate,
             ]);
+
+            $warnings = [
+                'Importació des de l\'última data a la BD: ' .
+                $lastDbMovement->data_moviment->format('d/m/Y'),
+            ];
+            if ($skippedBeforeLastDate > 0) {
+                $warnings[] = sprintf(
+                    '%d moviment(s) amb data anterior a %s omès(os) (possible conflicte de dates entre fonts d\'importació).',
+                    $skippedBeforeLastDate,
+                    $lastDbMovement->data_moviment->format('d/m/Y')
+                );
+            }
 
             return [
                 'movements' => array_values($toImport),
@@ -327,10 +359,7 @@ class MovementImportService
                 'last_db_movement' => $lastDbMovement,
                 'duplicates_skipped' => count($movements) - count($toImport),
                 'to_import_count' => count($toImport),
-                'warnings' => [
-                    'Importació des de l\'última data a la BD: ' .
-                    $lastDbMovement->data_moviment->format('d/m/Y'),
-                ],
+                'warnings' => $warnings,
             ];
         }
 
