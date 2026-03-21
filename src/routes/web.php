@@ -8,6 +8,7 @@ use App\Http\Controllers\LlogaterController;
 use App\Http\Controllers\ContracteController;
 use App\Http\Controllers\LloguerController;
 use App\Http\Controllers\MovementImportController;
+use App\Http\Controllers\ImpostosIrpfController;
 use App\Http\Controllers\MovimentClassificacioController;
 use App\Http\Controllers\MovimentCompteCorrentController;
 use App\Http\Controllers\ProfileController;
@@ -86,6 +87,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/moviments/{moviment}/classificacio', [MovimentClassificacioController::class, 'store'])->name('moviments.classificacio.store');
     Route::put('/moviments/{moviment}/classificacio', [MovimentClassificacioController::class, 'update'])->name('moviments.classificacio.update');
     Route::delete('/moviments/{moviment}/classificacio', [MovimentClassificacioController::class, 'destroy'])->name('moviments.classificacio.destroy');
+
+    // Impostos
+    Route::get('/impostos/irpf', [ImpostosIrpfController::class, 'index'])->name('impostos.irpf');
 
     // Maintenance - Movement Import
     Route::get('/maintenance/movements/import', [MovementImportController::class, 'index'])->name('maintenance.movements.import');

@@ -159,6 +159,45 @@ import { Head, Link } from '@inertiajs/vue3';
                         </div>
                     </div>
 
+                    <!-- Impostos Card -->
+                    <div class="rounded-lg bg-white p-6 shadow-sm dark:bg-gray-800">
+                        <div class="flex items-center">
+                            <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-red-100 dark:bg-red-900">
+                                <svg
+                                    class="h-6 w-6 text-red-600 dark:text-red-400"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"
+                                    />
+                                </svg>
+                            </div>
+                            <div class="ml-4">
+                                <h4 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                                    Impostos
+                                </h4>
+                                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                    Declaracions i càlculs fiscals
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Sub-links -->
+                        <div class="mt-4 ml-16 space-y-2 border-l-2 border-red-200 dark:border-red-800 pl-4">
+                            <Link
+                                :href="route('impostos.irpf')"
+                                class="block text-sm text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors"
+                            >
+                                → IRPF Lloguers
+                            </Link>
+                        </div>
+                    </div>
+
                     <!-- Configuració Card -->
                     <div class="rounded-lg bg-white p-6 shadow-sm dark:bg-gray-800">
                         <div class="flex items-center">
