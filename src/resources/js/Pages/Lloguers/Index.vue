@@ -274,6 +274,10 @@ const movimentsPage = ref(1);
 const movimentsTotal = ref(0);
 const movimentsHasMore = ref(false);
 const movimentsLoading = ref(false);
+const movimentsFilterAny = ref<number | null>(null);
+const movimentsFilterClassificats = ref(false);
+const movimentsFilterPendents = ref(false);
+const movimentsAnys = ref<number[]>([]);
 const movimentCategories = ref<Categoria[]>([]);
 
 const csrfToken = (): string =>
@@ -282,7 +286,12 @@ const csrfToken = (): string =>
 const fetchMoviments = async (lloguer: Lloguer, page: number, append = false) => {
     movimentsLoading.value = true;
     try {
-        const res = await fetch(`/lloguers/${lloguer.id}/moviments?page=${page}`, {
+        const params = new URLSearchParams({ page: String(page) });
+        if (movimentsFilterAny.value) params.set('any', String(movimentsFilterAny.value));
+        if (movimentsFilterClassificats.value) params.set('classificats', '1');
+        if (movimentsFilterPendents.value) params.set('pendents', '1');
+
+        const res = await fetch(`/lloguers/${lloguer.id}/moviments?${params}`, {
             headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
         });
         const json = await res.json();
@@ -291,6 +300,7 @@ const fetchMoviments = async (lloguer: Lloguer, page: number, append = false) =>
         movimentsHasMore.value = json.has_more;
         movimentsPage.value = page;
         if (json.categories) movimentCategories.value = json.categories;
+        if (json.anys) movimentsAnys.value = json.anys;
     } finally {
         movimentsLoading.value = false;
     }
@@ -620,11 +630,27 @@ const removeLinia = (index: number) => {
     classificacioIngres.value.linies.splice(index, 1);
 };
 
+watch(movimentsFilterClassificats, (val) => {
+    if (val) movimentsFilterPendents.value = false;
+});
+watch(movimentsFilterPendents, (val) => {
+    if (val) movimentsFilterClassificats.value = false;
+});
+watch([movimentsFilterAny, movimentsFilterClassificats, movimentsFilterPendents], () => {
+    if (selectedLloguerId.value) {
+        const lloguer = props.lloguers.find(l => l.id === selectedLloguerId.value);
+        if (lloguer) fetchMoviments(lloguer, 1);
+    }
+});
+
 watch(selectedLloguerId, (newId) => {
     moviments.value = [];
     movimentsTotal.value = 0;
     movimentsHasMore.value = false;
     movimentsPage.value = 1;
+    movimentsFilterAny.value = null;
+    movimentsFilterClassificats.value = false;
+    movimentsFilterPendents.value = false;
     if (newId) {
         const lloguer = props.lloguers.find(l => l.id === newId);
         if (lloguer) fetchMoviments(lloguer, 1);
@@ -940,6 +966,36 @@ const formatCurrency = (value: string | null): string => {
                                     {{ movimentsTotal }} moviments en total
                                 </p>
                             </div>
+                        </div>
+
+                        <!-- Filtres -->
+                        <div class="mb-4 flex flex-wrap items-center gap-4">
+                            <div class="flex items-center gap-2">
+                                <label class="text-sm text-gray-600 dark:text-gray-400">Any:</label>
+                                <select
+                                    v-model="movimentsFilterAny"
+                                    class="rounded-md border-gray-300 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                                >
+                                    <option :value="null">Tots</option>
+                                    <option v-for="a in movimentsAnys" :key="a" :value="a">{{ a }}</option>
+                                </select>
+                            </div>
+                            <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    v-model="movimentsFilterClassificats"
+                                    class="rounded border-gray-300 text-amber-500 focus:ring-amber-400"
+                                />
+                                Només classificats
+                            </label>
+                            <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    v-model="movimentsFilterPendents"
+                                    class="rounded border-gray-300 text-amber-500 focus:ring-amber-400"
+                                />
+                                Pendents de classificar
+                            </label>
                         </div>
 
                         <div v-if="movimentsLoading && moviments.length === 0" class="py-8 text-center text-sm text-gray-400">

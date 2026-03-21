@@ -113,9 +113,27 @@ class LloguerController extends Controller
         $perPage = 30;
 
         $query = MovimentCompteCorrent::with(['concepte', 'categoria', 'despesa', 'ingres.linies'])
-            ->where('compte_corrent_id', $lloguer->compte_corrent_id)
-            ->orderBy('data_moviment', 'desc')
-            ->orderBy('id', 'desc');
+            ->where('compte_corrent_id', $lloguer->compte_corrent_id);
+
+        if ($any = $request->integer('any')) {
+            $query->whereYear('data_moviment', $any);
+        }
+
+        if ($request->boolean('classificats')) {
+            $query->where(function ($q) use ($lloguer) {
+                $q->whereHas('despesa', fn($q2) => $q2->where('lloguer_id', $lloguer->id))
+                  ->orWhereHas('ingres', fn($q2) => $q2->where('lloguer_id', $lloguer->id));
+            });
+        }
+
+        if ($request->boolean('pendents')) {
+            $query->whereDoesntHave('despesa')
+                  ->whereDoesntHave('ingres')
+                  ->where('exclou_lloguer', false);
+        }
+
+        $query->orderBy('data_moviment', 'desc')
+              ->orderBy('id', 'desc');
 
         $total    = $query->count();
         $moviments = $query->skip(($page - 1) * $perPage)->take($perPage)->get()
@@ -157,13 +175,23 @@ class LloguerController extends Controller
             ->get(['id', 'nom', 'compte_corrent_id', 'categoria_pare_id', 'ordre'])
             ->toArray();
 
-        return response()->json([
+        $response = [
             'data'       => $moviments,
             'total'      => $total,
             'page'       => $page,
             'per_page'   => $perPage,
             'has_more'   => ($page * $perPage) < $total,
             'categories' => $categories,
-        ]);
+        ];
+
+        if ($page === 1) {
+            $response['anys'] = MovimentCompteCorrent::where('compte_corrent_id', $lloguer->compte_corrent_id)
+                ->selectRaw("DISTINCT strftime('%Y', data_moviment) as any")
+                ->orderBy('any', 'desc')
+                ->pluck('any')
+                ->map(fn($v) => (int) $v);
+        }
+
+        return response()->json($response);
     }
 }
