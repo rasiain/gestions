@@ -85,6 +85,7 @@ const select = () => {
         >
             <button
                 v-if="hasChildren"
+                type="button"
                 @click.stop="toggle"
                 class="w-5 h-5 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
             >
