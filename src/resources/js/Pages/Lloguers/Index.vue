@@ -448,6 +448,16 @@ const categoriesIngresLinia = [
     { value: 'gestoria', label: 'Gestoria' },
 ];
 
+const ingresNoQuadra = (moviment: Moviment): boolean => {
+    if (!moviment.ingres || moviment.ingres.lloguer_id !== selectedLloguerId.value) return false;
+    const base = parseFloat(moviment.ingres.base_lloguer) || 0;
+    const gestoria = moviment.ingres.gestoria_import ? parseFloat(moviment.ingres.gestoria_import) : 0;
+    const linies = moviment.ingres.linies.reduce((s, l) => s + (parseFloat(l.import) || 0), 0);
+    const netCalculat = (base - gestoria - linies).toFixed(2);
+    const importBanc = parseFloat(moviment.import).toFixed(2);
+    return netCalculat !== importBanc;
+};
+
 const classificacioThisLloguer = (moviment: Moviment) => {
     if (moviment.despesa?.lloguer_id === selectedLloguerId.value) return { tipus: 'despesa' as const, data: moviment.despesa };
     if (moviment.ingres?.lloguer_id === selectedLloguerId.value) return { tipus: 'ingres' as const, data: moviment.ingres };
@@ -1026,9 +1036,11 @@ const formatCurrency = (value: string | null): string => {
                                                 ? 'opacity-50 pointer-events-none select-none bg-gray-100 dark:bg-gray-900/60'
                                                 : moviment.exclou_lloguer
                                                     ? 'opacity-40'
-                                                    : classificacioThisLloguer(moviment)
-                                                        ? 'bg-green-50 dark:bg-green-900/20'
-                                                        : 'bg-amber-50 dark:bg-amber-900/10',
+                                                    : ingresNoQuadra(moviment)
+                                                        ? 'bg-red-50 ring-1 ring-inset ring-red-200 dark:bg-red-900/20 dark:ring-red-800'
+                                                        : classificacioThisLloguer(moviment)
+                                                            ? 'bg-green-50 dark:bg-green-900/20'
+                                                            : 'bg-amber-50 dark:bg-amber-900/10',
                                         ]"
                                     >
                                         <td class="px-3 py-3 text-center">
