@@ -7,6 +7,7 @@ use App\Models\CompteCorrent;
 use App\Models\Immoble;
 use App\Models\Llogater;
 use App\Models\Lloguer;
+use App\Models\Categoria;
 use App\Models\MovimentCompteCorrent;
 use App\Models\Proveidor;
 use Illuminate\Http\JsonResponse;
@@ -111,7 +112,7 @@ class LloguerController extends Controller
         $page    = max(1, $request->integer('page', 1));
         $perPage = 30;
 
-        $query = MovimentCompteCorrent::with(['concepte', 'despesa', 'ingres.linies'])
+        $query = MovimentCompteCorrent::with(['concepte', 'categoria', 'despesa', 'ingres.linies'])
             ->where('compte_corrent_id', $lloguer->compte_corrent_id)
             ->orderBy('data_moviment', 'desc')
             ->orderBy('id', 'desc');
@@ -120,11 +121,15 @@ class LloguerController extends Controller
         $moviments = $query->skip(($page - 1) * $perPage)->take($perPage)->get()
             ->map(fn($m) => [
                 'id'              => $m->id,
+                'compte_corrent_id' => $m->compte_corrent_id,
                 'data_moviment'   => $m->data_moviment->toDateString(),
                 'concepte'        => $m->concepte?->concepte ?? $m->concepte_original ?? '',
+                'notes'           => $m->notes,
                 'import'          => $m->import,
                 'saldo_posterior' => $m->saldo_posterior,
                 'exclou_lloguer'  => $m->exclou_lloguer,
+                'categoria_id'    => $m->categoria_id,
+                'categoria_nom'   => $m->categoria?->nom,
                 'despesa'         => $m->despesa ? [
                     'id'           => $m->despesa->id,
                     'lloguer_id'   => $m->despesa->lloguer_id,
@@ -147,12 +152,18 @@ class LloguerController extends Controller
                 ] : null,
             ]);
 
+        $categories = Categoria::where('compte_corrent_id', $lloguer->compte_corrent_id)
+            ->orderBy('nom')
+            ->get(['id', 'nom', 'compte_corrent_id', 'categoria_pare_id', 'ordre'])
+            ->toArray();
+
         return response()->json([
-            'data'     => $moviments,
-            'total'    => $total,
-            'page'     => $page,
-            'per_page' => $perPage,
-            'has_more' => ($page * $perPage) < $total,
+            'data'       => $moviments,
+            'total'      => $total,
+            'page'       => $page,
+            'per_page'   => $perPage,
+            'has_more'   => ($page * $perPage) < $total,
+            'categories' => $categories,
         ]);
     }
 }

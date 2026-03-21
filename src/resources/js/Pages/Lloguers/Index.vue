@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref, computed, watch } from 'vue';
 
@@ -220,6 +221,14 @@ const deleteContracte = () => {
 };
 
 // ── Moviments ──────────────────────────────────────────────────
+interface Categoria {
+    id: number;
+    nom: string;
+    compte_corrent_id: number;
+    categoria_pare_id: number | null;
+    ordre: number;
+}
+
 interface MovimentDespesa {
     id: number;
     lloguer_id: number;
@@ -246,11 +255,15 @@ interface MovimentIngres {
 
 interface Moviment {
     id: number;
+    compte_corrent_id: number;
     data_moviment: string;
     concepte: string;
+    notes: string | null;
     import: string;
     saldo_posterior: string | null;
     exclou_lloguer: boolean;
+    categoria_id: number | null;
+    categoria_nom: string | null;
     despesa: MovimentDespesa | null;
     ingres: MovimentIngres | null;
 }
@@ -260,6 +273,7 @@ const movimentsPage = ref(1);
 const movimentsTotal = ref(0);
 const movimentsHasMore = ref(false);
 const movimentsLoading = ref(false);
+const movimentCategories = ref<Categoria[]>([]);
 
 const csrfToken = (): string =>
     (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
@@ -275,6 +289,7 @@ const fetchMoviments = async (lloguer: Lloguer, page: number, append = false) =>
         movimentsTotal.value = json.total;
         movimentsHasMore.value = json.has_more;
         movimentsPage.value = page;
+        if (json.categories) movimentCategories.value = json.categories;
     } finally {
         movimentsLoading.value = false;
     }
@@ -308,6 +323,81 @@ const toggleExclou = async (moviment: Moviment) => {
     } catch {
         // Si falla, reverteix
         moviments.value[index] = { ...moviments.value[index], exclou_lloguer: !newValue };
+    }
+};
+
+// ── Edició de moviments ────────────────────────────────────────
+const showMovimentEditModal = ref(false);
+const movimentEditSaving = ref(false);
+const movimentEditErrors = ref<Record<string, string>>({});
+const editingMovimentForEdit = ref<Moviment | null>(null);
+const movimentEditForm = ref({
+    compte_corrent_id: 0,
+    data_moviment: '',
+    concepte: '',
+    notes: null as string | null,
+    import: 0 as number,
+    saldo_posterior: null as number | null,
+    categoria_id: null as number | null,
+});
+
+const openMovimentEditModal = (moviment: Moviment) => {
+    editingMovimentForEdit.value = moviment;
+    movimentEditForm.value = {
+        compte_corrent_id: moviment.compte_corrent_id,
+        data_moviment: moviment.data_moviment,
+        concepte: moviment.concepte,
+        notes: moviment.notes,
+        import: parseFloat(moviment.import),
+        saldo_posterior: moviment.saldo_posterior !== null ? parseFloat(moviment.saldo_posterior) : null,
+        categoria_id: moviment.categoria_id,
+    };
+    movimentEditErrors.value = {};
+    showMovimentEditModal.value = true;
+};
+
+const closeMovimentEditModal = () => {
+    showMovimentEditModal.value = false;
+    editingMovimentForEdit.value = null;
+};
+
+const submitMovimentEdit = async () => {
+    const moviment = editingMovimentForEdit.value;
+    if (!moviment) return;
+    movimentEditSaving.value = true;
+    movimentEditErrors.value = {};
+    try {
+        const res = await fetch(`/moviments/${moviment.id}`, {
+            method: 'PUT',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken(),
+            },
+            body: JSON.stringify(movimentEditForm.value),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+            movimentEditErrors.value = json.errors ?? {};
+            return;
+        }
+        // Update the moviment in the local array
+        const index = moviments.value.findIndex(m => m.id === moviment.id);
+        if (index !== -1) {
+            moviments.value[index] = {
+                ...moviments.value[index],
+                data_moviment: json.data_moviment,
+                concepte: json.concepte,
+                notes: json.notes,
+                import: json.import,
+                saldo_posterior: json.saldo_posterior,
+                categoria_id: json.categoria_id,
+                categoria_nom: json.categoria_nom,
+            };
+        }
+        closeMovimentEditModal();
+    } finally {
+        movimentEditSaving.value = false;
     }
 };
 
@@ -853,19 +943,26 @@ const formatCurrency = (value: string | null): string => {
                                         <th class="w-8 px-3 py-3"></th>
                                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Data</th>
                                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Concepte</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Categoria</th>
                                         <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Import</th>
                                         <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Saldo</th>
                                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Classificació</th>
+                                        <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Accions</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
                                     <tr
                                         v-for="moviment in moviments"
                                         :key="moviment.id"
-                                        class="transition-opacity"
+                                        class="transition-colors"
                                         :class="[
-                                            moviment.exclou_lloguer && !classificacioAltresLloguer(moviment) ? 'opacity-40' : '',
-                                            classificacioAltresLloguer(moviment) ? 'opacity-50 pointer-events-none select-none bg-gray-100 dark:bg-gray-900/60' : '',
+                                            classificacioAltresLloguer(moviment)
+                                                ? 'opacity-50 pointer-events-none select-none bg-gray-100 dark:bg-gray-900/60'
+                                                : moviment.exclou_lloguer
+                                                    ? 'opacity-40'
+                                                    : classificacioThisLloguer(moviment)
+                                                        ? 'bg-green-50 dark:bg-green-900/20'
+                                                        : 'bg-amber-50 dark:bg-amber-900/10',
                                         ]"
                                     >
                                         <td class="px-3 py-3 text-center">
@@ -884,6 +981,9 @@ const formatCurrency = (value: string | null): string => {
                                         </td>
                                         <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 max-w-xs truncate">
                                             {{ moviment.concepte }}
+                                        </td>
+                                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                                            {{ moviment.categoria_nom || '-' }}
                                         </td>
                                         <td
                                             class="whitespace-nowrap px-4 py-3 text-right text-sm font-medium"
@@ -921,6 +1021,14 @@ const formatCurrency = (value: string | null): string => {
                                                     + Classificar
                                                 </button>
                                             </template>
+                                        </td>
+                                        <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-medium">
+                                            <button
+                                                @click.stop="openMovimentEditModal(moviment)"
+                                                class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                                            >
+                                                Editar
+                                            </button>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -1070,6 +1178,105 @@ const formatCurrency = (value: string | null): string => {
                                 type="button"
                                 @click="closeLloguerModal"
                                 class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 sm:ml-3 sm:mt-0 sm:w-auto sm:text-sm"
+                            >
+                                Cancel·lar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edició Moviment Modal -->
+        <div
+            v-if="showMovimentEditModal"
+            class="fixed inset-0 z-50 overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+        >
+            <div class="flex min-h-screen items-end justify-center px-4 pb-20 pt-4 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeMovimentEditModal"></div>
+                <span class="hidden sm:inline-block sm:h-screen sm:align-middle" aria-hidden="true">&#8203;</span>
+                <div class="inline-block transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-left align-bottom shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:align-middle">
+                    <form @submit.prevent="submitMovimentEdit">
+                        <div class="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                            <h3 class="mb-4 text-lg font-medium leading-6 text-gray-900 dark:text-gray-100">
+                                Editar Moviment
+                            </h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Data</label>
+                                    <input
+                                        v-model="movimentEditForm.data_moviment"
+                                        type="date"
+                                        required
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                    <p v-if="movimentEditErrors.data_moviment" class="mt-1 text-sm text-red-600">{{ movimentEditErrors.data_moviment }}</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Concepte</label>
+                                    <input
+                                        v-model="movimentEditForm.concepte"
+                                        type="text"
+                                        required
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                    <p v-if="movimentEditErrors.concepte" class="mt-1 text-sm text-red-600">{{ movimentEditErrors.concepte }}</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes (opcional)</label>
+                                    <textarea
+                                        v-model="movimentEditForm.notes"
+                                        rows="2"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Import (€)</label>
+                                    <input
+                                        v-model.number="movimentEditForm.import"
+                                        type="number"
+                                        step="0.01"
+                                        required
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                    <p v-if="movimentEditErrors.import" class="mt-1 text-sm text-red-600">{{ movimentEditErrors.import }}</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Saldo posterior (opcional)</label>
+                                    <input
+                                        v-model.number="movimentEditForm.saldo_posterior"
+                                        type="number"
+                                        step="0.01"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoria (opcional)</label>
+                                    <CategoryTreeSelect
+                                        :categories="movimentCategories"
+                                        v-model="movimentEditForm.categoria_id"
+                                        :allow-none="true"
+                                        placeholder="Selecciona una categoria..."
+                                    />
+                                    <p v-if="movimentEditErrors.categoria_id" class="mt-1 text-sm text-red-600">{{ movimentEditErrors.categoria_id }}</p>
+                                </div>
+                                <p v-if="movimentEditErrors.error" class="text-sm text-red-600">{{ movimentEditErrors.error }}</p>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                            <button
+                                type="submit"
+                                :disabled="movimentEditSaving"
+                                class="inline-flex w-full justify-center rounded-md bg-indigo-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm"
+                            >
+                                {{ movimentEditSaving ? 'Desant…' : 'Actualitzar' }}
+                            </button>
+                            <button
+                                type="button"
+                                @click="closeMovimentEditModal"
+                                class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2 text-base font-medium text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                             >
                                 Cancel·lar
                             </button>

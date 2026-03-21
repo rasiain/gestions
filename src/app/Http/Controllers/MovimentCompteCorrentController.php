@@ -206,9 +206,28 @@ class MovimentCompteCorrentController extends Controller
 
             DB::commit();
 
+            if ($request->wantsJson()) {
+                $moviment->load('categoria');
+                return response()->json([
+                    'id'               => $moviment->id,
+                    'compte_corrent_id' => $moviment->compte_corrent_id,
+                    'data_moviment'    => $moviment->data_moviment->toDateString(),
+                    'concepte'         => $concepteText,
+                    'notes'            => $moviment->notes,
+                    'import'           => $moviment->import,
+                    'saldo_posterior'  => $moviment->saldo_posterior,
+                    'exclou_lloguer'   => $moviment->exclou_lloguer,
+                    'categoria_id'     => $moviment->categoria_id,
+                    'categoria_nom'    => $moviment->categoria?->nom,
+                ]);
+            }
+
             return redirect()->back()->with('success', 'Moviment actualitzat correctament.');
         } catch (\Exception $e) {
             DB::rollBack();
+            if ($request->wantsJson()) {
+                return response()->json(['errors' => ['error' => $e->getMessage()]], 422);
+            }
             return redirect()->back()
                 ->withErrors(['error' => 'Error actualitzant el moviment: ' . $e->getMessage()])
                 ->withInput();
