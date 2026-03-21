@@ -10,13 +10,7 @@
       "Bash(docker compose:*)",
       "Bash(npm run build:*)",
       "Bash(docker-compose exec:*)",
-      "Bash(git diff *)",
-      "Bash(git diff --stat *)",
-      "Bash(git log *)",
-      "Bash(git status)",
-      "Bash(git add -A)",
-      "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash(git *)"
     ],
     "deny": [],
     "ask": []
