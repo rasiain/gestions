@@ -250,6 +250,7 @@ interface MovimentIngres {
     lloguer_id: number;
     base_lloguer: string;
     gestoria_import: string | null;
+    notes: string | null;
     linies: MovimentIngresLinia[];
 }
 
@@ -417,6 +418,7 @@ const classificacioDespesa = ref({
 const classificacioIngres = ref({
     base_lloguer: null as number | null,
     gestoria_import: null as number | null,
+    notes: '',
     linies: [] as { tipus: string; descripcio: string; import: number | null; proveidor_id: number | null }[],
 });
 
@@ -509,6 +511,7 @@ const openClassificacioModal = (moviment: Moviment) => {
         classificacioIngres.value = {
             base_lloguer: parseFloat(cls.data.base_lloguer),
             gestoria_import: cls.data.gestoria_import ? parseFloat(cls.data.gestoria_import) : null,
+            notes: cls.data.notes ?? '',
             linies: cls.data.linies.map(l => ({
                 tipus: l.tipus,
                 descripcio: l.descripcio,
@@ -522,6 +525,7 @@ const openClassificacioModal = (moviment: Moviment) => {
         classificacioIngres.value = {
             base_lloguer: selectedLloguer.value?.base_euros ? parseFloat(selectedLloguer.value.base_euros) : null,
             gestoria_import: computedGestoriaImport.value,
+            notes: '',
             linies: [],
         };
     }
@@ -557,6 +561,7 @@ const submitClassificacio = async () => {
     } else {
         body.base_lloguer = classificacioIngres.value.base_lloguer;
         body.gestoria_import = classificacioIngres.value.gestoria_import;
+        body.notes = classificacioIngres.value.notes || null;
         body.linies = classificacioIngres.value.linies;
     }
 
@@ -1415,6 +1420,16 @@ const formatCurrency = (value: string | null): string => {
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
+                                    <textarea
+                                        v-model="classificacioIngres.notes"
+                                        rows="2"
+                                        maxlength="500"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    ></textarea>
                                 </div>
 
                                 <!-- Línies de despesa -->

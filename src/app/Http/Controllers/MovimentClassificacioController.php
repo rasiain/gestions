@@ -99,6 +99,7 @@ class MovimentClassificacioController extends Controller
                     'lloguer_id'      => $data['lloguer_id'],
                     'base_lloguer'    => $data['base_lloguer'],
                     'gestoria_import' => $data['gestoria_import'] ?? null,
+                    'notes'           => $data['notes'] ?? null,
                 ]);
                 foreach ($data['linies'] ?? [] as $linia) {
                     MovimentLloguerIngresLinia::create([
@@ -134,6 +135,7 @@ class MovimentClassificacioController extends Controller
                 'lloguer_id'      => $moviment->ingres->lloguer_id,
                 'base_lloguer'    => $moviment->ingres->base_lloguer,
                 'gestoria_import' => $moviment->ingres->gestoria_import,
+                'notes'           => $moviment->ingres->notes,
                 'linies'          => $moviment->ingres->linies->map(fn($l) => [
                     'id'           => $l->id,
                     'tipus'        => $l->tipus,

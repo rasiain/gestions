@@ -15,6 +15,7 @@ class MovimentLloguerIngres extends Model
         'lloguer_id',
         'base_lloguer',
         'gestoria_import',
+        'notes',
     ];
 
     protected $casts = [
