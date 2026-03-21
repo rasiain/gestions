@@ -15,6 +15,7 @@ interface DespesesPerCategoria {
     assegurança: number;
     compres: number;
     reparacions: number;
+    gestoria: number;
     altres: number;
 }
 
@@ -46,7 +47,7 @@ interface Props {
 const props = defineProps<Props>();
 
 const categories: (keyof DespesesPerCategoria)[] = [
-    'comunitat', 'taxes', 'assegurança', 'compres', 'reparacions', 'altres',
+    'comunitat', 'taxes', 'assegurança', 'compres', 'reparacions', 'gestoria', 'altres',
 ];
 
 function formatEur(value: number): string {
@@ -113,7 +114,7 @@ function tancaDetall() {
                                     Immoble
                                 </th>
                                 <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-green-600 dark:text-green-400">
-                                    Ingressos
+                                    Import base
                                 </th>
                                 <th
                                     v-for="cat in categories"
@@ -141,7 +142,7 @@ function tancaDetall() {
                                 <td
                                     class="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-green-600 dark:text-green-400"
                                     :class="{ 'cursor-pointer hover:underline': lloguer.moviments_ingressos.length > 0 }"
-                                    @click="obreDetall(lloguer.nom + ' — Ingressos', lloguer.moviments_ingressos, lloguer.total_ingressos)"
+                                    @click="obreDetall(lloguer.nom + ' — Import base', lloguer.moviments_ingressos, lloguer.total_ingressos)"
                                 >
                                     {{ formatEur(lloguer.total_ingressos) }}
                                 </td>

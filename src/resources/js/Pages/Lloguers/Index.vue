@@ -431,6 +431,11 @@ const categoriesDespesa = [
     { value: 'altres',      label: 'Altres' },
 ];
 
+const categoriesIngresLinia = [
+    ...categoriesDespesa,
+    { value: 'gestoria', label: 'Gestoria' },
+];
+
 const classificacioThisLloguer = (moviment: Moviment) => {
     if (moviment.despesa?.lloguer_id === selectedLloguerId.value) return { tipus: 'despesa' as const, data: moviment.despesa };
     if (moviment.ingres?.lloguer_id === selectedLloguerId.value) return { tipus: 'ingres' as const, data: moviment.ingres };
@@ -1425,14 +1430,14 @@ const formatCurrency = (value: string | null): string => {
                                             class="grid grid-cols-12 gap-2 items-start rounded-md border border-gray-200 p-2 dark:border-gray-700"
                                         >
                                             <div class="col-span-2">
-                                                <input
+                                                <select
                                                     v-model="linia.tipus"
-                                                    type="text"
-                                                    placeholder="Tipus"
-                                                    maxlength="20"
                                                     required
                                                     class="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-xs"
-                                                />
+                                                >
+                                                    <option value="">Categoria</option>
+                                                    <option v-for="cat in categoriesIngresLinia" :key="cat.value" :value="cat.value">{{ cat.label }}</option>
+                                                </select>
                                             </div>
                                             <div class="col-span-4">
                                                 <input

@@ -17,7 +17,7 @@ class ImpostosIrpfController extends Controller
             ->orderBy('nom')
             ->get();
 
-        $categories = ['comunitat', 'taxes', 'assegurança', 'compres', 'reparacions', 'altres'];
+        $categories = ['comunitat', 'taxes', 'assegurança', 'compres', 'reparacions', 'gestoria', 'altres'];
 
         $totals = [
             'total_ingressos' => 0,
@@ -30,7 +30,7 @@ class ImpostosIrpfController extends Controller
             $moviments = MovimentCompteCorrent::where('compte_corrent_id', $lloguer->compte_corrent_id)
                 ->whereYear('data_moviment', $any)
                 ->where('exclou_lloguer', false)
-                ->with(['ingres', 'despesa'])
+                ->with(['ingres.linies', 'despesa'])
                 ->get();
 
             $totalIngressos = 0;
@@ -41,16 +41,47 @@ class ImpostosIrpfController extends Controller
 
             foreach ($moviments as $moviment) {
                 if ($moviment->ingres && $moviment->ingres->lloguer_id === $lloguer->id) {
-                    $totalIngressos += (float) $moviment->import;
+                    // L'ingrés comptable és la base_lloguer (import brut)
+                    $baseLloguer = (float) $moviment->ingres->base_lloguer;
+                    $totalIngressos += $baseLloguer;
                     $movimentsIngressos[] = [
                         'data' => $moviment->data_moviment->toDateString(),
-                        'import' => (float) $moviment->import,
+                        'import' => $baseLloguer,
                     ];
+
+                    // La gestoria es comptabilitza com a despesa
+                    if ($moviment->ingres->gestoria_import) {
+                        $gestoria = (float) $moviment->ingres->gestoria_import;
+                        $despesesPerCategoria['gestoria'] -= $gestoria;
+                        $totalDespeses -= $gestoria;
+                        $movimentsDespeses['gestoria'][] = [
+                            'data' => $moviment->data_moviment->toDateString(),
+                            'import' => -$gestoria,
+                        ];
+                    }
+
+                    // Les línies d'ingrés es comptabilitzen com a despeses per categoria
+                    foreach ($moviment->ingres->linies as $linia) {
+                        $cat = $linia->tipus ?? 'altres';
+                        if (!isset($despesesPerCategoria[$cat])) {
+                            $cat = 'altres';
+                        }
+                        $importLinia = (float) $linia->import;
+                        $despesesPerCategoria[$cat] -= $importLinia;
+                        $totalDespeses -= $importLinia;
+                        $movimentsDespeses[$cat][] = [
+                            'data' => $moviment->data_moviment->toDateString(),
+                            'import' => -$importLinia,
+                        ];
+                    }
                 }
 
                 if ($moviment->despesa && $moviment->despesa->lloguer_id === $lloguer->id) {
                     $cat = $moviment->despesa->categoria ?? 'altres';
-                    $despesesPerCategoria[$cat] = ($despesesPerCategoria[$cat] ?? 0) + (float) $moviment->import;
+                    if (!isset($despesesPerCategoria[$cat])) {
+                        $cat = 'altres';
+                    }
+                    $despesesPerCategoria[$cat] += (float) $moviment->import;
                     $totalDespeses += (float) $moviment->import;
                     $movimentsDespeses[$cat][] = [
                         'data' => $moviment->data_moviment->toDateString(),

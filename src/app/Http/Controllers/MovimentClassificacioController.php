@@ -23,7 +23,7 @@ class MovimentClassificacioController extends Controller
             'base_lloguer'           => ['nullable', 'numeric'],
             'gestoria_import'        => ['nullable', 'numeric'],
             'linies'                 => ['nullable', 'array'],
-            'linies.*.tipus'         => ['required', 'string', 'max:20'],
+            'linies.*.tipus'         => ['required', 'in:comunitat,taxes,assegurança,compres,reparacions,gestoria,altres'],
             'linies.*.descripcio'    => ['required', 'string', 'max:200'],
             'linies.*.import'        => ['required', 'numeric'],
             'linies.*.proveidor_id'  => ['nullable', 'integer', 'exists:g_proveidors,id'],
