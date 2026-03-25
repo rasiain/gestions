@@ -23,6 +23,7 @@ class CompteCorrent extends Model
         'nom',
         'entitat',
         'ordre',
+        'last_import_type',
     ];
 
     /**
@@ -88,6 +89,10 @@ class CompteCorrent extends Model
      */
     public function getBankTypeAttribute(): ?string
     {
+        if ($this->last_import_type) {
+            return $this->last_import_type;
+        }
+
         $entitat = strtolower($this->entitat);
 
         if (str_contains($entitat, 'enginyer')) {

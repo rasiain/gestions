@@ -29,7 +29,7 @@ class MovementImportController extends Controller
     /**
      * Show movement import page.
      */
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $comptesCorrents = CompteCorrent::orderBy('ordre')
             ->orderBy('entitat')
@@ -37,6 +37,7 @@ class MovementImportController extends Controller
 
         return Inertia::render('Maintenance/MovementImport', [
             'comptesCorrents' => $comptesCorrents,
+            'selectedCompteCorrentId' => $request->integer('compte_corrent_id') ?: null,
         ]);
     }
 
@@ -180,6 +181,9 @@ class MovementImportController extends Controller
 
             // Import to database
             $stats = $this->importService->import($result['movements'], $compteCorrentId);
+
+            // Guardar el tipus d'importació usat
+            CompteCorrent::where('id', $compteCorrentId)->update(['last_import_type' => $bankType]);
 
             $message = sprintf('S\'han importat %d moviments correctament', $stats['created']);
             if ($stats['skipped'] > 0) {

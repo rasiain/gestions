@@ -375,7 +375,7 @@ const getImportClass = (import_val: number): string => {
                             </h3>
                             <div class="flex gap-3">
                                 <Link
-                                    :href="route('maintenance.movements.import')"
+                                    :href="route('maintenance.movements.import', selectedCompte ? { compte_corrent_id: selectedCompte.id } : {})"
                                     class="inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600"
                                 >
                                     Importar Moviments

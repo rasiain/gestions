@@ -40,13 +40,21 @@ interface ParsedData {
 
 interface Props {
     comptesCorrents: CompteCorrent[];
+    selectedCompteCorrentId?: number | null;
 }
 
 const props = defineProps<Props>();
 
 const selectedFile = ref<File | null>(null);
-const selectedCompteCorrent = ref<number | null>(null);
-const selectedBankType = ref<string | null>(null);
+const selectedCompteCorrent = ref<number | null>(props.selectedCompteCorrentId ?? null);
+const initialBankType = (() => {
+    if (props.selectedCompteCorrentId) {
+        const compte = props.comptesCorrents.find(c => c.id === props.selectedCompteCorrentId);
+        if (compte?.bank_type) return compte.bank_type;
+    }
+    return null;
+})();
+const selectedBankType = ref<string | null>(initialBankType);
 const isProcessing = ref<boolean>(false);
 const isParsed = ref<boolean>(false);
 const parsedData = ref<ParsedData | null>(null);

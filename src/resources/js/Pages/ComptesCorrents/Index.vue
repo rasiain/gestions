@@ -218,6 +218,12 @@ const formatSaldo = (saldo: number | null): string => {
                                             >
                                                 Moviments
                                             </Link>
+                                            <Link
+                                                :href="route('maintenance.movements.import', { compte_corrent_id: compte.id })"
+                                                class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300"
+                                            >
+                                                Importar
+                                            </Link>
                                             <button
                                                 @click="openEditModal(compte)"
                                                 class="mr-3 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
