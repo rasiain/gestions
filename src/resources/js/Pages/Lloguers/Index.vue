@@ -1006,6 +1006,17 @@ const formatCurrency = (value: string | null): string => {
                                 />
                                 Pendents de classificar
                             </label>
+                            <a
+                                v-if="selectedLloguer"
+                                :href="`/lloguers/${selectedLloguer.id}/exportar${movimentsFilterAny ? '?any=' + movimentsFilterAny : ''}`"
+                                target="_blank"
+                                class="ml-auto inline-flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-amber-600 transition-colors"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                Exportar
+                            </a>
                         </div>
 
                         <div v-if="movimentsLoading && moviments.length === 0" class="py-8 text-center text-sm text-gray-400">
