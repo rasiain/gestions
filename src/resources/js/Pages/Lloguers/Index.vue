@@ -249,7 +249,6 @@ interface MovimentIngres {
     id: number;
     lloguer_id: number;
     base_lloguer: string;
-    gestoria_import: string | null;
     notes: string | null;
     linies: MovimentIngresLinia[];
 }
@@ -427,12 +426,10 @@ const classificacioDespesa = ref({
 
 const classificacioIngres = ref({
     base_lloguer: null as number | null,
-    gestoria_import: null as number | null,
     notes: '',
     linies: [] as { tipus: string; descripcio: string; import: number | null; proveidor_id: number | null }[],
 });
 
-const categoriesAmbProveidor = ['compres', 'reparacions'];
 
 const categoriesDespesa = [
     { value: 'comunitat',   label: 'Comunitat' },
@@ -451,9 +448,8 @@ const categoriesIngresLinia = [
 const ingresNoQuadra = (moviment: Moviment): boolean => {
     if (!moviment.ingres || moviment.ingres.lloguer_id !== selectedLloguerId.value) return false;
     const base = parseFloat(moviment.ingres.base_lloguer) || 0;
-    const gestoria = moviment.ingres.gestoria_import ? parseFloat(moviment.ingres.gestoria_import) : 0;
     const linies = moviment.ingres.linies.reduce((s, l) => s + (parseFloat(l.import) || 0), 0);
-    const netCalculat = (base - gestoria - linies).toFixed(2);
+    const netCalculat = (base - linies).toFixed(2);
     const importBanc = parseFloat(moviment.import).toFixed(2);
     return netCalculat !== importBanc;
 };
@@ -479,26 +475,11 @@ const classificacioLabel = (moviment: Moviment): string => {
 
 const IVA_RATE = 0.21;
 
-// gestoria_import emmagatzema el TOTAL amb IVA inclòs.
-// A partir del total, descomposem en net i IVA per mostrar-ho a la UI.
-const gestoriaNet = computed(() => {
-    const total = classificacioIngres.value.gestoria_import;
-    if (total === null || total === undefined || isNaN(total)) return null;
-    return parseFloat((total / (1 + IVA_RATE)).toFixed(2));
-});
-
-const gestoriaIva = computed(() => {
-    const total = classificacioIngres.value.gestoria_import;
-    if (total === null || total === undefined || isNaN(total)) return null;
-    return parseFloat((total - total / (1 + IVA_RATE)).toFixed(2));
-});
-
-// Reconciliació: base − gestoria − línies = net calculat vs. import al banc
+// Reconciliació: base − línies = net calculat vs. import al banc
 const ingresNetCalculat = computed(() => {
     const base = classificacioIngres.value.base_lloguer ?? 0;
-    const gestoria = classificacioIngres.value.gestoria_import ?? 0;
     const linies = classificacioIngres.value.linies.reduce((s, l) => s + (l.import ?? 0), 0);
-    return parseFloat((base - gestoria - linies).toFixed(2));
+    return parseFloat((base - linies).toFixed(2));
 });
 
 const ingresDiferencia = computed(() => {
@@ -530,7 +511,6 @@ const openClassificacioModal = (moviment: Moviment) => {
         classificacioTipus.value = 'ingres';
         classificacioIngres.value = {
             base_lloguer: parseFloat(cls.data.base_lloguer),
-            gestoria_import: cls.data.gestoria_import ? parseFloat(cls.data.gestoria_import) : null,
             notes: cls.data.notes ?? '',
             linies: cls.data.linies.map(l => ({
                 tipus: l.tipus,
@@ -542,11 +522,19 @@ const openClassificacioModal = (moviment: Moviment) => {
     } else {
         classificacioTipus.value = parseFloat(moviment.import) >= 0 ? 'ingres' : 'despesa';
         classificacioDespesa.value = { categoria: '', proveidor_id: null, notes: '' };
+        const liniesInicials: { tipus: string; descripcio: string; import: number | null; proveidor_id: number | null }[] = [];
+        if (computedGestoriaImport.value) {
+            liniesInicials.push({
+                tipus: 'gestoria',
+                descripcio: 'Comissió gestoria',
+                import: computedGestoriaImport.value,
+                proveidor_id: selectedLloguer.value?.proveidor_gestoria_id ?? null,
+            });
+        }
         classificacioIngres.value = {
             base_lloguer: selectedLloguer.value?.base_euros ? parseFloat(selectedLloguer.value.base_euros) : null,
-            gestoria_import: computedGestoriaImport.value,
             notes: '',
-            linies: [],
+            linies: liniesInicials,
         };
     }
 
@@ -574,13 +562,10 @@ const submitClassificacio = async () => {
 
     if (classificacioTipus.value === 'despesa') {
         body.categoria = classificacioDespesa.value.categoria;
-        body.proveidor_id = categoriesAmbProveidor.includes(classificacioDespesa.value.categoria)
-            ? classificacioDespesa.value.proveidor_id
-            : null;
+        body.proveidor_id = classificacioDespesa.value.proveidor_id || null;
         body.notes = classificacioDespesa.value.notes || null;
     } else {
         body.base_lloguer = classificacioIngres.value.base_lloguer;
-        body.gestoria_import = classificacioIngres.value.gestoria_import;
         body.notes = classificacioIngres.value.notes || null;
         body.linies = classificacioIngres.value.linies;
     }
@@ -666,6 +651,68 @@ watch(selectedLloguerId, (newId) => {
         if (lloguer) fetchMoviments(lloguer, 1);
     }
 });
+
+// ── Resum modal ─────────────────────────────────────────────────
+interface ResumIngres {
+    data: string;
+    concepte: string;
+    base: number;
+    despeses: number | null;
+    net_calculat: number;
+    import_banc: number;
+    diferencia: number;
+    notes: string;
+}
+
+interface ResumDespesa {
+    data: string;
+    categoria: string;
+    concepte: string;
+    proveidor: string;
+    nif: string;
+    import: number;
+    notes: string;
+}
+
+interface ResumData {
+    ingressos: ResumIngres[];
+    despeses: ResumDespesa[];
+    total_base: number;
+    total_despeses: number;
+    resultat_net: number;
+    lloguer_nom: string;
+    immoble_adreca: string;
+    any: number | null;
+}
+
+const showResumModal = ref(false);
+const resumData = ref<ResumData | null>(null);
+const resumLoading = ref(false);
+const resumTab = ref<'resum' | 'ingressos' | 'despeses'>('resum');
+
+const openResum = async () => {
+    if (!selectedLloguer.value) return;
+    resumLoading.value = true;
+    showResumModal.value = true;
+    resumTab.value = 'resum';
+    try {
+        const params = new URLSearchParams();
+        if (movimentsFilterAny.value) params.set('any', String(movimentsFilterAny.value));
+        const res = await fetch(`/lloguers/${selectedLloguer.value.id}/resum?${params}`, {
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+        });
+        resumData.value = await res.json();
+    } catch {
+        resumData.value = null;
+    } finally {
+        resumLoading.value = false;
+    }
+};
+
+const closeResumModal = () => {
+    showResumModal.value = false;
+    resumData.value = null;
+};
 
 // ── Helpers ────────────────────────────────────────────────────
 const formatCurrency = (value: string | null): string => {
@@ -1006,17 +1053,27 @@ const formatCurrency = (value: string | null): string => {
                                 />
                                 Pendents de classificar
                             </label>
-                            <a
-                                v-if="selectedLloguer"
-                                :href="`/lloguers/${selectedLloguer.id}/exportar${movimentsFilterAny ? '?any=' + movimentsFilterAny : ''}`"
-                                target="_blank"
-                                class="ml-auto inline-flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-amber-600 transition-colors"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                </svg>
-                                Exportar
-                            </a>
+                            <div v-if="selectedLloguer" class="ml-auto flex items-center gap-2">
+                                <button
+                                    @click="openResum"
+                                    class="inline-flex items-center gap-1.5 rounded-md border border-amber-500 px-3 py-1.5 text-sm font-medium text-amber-600 shadow-sm hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20 transition-colors"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                    Resum
+                                </button>
+                                <a
+                                    :href="`/lloguers/${selectedLloguer.id}/exportar${movimentsFilterAny ? '?any=' + movimentsFilterAny : ''}`"
+                                    target="_blank"
+                                    class="inline-flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-amber-600 transition-colors"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    Exportar
+                                </a>
+                            </div>
                         </div>
 
                         <div v-if="movimentsLoading && moviments.length === 0" class="py-8 text-center text-sm text-gray-400">
@@ -1440,7 +1497,7 @@ const formatCurrency = (value: string | null): string => {
                                     <p v-if="classificacioErrors['categoria']" class="mt-1 text-sm text-red-600">{{ classificacioErrors['categoria'] }}</p>
                                 </div>
 
-                                <div v-if="categoriesAmbProveidor.includes(classificacioDespesa.categoria)">
+                                <div>
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Proveïdor</label>
                                     <select
                                         v-model="classificacioDespesa.proveidor_id"
@@ -1474,30 +1531,6 @@ const formatCurrency = (value: string | null): string => {
                                             required
                                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                         />
-                                    </div>
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                            Comissió gestoria total (amb IVA, €)
-                                            <span v-if="selectedLloguer?.gestoria_percentatge" class="text-xs text-gray-400 ml-1">
-                                                ({{ selectedLloguer.gestoria_percentatge }}% + IVA 21%)
-                                            </span>
-                                        </label>
-                                        <input
-                                            v-model="classificacioIngres.gestoria_import"
-                                            type="number"
-                                            step="0.01"
-                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
-                                        />
-                                        <div v-if="gestoriaNet !== null" class="mt-1 space-y-0.5 text-xs text-gray-500 dark:text-gray-400">
-                                            <div class="flex justify-between">
-                                                <span>Comissió neta</span>
-                                                <span>{{ formatCurrency(gestoriaNet.toString()) }}</span>
-                                            </div>
-                                            <div class="flex justify-between">
-                                                <span>IVA (21%)</span>
-                                                <span>{{ formatCurrency(gestoriaIva!.toString()) }}</span>
-                                            </div>
-                                        </div>
                                     </div>
                                 </div>
 
@@ -1577,10 +1610,6 @@ const formatCurrency = (value: string | null): string => {
                                             <span>Base lloguer</span>
                                             <span>{{ formatCurrency((classificacioIngres.base_lloguer ?? 0).toString()) }}</span>
                                         </div>
-                                        <div v-if="(classificacioIngres.gestoria_import ?? 0) !== 0" class="flex justify-between text-gray-600 dark:text-gray-400">
-                                            <span>− Gestoria (total amb IVA)</span>
-                                            <span class="text-red-600 dark:text-red-400">{{ formatCurrency((classificacioIngres.gestoria_import ?? 0).toString()) }}</span>
-                                        </div>
                                         <div
                                             v-for="(linia, idx) in classificacioIngres.linies.filter(l => (l.import ?? 0) !== 0)"
                                             :key="'res-' + idx"
@@ -1628,6 +1657,203 @@ const formatCurrency = (value: string | null): string => {
                             </button>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Resum -->
+        <div v-if="showResumModal" class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+            <div class="flex min-h-screen items-center justify-center px-4 pt-4 pb-20 text-center sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity dark:bg-gray-900 dark:bg-opacity-75" @click="closeResumModal"></div>
+                <div class="relative inline-block w-full max-w-5xl transform overflow-hidden rounded-lg bg-white text-left align-bottom shadow-xl transition-all dark:bg-gray-800 sm:my-8 sm:align-middle">
+                    <!-- Header -->
+                    <div class="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
+                        <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
+                            Resum del lloguer
+                        </h3>
+                        <button @click="closeResumModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Tabs -->
+                    <div class="border-b border-gray-200 dark:border-gray-700">
+                        <nav class="flex -mb-px px-6" aria-label="Tabs">
+                            <button
+                                @click="resumTab = 'resum'"
+                                :class="[
+                                    'px-4 py-3 text-sm font-medium border-b-2 transition-colors',
+                                    resumTab === 'resum'
+                                        ? 'border-amber-500 text-amber-600 dark:text-amber-400'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                                ]"
+                            >Resum</button>
+                            <button
+                                @click="resumTab = 'ingressos'"
+                                :class="[
+                                    'px-4 py-3 text-sm font-medium border-b-2 transition-colors',
+                                    resumTab === 'ingressos'
+                                        ? 'border-amber-500 text-amber-600 dark:text-amber-400'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                                ]"
+                            >Ingressos</button>
+                            <button
+                                @click="resumTab = 'despeses'"
+                                :class="[
+                                    'px-4 py-3 text-sm font-medium border-b-2 transition-colors',
+                                    resumTab === 'despeses'
+                                        ? 'border-amber-500 text-amber-600 dark:text-amber-400'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                                ]"
+                            >Despeses</button>
+                        </nav>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="max-h-[70vh] overflow-y-auto px-6 py-4">
+                        <!-- Loading -->
+                        <div v-if="resumLoading" class="py-12 text-center text-sm text-gray-400">
+                            Carregant...
+                        </div>
+
+                        <template v-else-if="resumData">
+                            <!-- Tab: Resum -->
+                            <div v-if="resumTab === 'resum'" class="space-y-6">
+                                <div class="grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                        <span class="font-medium text-gray-500 dark:text-gray-400">Lloguer</span>
+                                        <p class="mt-1 text-gray-900 dark:text-gray-100">{{ resumData.lloguer_nom }}</p>
+                                    </div>
+                                    <div>
+                                        <span class="font-medium text-gray-500 dark:text-gray-400">Immoble</span>
+                                        <p class="mt-1 text-gray-900 dark:text-gray-100">{{ resumData.immoble_adreca || '-' }}</p>
+                                    </div>
+                                    <div>
+                                        <span class="font-medium text-gray-500 dark:text-gray-400">Any</span>
+                                        <p class="mt-1 text-gray-900 dark:text-gray-100">{{ resumData.any ?? 'Tots' }}</p>
+                                    </div>
+                                </div>
+                                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                    <thead class="bg-gray-50 dark:bg-gray-700">
+                                        <tr>
+                                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Concepte</th>
+                                            <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Import</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                                        <tr>
+                                            <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">Total ingressos bruts</td>
+                                            <td class="px-4 py-3 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ formatCurrency(resumData.total_base.toString()) }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">Total despeses</td>
+                                            <td class="px-4 py-3 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ formatCurrency(resumData.total_despeses.toString()) }}</td>
+                                        </tr>
+                                        <tr class="border-t-2 border-gray-300 dark:border-gray-600 font-bold">
+                                            <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">Resultat net</td>
+                                            <td class="px-4 py-3 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ formatCurrency(resumData.resultat_net.toString()) }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Tab: Ingressos -->
+                            <div v-if="resumTab === 'ingressos'">
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                        <thead class="bg-gray-50 dark:bg-gray-700">
+                                            <tr>
+                                                <th class="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Data</th>
+                                                <th class="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Concepte</th>
+                                                <th class="px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Base lloguer</th>
+                                                <th class="px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Despeses</th>
+                                                <th class="px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Net calculat</th>
+                                                <th class="px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Import bancari</th>
+                                                <th class="px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Diferencia</th>
+                                                <th class="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Notes</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                                            <tr
+                                                v-for="(ing, idx) in resumData.ingressos"
+                                                :key="idx"
+                                                :class="ing.diferencia !== 0 ? 'bg-red-50 dark:bg-red-900/20' : ''"
+                                            >
+                                                <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-900 dark:text-gray-100">{{ ing.data }}</td>
+                                                <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100 max-w-[200px] truncate">{{ ing.concepte }}</td>
+                                                <td class="whitespace-nowrap px-3 py-2 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ formatCurrency(ing.base.toString()) }}</td>
+                                                <td class="whitespace-nowrap px-3 py-2 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ ing.despeses !== null ? formatCurrency(ing.despeses.toString()) : '' }}</td>
+                                                <td class="whitespace-nowrap px-3 py-2 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ formatCurrency(ing.net_calculat.toString()) }}</td>
+                                                <td class="whitespace-nowrap px-3 py-2 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ formatCurrency(ing.import_banc.toString()) }}</td>
+                                                <td class="whitespace-nowrap px-3 py-2 text-sm text-right font-mono" :class="ing.diferencia !== 0 ? 'text-red-600 dark:text-red-400 font-semibold' : 'text-gray-900 dark:text-gray-100'">{{ ing.diferencia !== 0 ? formatCurrency(ing.diferencia.toString()) : '' }}</td>
+                                                <td class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 max-w-[150px] truncate">{{ ing.notes }}</td>
+                                            </tr>
+                                            <!-- Totals -->
+                                            <tr class="border-t-2 border-gray-300 dark:border-gray-600 font-bold bg-gray-50 dark:bg-gray-700">
+                                                <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100" colspan="2">TOTAL</td>
+                                                <td class="whitespace-nowrap px-3 py-2 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ formatCurrency(resumData.total_base.toString()) }}</td>
+                                                <td class="whitespace-nowrap px-3 py-2 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ (() => { const t = resumData!.ingressos.reduce((s, i) => s + (i.despeses ?? 0), 0); return t !== 0 ? formatCurrency(t.toString()) : ''; })() }}</td>
+                                                <td class="whitespace-nowrap px-3 py-2 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ formatCurrency(resumData.ingressos.reduce((s, i) => s + i.net_calculat, 0).toString()) }}</td>
+                                                <td class="whitespace-nowrap px-3 py-2 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ formatCurrency(resumData.ingressos.reduce((s, i) => s + i.import_banc, 0).toString()) }}</td>
+                                                <td class="whitespace-nowrap px-3 py-2 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ (() => { const t = resumData!.ingressos.reduce((s, i) => s + i.net_calculat, 0) - resumData!.ingressos.reduce((s, i) => s + i.import_banc, 0); return Math.abs(t) > 0.005 ? formatCurrency(t.toFixed(2)) : ''; })() }}</td>
+                                                <td class="px-3 py-2"></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p v-if="resumData.ingressos.length === 0" class="py-8 text-center text-sm text-gray-400">Cap ingres registrat.</p>
+                            </div>
+
+                            <!-- Tab: Despeses -->
+                            <div v-if="resumTab === 'despeses'">
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                        <thead class="bg-gray-50 dark:bg-gray-700">
+                                            <tr>
+                                                <th class="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Data</th>
+                                                <th class="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Categoria</th>
+                                                <th class="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Concepte</th>
+                                                <th class="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Proveidor</th>
+                                                <th class="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">NIF/CIF</th>
+                                                <th class="px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Import</th>
+                                                <th class="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Notes</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                                            <tr v-for="(desp, idx) in resumData.despeses" :key="idx">
+                                                <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-900 dark:text-gray-100">{{ desp.data }}</td>
+                                                <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">{{ desp.categoria }}</td>
+                                                <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100 max-w-[200px] truncate">{{ desp.concepte }}</td>
+                                                <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">{{ desp.proveidor }}</td>
+                                                <td class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">{{ desp.nif }}</td>
+                                                <td class="whitespace-nowrap px-3 py-2 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ formatCurrency(desp.import.toString()) }}</td>
+                                                <td class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 max-w-[150px] truncate">{{ desp.notes }}</td>
+                                            </tr>
+                                            <!-- Totals -->
+                                            <tr class="border-t-2 border-gray-300 dark:border-gray-600 font-bold bg-gray-50 dark:bg-gray-700">
+                                                <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100" colspan="5">TOTAL</td>
+                                                <td class="whitespace-nowrap px-3 py-2 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ formatCurrency(resumData.total_despeses.toString()) }}</td>
+                                                <td class="px-3 py-2"></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p v-if="resumData.despeses.length === 0" class="py-8 text-center text-sm text-gray-400">Cap despesa registrada.</p>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="border-t border-gray-200 px-6 py-3 dark:border-gray-700 flex justify-end">
+                        <button
+                            @click="closeResumModal"
+                            class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                        >
+                            Tancar
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

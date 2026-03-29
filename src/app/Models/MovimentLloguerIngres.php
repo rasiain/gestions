@@ -14,13 +14,11 @@ class MovimentLloguerIngres extends Model
         'moviment_id',
         'lloguer_id',
         'base_lloguer',
-        'gestoria_import',
         'notes',
     ];
 
     protected $casts = [
-        'base_lloguer'    => 'decimal:2',
-        'gestoria_import' => 'decimal:2',
+        'base_lloguer' => 'decimal:2',
     ];
 
     public function moviment(): BelongsTo

@@ -52,6 +52,7 @@ Route::middleware('auth')->group(function () {
     ]);
     Route::get('/lloguers/{lloguer}/moviments', [LloguerController::class, 'moviments'])->name('lloguers.moviments');
     Route::get('/lloguers/{lloguer}/exportar', [LloguerController::class, 'exportar'])->name('lloguers.exportar');
+    Route::get('/lloguers/{lloguer}/resum', [LloguerController::class, 'resum'])->name('lloguers.resum');
 
     // Contractes management
     Route::resource('contractes', ContracteController::class)->only([

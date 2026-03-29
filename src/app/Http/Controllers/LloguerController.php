@@ -166,7 +166,6 @@ class LloguerController extends Controller
                     'id'              => $m->ingres->id,
                     'lloguer_id'      => $m->ingres->lloguer_id,
                     'base_lloguer'    => $m->ingres->base_lloguer,
-                    'gestoria_import' => $m->ingres->gestoria_import,
                     'linies'          => $m->ingres->linies->map(fn($l) => [
                         'id'           => $l->id,
                         'tipus'        => $l->tipus,
@@ -202,10 +201,9 @@ class LloguerController extends Controller
         return response()->json($response);
     }
 
-    public function exportar(Lloguer $lloguer, Request $request): StreamedResponse
+    private function prepararDadesResum(Lloguer $lloguer, ?int $any): array
     {
         $lloguer->load('immoble');
-        $any = $request->integer('any') ?: null;
 
         $moviments = MovimentCompteCorrent::where('compte_corrent_id', $lloguer->compte_corrent_id)
             ->where('exclou_lloguer', false)
@@ -218,41 +216,38 @@ class LloguerController extends Controller
             ->orderBy('data_moviment')
             ->get();
 
-        $proveidors = Proveidor::pluck('nom_rao_social', 'id');
+        $proveidorsAll = Proveidor::get(['id', 'nom_rao_social', 'nif_cif']);
+        $proveidors = $proveidorsAll->pluck('nom_rao_social', 'id');
+        $proveidorsNif = $proveidorsAll->pluck('nif_cif', 'id');
 
         $ingressos = [];
         $despeses = [];
         $totalBase = 0;
-        $totalGestoria = 0;
         $totalDespeses = 0;
 
         foreach ($moviments as $moviment) {
             if ($moviment->ingres && $moviment->ingres->lloguer_id === $lloguer->id) {
                 $base = (float) $moviment->ingres->base_lloguer;
-                $gestoria = (float) ($moviment->ingres->gestoria_import ?? 0);
                 $totalBase += $base;
-                $totalGestoria += $gestoria;
 
                 $concepte = $moviment->concepte?->concepte ?? $moviment->concepte_original ?? '';
+                $totalLinies = 0;
+                foreach ($moviment->ingres->linies as $linia) {
+                    $totalLinies += (float) $linia->import;
+                }
+                $netCalculat = $base - $totalLinies;
+                $importBanc = (float) $moviment->import;
+
                 $ingressos[] = [
                     'data' => $moviment->data_moviment->toDateString(),
                     'concepte' => $concepte,
                     'base' => $base,
-                    'gestoria' => $gestoria > 0 ? -$gestoria : null,
+                    'despeses' => $totalLinies > 0 ? -$totalLinies : null,
+                    'net_calculat' => $netCalculat,
+                    'import_banc' => $importBanc,
+                    'diferencia' => round($netCalculat - $importBanc, 2),
                     'notes' => $moviment->ingres->notes ?? '',
                 ];
-
-                if ($gestoria > 0) {
-                    $despeses[] = [
-                        'data' => $moviment->data_moviment->toDateString(),
-                        'categoria' => 'Gestoria',
-                        'concepte' => $concepte,
-                        'proveidor' => '',
-                        'import' => -$gestoria,
-                        'notes' => '',
-                    ];
-                    $totalDespeses -= $gestoria;
-                }
 
                 foreach ($moviment->ingres->linies as $linia) {
                     $importLinia = (float) $linia->import;
@@ -261,6 +256,7 @@ class LloguerController extends Controller
                         'categoria' => ucfirst($linia->tipus),
                         'concepte' => $linia->descripcio,
                         'proveidor' => $linia->proveidor_id ? ($proveidors[$linia->proveidor_id] ?? '') : '',
+                        'nif' => $linia->proveidor_id ? ($proveidorsNif[$linia->proveidor_id] ?? '') : '',
                         'import' => -$importLinia,
                         'notes' => '',
                     ];
@@ -276,6 +272,7 @@ class LloguerController extends Controller
                     'categoria' => ucfirst($moviment->despesa->categoria ?? 'altres'),
                     'concepte' => $concepte,
                     'proveidor' => $moviment->despesa->proveidor_id ? ($proveidors[$moviment->despesa->proveidor_id] ?? '') : '',
+                    'nif' => $moviment->despesa->proveidor_id ? ($proveidorsNif[$moviment->despesa->proveidor_id] ?? '') : '',
                     'import' => $importDespesa,
                     'notes' => $moviment->despesa->notes ?? '',
                 ];
@@ -284,6 +281,36 @@ class LloguerController extends Controller
         }
 
         usort($despeses, fn($a, $b) => strcmp($a['data'], $b['data']));
+
+        return [
+            'ingressos' => $ingressos,
+            'despeses' => $despeses,
+            'total_base' => $totalBase,
+            'total_despeses' => $totalDespeses,
+            'resultat_net' => $totalBase + $totalDespeses,
+            'lloguer_nom' => $lloguer->nom,
+            'immoble_adreca' => $lloguer->immoble?->adreca ?? '',
+            'any' => $any,
+        ];
+    }
+
+    public function resum(Lloguer $lloguer, Request $request): JsonResponse
+    {
+        $any = $request->integer('any') ?: null;
+        $dades = $this->prepararDadesResum($lloguer, $any);
+
+        return response()->json($dades);
+    }
+
+    public function exportar(Lloguer $lloguer, Request $request): StreamedResponse
+    {
+        $any = $request->integer('any') ?: null;
+        $dades = $this->prepararDadesResum($lloguer, $any);
+
+        $ingressos = $dades['ingressos'];
+        $despeses = $dades['despeses'];
+        $totalBase = $dades['total_base'];
+        $totalDespeses = $dades['total_despeses'];
 
         $anyLabel = $any ?? 'tots';
         $filename = sprintf('lloguer-%s-%s.xlsx', $lloguer->acronim ?? $lloguer->id, $anyLabel);
@@ -320,14 +347,12 @@ class LloguerController extends Controller
 
         $resum->setCellValue('A6', 'Total ingressos bruts');
         $resum->setCellValue('B6', $totalBase);
-        $resum->setCellValue('A7', 'Total despeses gestoria');
-        $resum->setCellValue('B7', -$totalGestoria);
-        $resum->setCellValue('A8', 'Total despeses');
-        $resum->setCellValue('B8', $totalDespeses);
-        $resum->setCellValue('A9', 'Resultat net');
-        $resum->setCellValue('B9', $totalBase + $totalDespeses);
-        $resum->getStyle('A9:B9')->applyFromArray($totalStyle);
-        $resum->getStyle('B6:B9')->getNumberFormat()->setFormatCode($euroFormat);
+        $resum->setCellValue('A7', 'Total despeses');
+        $resum->setCellValue('B7', $totalDespeses);
+        $resum->setCellValue('A8', 'Resultat net');
+        $resum->setCellValue('B8', $totalBase + $totalDespeses);
+        $resum->getStyle('A8:B8')->applyFromArray($totalStyle);
+        $resum->getStyle('B6:B8')->getNumberFormat()->setFormatCode($euroFormat);
 
         $resum->getColumnDimension('A')->setWidth(25);
         $resum->getColumnDimension('B')->setWidth(18);
@@ -339,34 +364,60 @@ class LloguerController extends Controller
         $sheetIng->setCellValue('A1', 'Data');
         $sheetIng->setCellValue('B1', 'Concepte');
         $sheetIng->setCellValue('C1', 'Base lloguer');
-        $sheetIng->setCellValue('D1', 'Gestoria');
-        $sheetIng->setCellValue('E1', 'Notes');
-        $sheetIng->getStyle('A1:E1')->applyFromArray($headerStyle);
+        $sheetIng->setCellValue('D1', 'Despeses');
+        $sheetIng->setCellValue('E1', 'Net calculat');
+        $sheetIng->setCellValue('F1', 'Import bancari');
+        $sheetIng->setCellValue('G1', 'Diferència');
+        $sheetIng->setCellValue('H1', 'Notes');
+        $sheetIng->getStyle('A1:H1')->applyFromArray($headerStyle);
+
+        $warnStyle = [
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FEE2E2']],
+        ];
 
         $row = 2;
         foreach ($ingressos as $ing) {
             $sheetIng->setCellValue("A{$row}", $ing['data']);
             $sheetIng->setCellValue("B{$row}", $ing['concepte']);
             $sheetIng->setCellValue("C{$row}", $ing['base']);
-            if ($ing['gestoria'] !== null) {
-                $sheetIng->setCellValue("D{$row}", $ing['gestoria']);
+            if ($ing['despeses'] !== null) {
+                $sheetIng->setCellValue("D{$row}", $ing['despeses']);
             }
-            $sheetIng->setCellValue("E{$row}", $ing['notes']);
+            $sheetIng->setCellValue("E{$row}", $ing['net_calculat']);
+            $sheetIng->setCellValue("F{$row}", $ing['import_banc']);
+            if ($ing['diferencia'] != 0) {
+                $sheetIng->setCellValue("G{$row}", $ing['diferencia']);
+                $sheetIng->getStyle("A{$row}:H{$row}")->applyFromArray($warnStyle);
+            }
+            $sheetIng->setCellValue("H{$row}", $ing['notes']);
             $row++;
         }
 
         // Totals
+        $totalDespesesIng = array_sum(array_map(fn($i) => $i['despeses'] ?? 0, $ingressos));
+        $totalNetCalculat = array_sum(array_map(fn($i) => $i['net_calculat'], $ingressos));
+        $totalImportBanc = array_sum(array_map(fn($i) => $i['import_banc'], $ingressos));
+
         $sheetIng->setCellValue("A{$row}", 'TOTAL');
         $sheetIng->setCellValue("C{$row}", $totalBase);
-        $sheetIng->setCellValue("D{$row}", $totalGestoria > 0 ? -$totalGestoria : null);
-        $sheetIng->getStyle("A{$row}:E{$row}")->applyFromArray($totalStyle);
+        $sheetIng->setCellValue("D{$row}", $totalDespesesIng != 0 ? $totalDespesesIng : null);
+        $sheetIng->setCellValue("E{$row}", $totalNetCalculat);
+        $sheetIng->setCellValue("F{$row}", $totalImportBanc);
+        $totalDif = round($totalNetCalculat - $totalImportBanc, 2);
+        if ($totalDif != 0) {
+            $sheetIng->setCellValue("G{$row}", $totalDif);
+        }
+        $sheetIng->getStyle("A{$row}:H{$row}")->applyFromArray($totalStyle);
 
-        $sheetIng->getStyle("C2:D{$row}")->getNumberFormat()->setFormatCode($euroFormat);
+        $sheetIng->getStyle("C2:G{$row}")->getNumberFormat()->setFormatCode($euroFormat);
         $sheetIng->getColumnDimension('A')->setWidth(12);
         $sheetIng->getColumnDimension('B')->setWidth(35);
         $sheetIng->getColumnDimension('C')->setWidth(15);
-        $sheetIng->getColumnDimension('D')->setWidth(15);
-        $sheetIng->getColumnDimension('E')->setWidth(30);
+        $sheetIng->getColumnDimension('D')->setWidth(13);
+        $sheetIng->getColumnDimension('E')->setWidth(15);
+        $sheetIng->getColumnDimension('F')->setWidth(15);
+        $sheetIng->getColumnDimension('G')->setWidth(13);
+        $sheetIng->getColumnDimension('H')->setWidth(30);
 
         // --- Pestanya 3: Despeses ---
         $sheetDesp = $spreadsheet->createSheet();
@@ -376,9 +427,10 @@ class LloguerController extends Controller
         $sheetDesp->setCellValue('B1', 'Categoria');
         $sheetDesp->setCellValue('C1', 'Concepte');
         $sheetDesp->setCellValue('D1', 'Proveïdor');
-        $sheetDesp->setCellValue('E1', 'Import');
-        $sheetDesp->setCellValue('F1', 'Notes');
-        $sheetDesp->getStyle('A1:F1')->applyFromArray($headerStyle);
+        $sheetDesp->setCellValue('E1', 'NIF/CIF');
+        $sheetDesp->setCellValue('F1', 'Import');
+        $sheetDesp->setCellValue('G1', 'Notes');
+        $sheetDesp->getStyle('A1:G1')->applyFromArray($headerStyle);
 
         $row = 2;
         foreach ($despeses as $desp) {
@@ -386,23 +438,25 @@ class LloguerController extends Controller
             $sheetDesp->setCellValue("B{$row}", $desp['categoria']);
             $sheetDesp->setCellValue("C{$row}", $desp['concepte']);
             $sheetDesp->setCellValue("D{$row}", $desp['proveidor']);
-            $sheetDesp->setCellValue("E{$row}", $desp['import']);
-            $sheetDesp->setCellValue("F{$row}", $desp['notes']);
+            $sheetDesp->setCellValue("E{$row}", $desp['nif'] ?? '');
+            $sheetDesp->setCellValue("F{$row}", $desp['import']);
+            $sheetDesp->setCellValue("G{$row}", $desp['notes']);
             $row++;
         }
 
         // Totals
         $sheetDesp->setCellValue("A{$row}", 'TOTAL');
-        $sheetDesp->setCellValue("E{$row}", $totalDespeses);
-        $sheetDesp->getStyle("A{$row}:F{$row}")->applyFromArray($totalStyle);
+        $sheetDesp->setCellValue("F{$row}", $totalDespeses);
+        $sheetDesp->getStyle("A{$row}:G{$row}")->applyFromArray($totalStyle);
 
-        $sheetDesp->getStyle("E2:E{$row}")->getNumberFormat()->setFormatCode($euroFormat);
+        $sheetDesp->getStyle("F2:F{$row}")->getNumberFormat()->setFormatCode($euroFormat);
         $sheetDesp->getColumnDimension('A')->setWidth(12);
         $sheetDesp->getColumnDimension('B')->setWidth(15);
         $sheetDesp->getColumnDimension('C')->setWidth(35);
         $sheetDesp->getColumnDimension('D')->setWidth(25);
-        $sheetDesp->getColumnDimension('E')->setWidth(15);
-        $sheetDesp->getColumnDimension('F')->setWidth(30);
+        $sheetDesp->getColumnDimension('E')->setWidth(14);
+        $sheetDesp->getColumnDimension('F')->setWidth(15);
+        $sheetDesp->getColumnDimension('G')->setWidth(30);
 
         // Activar la primera pestanya
         $spreadsheet->setActiveSheetIndex(0);

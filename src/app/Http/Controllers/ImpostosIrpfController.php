@@ -49,17 +49,6 @@ class ImpostosIrpfController extends Controller
                         'import' => $baseLloguer,
                     ];
 
-                    // La gestoria es comptabilitza com a despesa
-                    if ($moviment->ingres->gestoria_import) {
-                        $gestoria = (float) $moviment->ingres->gestoria_import;
-                        $despesesPerCategoria['gestoria'] -= $gestoria;
-                        $totalDespeses -= $gestoria;
-                        $movimentsDespeses['gestoria'][] = [
-                            'data' => $moviment->data_moviment->toDateString(),
-                            'import' => -$gestoria,
-                        ];
-                    }
-
                     // Les línies d'ingrés es comptabilitzen com a despeses per categoria
                     foreach ($moviment->ingres->linies as $linia) {
                         $cat = $linia->tipus ?? 'altres';

@@ -21,7 +21,6 @@ class MovimentClassificacioController extends Controller
             'proveidor_id'           => ['nullable', 'integer', 'exists:g_proveidors,id'],
             'notes'                  => ['nullable', 'string', 'max:500'],
             'base_lloguer'           => ['nullable', 'numeric'],
-            'gestoria_import'        => ['nullable', 'numeric'],
             'linies'                 => ['nullable', 'array'],
             'linies.*.tipus'         => ['required', 'in:comunitat,taxes,assegurança,compres,reparacions,gestoria,altres'],
             'linies.*.descripcio'    => ['required', 'string', 'max:200'],
@@ -98,7 +97,6 @@ class MovimentClassificacioController extends Controller
                     'moviment_id'     => $moviment->id,
                     'lloguer_id'      => $data['lloguer_id'],
                     'base_lloguer'    => $data['base_lloguer'],
-                    'gestoria_import' => $data['gestoria_import'] ?? null,
                     'notes'           => $data['notes'] ?? null,
                 ]);
                 foreach ($data['linies'] ?? [] as $linia) {
@@ -134,7 +132,6 @@ class MovimentClassificacioController extends Controller
                 'id'              => $moviment->ingres->id,
                 'lloguer_id'      => $moviment->ingres->lloguer_id,
                 'base_lloguer'    => $moviment->ingres->base_lloguer,
-                'gestoria_import' => $moviment->ingres->gestoria_import,
                 'notes'           => $moviment->ingres->notes,
                 'linies'          => $moviment->ingres->linies->map(fn($l) => [
                     'id'           => $l->id,
