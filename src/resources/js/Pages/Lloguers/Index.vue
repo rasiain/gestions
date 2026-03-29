@@ -45,6 +45,8 @@ interface Lloguer {
     base_euros: string | null;
     proveidor_gestoria_id: number | null;
     gestoria_percentatge: string | null;
+    es_habitatge: boolean;
+    retencio_irpf: boolean;
     gestoria: Proveidor | null;
     contracte_actiu: ContracteActiu | null;
 }
@@ -72,6 +74,8 @@ const lloguerForm = useForm({
     base_euros: null as number | null,
     proveidor_gestoria_id: null as number | null,
     gestoria_percentatge: null as number | null,
+    es_habitatge: false,
+    retencio_irpf: false,
 });
 
 const openCreateLloguerModal = () => {
@@ -91,6 +95,8 @@ const openEditLloguerModal = (lloguer: Lloguer) => {
     lloguerForm.base_euros = lloguer.base_euros ? parseFloat(lloguer.base_euros) : null;
     lloguerForm.proveidor_gestoria_id = lloguer.proveidor_gestoria_id;
     lloguerForm.gestoria_percentatge = lloguer.gestoria_percentatge ? parseFloat(lloguer.gestoria_percentatge) : null;
+    lloguerForm.es_habitatge = lloguer.es_habitatge;
+    lloguerForm.retencio_irpf = lloguer.retencio_irpf;
     showLloguerModal.value = true;
 };
 
@@ -1255,6 +1261,26 @@ const formatCurrency = (value: string | null): string => {
                                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                     />
                                     <p v-if="lloguerForm.errors.base_euros" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ lloguerForm.errors.base_euros }}</p>
+                                </div>
+
+                                <div class="flex items-center gap-2">
+                                    <input
+                                        id="es_habitatge"
+                                        v-model="lloguerForm.es_habitatge"
+                                        type="checkbox"
+                                        class="rounded border-gray-300 text-amber-500 focus:ring-amber-400 dark:border-gray-600 dark:bg-gray-700"
+                                    />
+                                    <label for="es_habitatge" class="text-sm font-medium text-gray-700 dark:text-gray-300">És habitatge</label>
+                                </div>
+
+                                <div v-if="!lloguerForm.es_habitatge" class="flex items-center gap-2">
+                                    <input
+                                        id="retencio_irpf"
+                                        v-model="lloguerForm.retencio_irpf"
+                                        type="checkbox"
+                                        class="rounded border-gray-300 text-amber-500 focus:ring-amber-400 dark:border-gray-600 dark:bg-gray-700"
+                                    />
+                                    <label for="retencio_irpf" class="text-sm font-medium text-gray-700 dark:text-gray-300">Retenció IRPF</label>
                                 </div>
 
                                 <div class="sm:col-span-2">

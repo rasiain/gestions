@@ -57,6 +57,8 @@ class LloguerController extends Controller
                     'base_euros'            => $lloguer->base_euros,
                     'proveidor_gestoria_id' => $lloguer->proveidor_gestoria_id,
                     'gestoria_percentatge'  => $lloguer->gestoria_percentatge,
+                    'es_habitatge'          => $lloguer->es_habitatge,
+                    'retencio_irpf'         => $lloguer->retencio_irpf,
                     'gestoria'              => $lloguer->gestoria ? [
                         'id'             => $lloguer->gestoria->id,
                         'nom_rao_social' => $lloguer->gestoria->nom_rao_social,

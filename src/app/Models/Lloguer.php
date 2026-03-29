@@ -18,11 +18,15 @@ class Lloguer extends Model
         'base_euros',
         'proveidor_gestoria_id',
         'gestoria_percentatge',
+        'es_habitatge',
+        'retencio_irpf',
     ];
 
     protected $casts = [
         'base_euros'           => 'decimal:2',
         'gestoria_percentatge' => 'decimal:2',
+        'es_habitatge'         => 'boolean',
+        'retencio_irpf'        => 'boolean',
     ];
 
     public function immoble(): BelongsTo

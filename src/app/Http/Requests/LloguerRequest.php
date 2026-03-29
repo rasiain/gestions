@@ -21,6 +21,8 @@ class LloguerRequest extends FormRequest
             'base_euros'            => ['nullable', 'numeric', 'min:0'],
             'proveidor_gestoria_id' => ['nullable', 'integer', 'exists:g_proveidors,id'],
             'gestoria_percentatge'  => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'es_habitatge'          => ['boolean'],
+            'retencio_irpf'         => ['boolean'],
         ];
     }
 
