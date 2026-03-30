@@ -252,6 +252,8 @@ interface MovimentDespesa {
     categoria: string;
     proveidor_id: number | null;
     notes: string | null;
+    base_imposable: number | null;
+    iva_import: number | null;
 }
 
 interface MovimentIngresLinia {
@@ -446,6 +448,8 @@ const classificacioDespesa = ref({
     categoria: '',
     proveidor_id: null as number | null,
     notes: '',
+    base_imposable: null as number | null,
+    iva_import: null as number | null,
 });
 
 const classificacioIngres = ref({
@@ -532,6 +536,8 @@ const openClassificacioModal = (moviment: Moviment) => {
             categoria: cls.data.categoria,
             proveidor_id: cls.data.proveidor_id,
             notes: cls.data.notes ?? '',
+            base_imposable: cls.data.base_imposable ?? null,
+            iva_import: cls.data.iva_import ?? null,
         };
     } else if (cls?.tipus === 'ingres') {
         classificacioTipus.value = 'ingres';
@@ -547,7 +553,7 @@ const openClassificacioModal = (moviment: Moviment) => {
         };
     } else {
         classificacioTipus.value = parseFloat(moviment.import) >= 0 ? 'ingres' : 'despesa';
-        classificacioDespesa.value = { categoria: '', proveidor_id: null, notes: '' };
+        classificacioDespesa.value = { categoria: '', proveidor_id: null, notes: '', base_imposable: null, iva_import: null };
         const liniesInicials: { tipus: string; descripcio: string; import: number | null; proveidor_id: number | null }[] = [];
         if (computedGestoriaImport.value) {
             liniesInicials.push({
@@ -590,6 +596,8 @@ const submitClassificacio = async () => {
         body.categoria = classificacioDespesa.value.categoria;
         body.proveidor_id = classificacioDespesa.value.proveidor_id || null;
         body.notes = classificacioDespesa.value.notes || null;
+        body.base_imposable = classificacioDespesa.value.base_imposable ?? null;
+        body.iva_import = classificacioDespesa.value.iva_import ?? null;
     } else {
         body.base_lloguer = classificacioIngres.value.base_lloguer;
         body.notes = classificacioIngres.value.notes || null;
@@ -1630,6 +1638,30 @@ const formatCurrency = (value: string | null): string => {
                                         maxlength="500"
                                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                     ></textarea>
+                                </div>
+
+                                <!-- Camps IVA: només per lloguers no-habitatge -->
+                                <div v-if="selectedLloguer && selectedLloguer.es_habitatge === false" class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Base imposable IVA (€)</label>
+                                        <input
+                                            v-model="classificacioDespesa.base_imposable"
+                                            type="number"
+                                            step="0.01"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        />
+                                        <p v-if="classificacioErrors['base_imposable']" class="mt-1 text-sm text-red-600">{{ classificacioErrors['base_imposable'] }}</p>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">IVA suportat (€)</label>
+                                        <input
+                                            v-model="classificacioDespesa.iva_import"
+                                            type="number"
+                                            step="0.01"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        />
+                                        <p v-if="classificacioErrors['iva_import']" class="mt-1 text-sm text-red-600">{{ classificacioErrors['iva_import'] }}</p>
+                                    </div>
                                 </div>
                             </div>
 

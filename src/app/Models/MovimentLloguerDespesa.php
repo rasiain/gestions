@@ -15,6 +15,13 @@ class MovimentLloguerDespesa extends Model
         'categoria',
         'proveidor_id',
         'notes',
+        'base_imposable',
+        'iva_import',
+    ];
+
+    protected $casts = [
+        'base_imposable' => 'decimal:2',
+        'iva_import'     => 'decimal:2',
     ];
 
     public function moviment(): BelongsTo

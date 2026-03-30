@@ -11,6 +11,7 @@ use App\Http\Controllers\LloguerController;
 use App\Http\Controllers\LloguerRevisioIpcController;
 use App\Http\Controllers\MovementImportController;
 use App\Http\Controllers\ImpostosIrpfController;
+use App\Http\Controllers\ImpostosIvaController;
 use App\Http\Controllers\MovimentClassificacioController;
 use App\Http\Controllers\MovimentCompteCorrentController;
 use App\Http\Controllers\ProfileController;
@@ -106,6 +107,7 @@ Route::middleware('auth')->group(function () {
 
     // Impostos
     Route::get('/impostos/irpf', [ImpostosIrpfController::class, 'index'])->name('impostos.irpf');
+    Route::get('/impostos/iva', [ImpostosIvaController::class, 'index'])->name('impostos.iva');
 
     // Maintenance - Movement Import
     Route::get('/maintenance/movements/import', [MovementImportController::class, 'index'])->name('maintenance.movements.import');
