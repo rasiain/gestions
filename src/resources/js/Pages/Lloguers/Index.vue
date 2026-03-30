@@ -270,6 +270,12 @@ interface MovimentIngres {
     linies: MovimentIngresLinia[];
 }
 
+interface MovimentFactura {
+    id: number;
+    numero_factura: string | null;
+    total: string;
+}
+
 interface Moviment {
     id: number;
     compte_corrent_id: number;
@@ -283,6 +289,7 @@ interface Moviment {
     categoria_nom: string | null;
     despesa: MovimentDespesa | null;
     ingres: MovimentIngres | null;
+    factura: MovimentFactura | null;
 }
 
 const moviments = ref<Moviment[]>([]);
@@ -454,14 +461,14 @@ const categoriesDespesa = [
     { value: 'assegurança', label: 'Assegurança' },
     { value: 'compres',     label: 'Compres' },
     { value: 'reparacions', label: 'Reparacions' },
-    { value: 'interessos',  label: 'Interessos bancaris' },
+    { value: 'comissions',  label: 'Comissions bancàries' },
     { value: 'altres',      label: 'Altres' },
 ];
 
 const categoriesIngresLinia = [
     ...categoriesDespesa,
     { value: 'gestoria', label: 'Gestoria' },
-    { value: 'interessos', label: 'Interessos bancaris' },
+    { value: 'comissions', label: 'Comissions bancàries' },
 ];
 
 const ingresNoQuadra = (moviment: Moviment): boolean => {
@@ -1183,7 +1190,18 @@ const formatCurrency = (value: string | null): string => {
                                             {{ moviment.saldo_posterior ? formatCurrency(moviment.saldo_posterior) : '-' }}
                                         </td>
                                         <td class="px-4 py-3 text-sm">
-                                            <template v-if="classificacioThisLloguer(moviment)">
+                                            <template v-if="moviment.factura">
+                                                <button
+                                                    @click.stop="showFacturesModal = true"
+                                                    class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                                                    :class="parseFloat(moviment.factura.total) !== parseFloat(moviment.import)
+                                                        ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 ring-2 ring-red-400'
+                                                        : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'"
+                                                >
+                                                    {{ moviment.factura.numero_factura || 'Factura vinculada' }}
+                                                </button>
+                                            </template>
+                                            <template v-else-if="classificacioThisLloguer(moviment)">
                                                 <div class="flex items-center gap-2">
                                                     <span
                                                         class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"

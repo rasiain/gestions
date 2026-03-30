@@ -124,7 +124,7 @@ class LloguerController extends Controller
         $page    = max(1, $request->integer('page', 1));
         $perPage = 30;
 
-        $query = MovimentCompteCorrent::with(['concepte', 'categoria', 'despesa', 'ingres.linies'])
+        $query = MovimentCompteCorrent::with(['concepte', 'categoria', 'despesa', 'ingres.linies', 'factura:id,moviment_id,numero_factura,total'])
             ->where('compte_corrent_id', $lloguer->compte_corrent_id);
 
         if ($any = $request->integer('any')) {
@@ -142,6 +142,13 @@ class LloguerController extends Controller
             $query->whereDoesntHave('despesa')
                   ->whereDoesntHave('ingres')
                   ->where('exclou_lloguer', false);
+        }
+
+        if ($facturaId = $request->integer('per_vincular_factura')) {
+            $query->where(function ($q) use ($facturaId) {
+                $q->whereDoesntHave('factura')
+                  ->orWhereHas('factura', fn($q2) => $q2->where('id', $facturaId));
+            });
         }
 
         $query->orderBy('data_moviment', 'desc')
@@ -178,6 +185,11 @@ class LloguerController extends Controller
                         'import'       => $l->import,
                         'proveidor_id' => $l->proveidor_id,
                     ])->toArray(),
+                ] : null,
+                'factura'         => $m->factura ? [
+                    'id'              => $m->factura->id,
+                    'numero_factura'  => $m->factura->numero_factura,
+                    'total'           => $m->factura->total,
                 ] : null,
             ]);
 

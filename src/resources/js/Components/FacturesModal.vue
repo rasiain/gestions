@@ -10,6 +10,12 @@ interface FacturaLinia {
     irpf_import: string;
 }
 
+interface MovimentVinculat {
+    id: number;
+    data_moviment: string;
+    import: string;
+}
+
 interface Factura {
     id: number;
     lloguer_id: number;
@@ -24,6 +30,7 @@ interface Factura {
     total: string;
     estat: string;
     moviment_id: number | null;
+    moviment: MovimentVinculat | null;
     numero_factura: string | null;
     data_emissio: string | null;
     notes: string | null;
@@ -219,7 +226,7 @@ const openVincularModal = async (factura: Factura) => {
     showVincularModal.value = true;
     movimentsLoading.value = true;
     try {
-        const params = new URLSearchParams({ page: '1' });
+        const params = new URLSearchParams({ page: '1', per_vincular_factura: String(factura.id) });
         if (filterAny.value) params.set('any', String(filterAny.value));
         const res = await fetch(`/lloguers/${props.lloguer.id}/moviments?${params}`, {
             headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
@@ -380,7 +387,9 @@ const anys = computed(() => {
                                     <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-500 dark:text-gray-400">{{ factura.numero_factura || '-' }}</td>
                                     <td class="whitespace-nowrap px-3 py-2 text-right text-sm font-medium">
                                         <button @click="openEditFactura(factura)" class="text-amber-600 hover:text-amber-900 dark:text-amber-400 mr-2">Editar</button>
-                                        <button @click="openVincularModal(factura)" class="text-blue-600 hover:text-blue-900 dark:text-blue-400 mr-2">Vincular</button>
+                                        <button @click="openVincularModal(factura)" :class="factura.moviment_id ? 'text-green-600 hover:text-green-800 dark:text-green-400' : 'text-blue-600 hover:text-blue-900 dark:text-blue-400'" class="mr-2">
+                                            {{ factura.moviment_id ? 'Vinculat' : 'Vincular' }}
+                                        </button>
                                         <button v-if="factura.estat === 'esborrany'" @click="deleteFactura(factura)" class="text-red-600 hover:text-red-900 dark:text-red-400">Eliminar</button>
                                     </td>
                                 </tr>

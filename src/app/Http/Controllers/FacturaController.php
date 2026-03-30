@@ -12,7 +12,7 @@ class FacturaController extends Controller
 {
     public function index(Lloguer $lloguer, Request $request): JsonResponse
     {
-        $query = $lloguer->factures()->with('linies')->orderBy('mes');
+        $query = $lloguer->factures()->with(['linies', 'moviment:id,data_moviment,import'])->orderBy('mes');
 
         if ($any = $request->integer('any')) {
             $query->where('any', $any);
