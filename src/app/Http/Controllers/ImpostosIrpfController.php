@@ -17,7 +17,7 @@ class ImpostosIrpfController extends Controller
             ->orderBy('nom')
             ->get();
 
-        $categories = ['comunitat', 'taxes', 'assegurança', 'compres', 'reparacions', 'gestoria', 'altres'];
+        $categories = ['comunitat', 'taxes', 'assegurança', 'compres', 'reparacions', 'gestoria', 'interessos', 'altres'];
 
         $totals = [
             'total_ingressos' => 0,

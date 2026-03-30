@@ -16,6 +16,7 @@ interface DespesesPerCategoria {
     compres: number;
     reparacions: number;
     gestoria: number;
+    interessos: number;
     altres: number;
 }
 
@@ -60,7 +61,7 @@ interface Props {
 const props = defineProps<Props>();
 
 const categories: (keyof DespesesPerCategoria)[] = [
-    'comunitat', 'taxes', 'assegurança', 'compres', 'reparacions', 'gestoria', 'altres',
+    'comunitat', 'taxes', 'assegurança', 'compres', 'reparacions', 'gestoria', 'interessos', 'altres',
 ];
 
 function formatEur(value: number): string {
