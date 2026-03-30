@@ -82,6 +82,11 @@ class MovimentCompteCorrent extends Model
         return $this->hasOne(MovimentLloguerIngres::class, 'moviment_id');
     }
 
+    public function factura(): HasOne
+    {
+        return $this->hasOne(Factura::class, 'moviment_id');
+    }
+
     /**
      * Scope to filter by compte corrent.
      */
@@ -140,16 +145,14 @@ class MovimentCompteCorrent extends Model
      * @param int $compteCorrentId
      * @return string
      */
-    public static function generateHash(string $dataMoviment, string $concepte, float $import, int $compteCorrentId): string
+    public static function generateHash(string $dataMoviment, string $concepte, float $import, int $compteCorrentId, int $sequence = 0): string
     {
-        // Concept is kept as parameter for backwards compatibility but not used in hash
-        // This allows matching movements from different sources (KMyMoney, bank exports)
-        // that have slight variations in concept text
         $data = sprintf(
-            '%s|%.2f|%d',
+            '%s|%.2f|%d|%d',
             $dataMoviment,
             $import,
-            $compteCorrentId
+            $compteCorrentId,
+            $sequence
         );
 
         return hash('sha256', $data);

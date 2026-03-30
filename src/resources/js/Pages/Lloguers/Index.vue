@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
+import FacturesModal from '@/Components/FacturesModal.vue';
+import RevisioIpcModal from '@/Components/RevisioIpcModal.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref, computed, watch } from 'vue';
 
@@ -47,6 +49,9 @@ interface Lloguer {
     gestoria_percentatge: string | null;
     es_habitatge: boolean;
     retencio_irpf: boolean;
+    iva_percentatge: string | null;
+    irpf_percentatge: string | null;
+    despeses_separades: boolean;
     gestoria: Proveidor | null;
     contracte_actiu: ContracteActiu | null;
 }
@@ -76,6 +81,9 @@ const lloguerForm = useForm({
     gestoria_percentatge: null as number | null,
     es_habitatge: false,
     retencio_irpf: false,
+    iva_percentatge: 21.00 as number | null,
+    irpf_percentatge: 19.00 as number | null,
+    despeses_separades: false,
 });
 
 const openCreateLloguerModal = () => {
@@ -97,6 +105,9 @@ const openEditLloguerModal = (lloguer: Lloguer) => {
     lloguerForm.gestoria_percentatge = lloguer.gestoria_percentatge ? parseFloat(lloguer.gestoria_percentatge) : null;
     lloguerForm.es_habitatge = lloguer.es_habitatge;
     lloguerForm.retencio_irpf = lloguer.retencio_irpf;
+    lloguerForm.iva_percentatge = lloguer.iva_percentatge ? parseFloat(lloguer.iva_percentatge) : 21.00;
+    lloguerForm.irpf_percentatge = lloguer.irpf_percentatge ? parseFloat(lloguer.irpf_percentatge) : 19.00;
+    lloguerForm.despeses_separades = lloguer.despeses_separades;
     showLloguerModal.value = true;
 };
 
@@ -443,12 +454,14 @@ const categoriesDespesa = [
     { value: 'assegurança', label: 'Assegurança' },
     { value: 'compres',     label: 'Compres' },
     { value: 'reparacions', label: 'Reparacions' },
+    { value: 'interessos',  label: 'Interessos bancaris' },
     { value: 'altres',      label: 'Altres' },
 ];
 
 const categoriesIngresLinia = [
     ...categoriesDespesa,
     { value: 'gestoria', label: 'Gestoria' },
+    { value: 'interessos', label: 'Interessos bancaris' },
 ];
 
 const ingresNoQuadra = (moviment: Moviment): boolean => {
@@ -719,6 +732,10 @@ const closeResumModal = () => {
     showResumModal.value = false;
     resumData.value = null;
 };
+
+// ── Factures i Revisions IPC ─────────────────────────────────
+const showFacturesModal = ref(false);
+const showRevisioIpcModal = ref(false);
 
 // ── Helpers ────────────────────────────────────────────────────
 const formatCurrency = (value: string | null): string => {
@@ -1061,6 +1078,23 @@ const formatCurrency = (value: string | null): string => {
                             </label>
                             <div v-if="selectedLloguer" class="ml-auto flex items-center gap-2">
                                 <button
+                                    v-if="!selectedLloguer.es_habitatge"
+                                    @click="showFacturesModal = true"
+                                    class="inline-flex items-center gap-1.5 rounded-md border border-blue-500 px-3 py-1.5 text-sm font-medium text-blue-600 shadow-sm hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 transition-colors"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    Factures
+                                </button>
+                                <button
+                                    v-if="!selectedLloguer.es_habitatge"
+                                    @click="showRevisioIpcModal = true"
+                                    class="inline-flex items-center gap-1.5 rounded-md border border-purple-500 px-3 py-1.5 text-sm font-medium text-purple-600 shadow-sm hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20 transition-colors"
+                                >
+                                    IPC
+                                </button>
+                                <button
                                     @click="openResum"
                                     class="inline-flex items-center gap-1.5 rounded-md border border-amber-500 px-3 py-1.5 text-sm font-medium text-amber-600 shadow-sm hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20 transition-colors"
                                 >
@@ -1280,7 +1314,43 @@ const formatCurrency = (value: string | null): string => {
                                         type="checkbox"
                                         class="rounded border-gray-300 text-amber-500 focus:ring-amber-400 dark:border-gray-600 dark:bg-gray-700"
                                     />
-                                    <label for="retencio_irpf" class="text-sm font-medium text-gray-700 dark:text-gray-300">Retenció IRPF</label>
+                                    <label for="retencio_irpf" class="text-sm font-medium text-gray-700 dark:text-gray-300">Retencio IRPF</label>
+                                </div>
+
+                                <div v-if="!lloguerForm.es_habitatge">
+                                    <label for="iva_percentatge" class="block text-sm font-medium text-gray-700 dark:text-gray-300">IVA %</label>
+                                    <input
+                                        id="iva_percentatge"
+                                        v-model="lloguerForm.iva_percentatge"
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        max="100"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                </div>
+
+                                <div v-if="!lloguerForm.es_habitatge">
+                                    <label for="irpf_percentatge" class="block text-sm font-medium text-gray-700 dark:text-gray-300">IRPF %</label>
+                                    <input
+                                        id="irpf_percentatge"
+                                        v-model="lloguerForm.irpf_percentatge"
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        max="100"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                </div>
+
+                                <div v-if="!lloguerForm.es_habitatge" class="flex items-center gap-2">
+                                    <input
+                                        id="despeses_separades"
+                                        v-model="lloguerForm.despeses_separades"
+                                        type="checkbox"
+                                        class="rounded border-gray-300 text-amber-500 focus:ring-amber-400 dark:border-gray-600 dark:bg-gray-700"
+                                    />
+                                    <label for="despeses_separades" class="text-sm font-medium text-gray-700 dark:text-gray-300">Despeses separades</label>
                                 </div>
 
                                 <div class="sm:col-span-2">
@@ -1883,6 +1953,23 @@ const formatCurrency = (value: string | null): string => {
                 </div>
             </div>
         </div>
+
+        <!-- Factures Modal -->
+        <FacturesModal
+            v-if="selectedLloguer && !selectedLloguer.es_habitatge"
+            :lloguer="selectedLloguer"
+            :show="showFacturesModal"
+            @close="showFacturesModal = false"
+        />
+
+        <!-- Revisio IPC Modal -->
+        <RevisioIpcModal
+            v-if="selectedLloguer && !selectedLloguer.es_habitatge"
+            :lloguer="selectedLloguer"
+            :show="showRevisioIpcModal"
+            @close="showRevisioIpcModal = false"
+            @updated="router.reload()"
+        />
 
     </AuthenticatedLayout>
 </template>

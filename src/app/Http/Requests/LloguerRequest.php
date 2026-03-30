@@ -23,6 +23,9 @@ class LloguerRequest extends FormRequest
             'gestoria_percentatge'  => ['nullable', 'numeric', 'min:0', 'max:100'],
             'es_habitatge'          => ['boolean'],
             'retencio_irpf'         => ['boolean'],
+            'iva_percentatge'       => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'irpf_percentatge'      => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'despeses_separades'    => ['boolean'],
         ];
     }
 

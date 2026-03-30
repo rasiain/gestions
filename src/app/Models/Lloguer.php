@@ -20,6 +20,9 @@ class Lloguer extends Model
         'gestoria_percentatge',
         'es_habitatge',
         'retencio_irpf',
+        'iva_percentatge',
+        'irpf_percentatge',
+        'despeses_separades',
     ];
 
     protected $casts = [
@@ -27,6 +30,9 @@ class Lloguer extends Model
         'gestoria_percentatge' => 'decimal:2',
         'es_habitatge'         => 'boolean',
         'retencio_irpf'        => 'boolean',
+        'iva_percentatge'      => 'decimal:2',
+        'irpf_percentatge'     => 'decimal:2',
+        'despeses_separades'   => 'boolean',
     ];
 
     public function immoble(): BelongsTo
@@ -47,5 +53,15 @@ class Lloguer extends Model
     public function gestoria(): BelongsTo
     {
         return $this->belongsTo(Proveidor::class, 'proveidor_gestoria_id');
+    }
+
+    public function factures(): HasMany
+    {
+        return $this->hasMany(Factura::class);
+    }
+
+    public function revisionsIpc(): HasMany
+    {
+        return $this->hasMany(LloguerRevisioIpc::class);
     }
 }

@@ -795,15 +795,26 @@ class MovementImportService
      */
     private function generateHashesForMovements(array &$movements, int $compteCorrentId): void
     {
+        $sequenceCounters = [];
+
         foreach ($movements as &$movement) {
+            $key = sprintf('%s|%.2f', $movement['data_moviment'], $movement['import']);
+
+            if (!isset($sequenceCounters[$key])) {
+                $sequenceCounters[$key] = 0;
+            }
+
             $movement['hash'] = MovimentCompteCorrent::generateHash(
                 $movement['data_moviment'],
                 $movement['concepte'],
                 $movement['import'],
-                $compteCorrentId
+                $compteCorrentId,
+                $sequenceCounters[$key]
             );
+
+            $sequenceCounters[$key]++;
         }
-        unset($movement); // Break reference
+        unset($movement);
     }
 
     /**

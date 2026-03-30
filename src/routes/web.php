@@ -6,7 +6,9 @@ use App\Http\Controllers\CompteCorrentController;
 use App\Http\Controllers\ImmobleController;
 use App\Http\Controllers\LlogaterController;
 use App\Http\Controllers\ContracteController;
+use App\Http\Controllers\FacturaController;
 use App\Http\Controllers\LloguerController;
+use App\Http\Controllers\LloguerRevisioIpcController;
 use App\Http\Controllers\MovementImportController;
 use App\Http\Controllers\ImpostosIrpfController;
 use App\Http\Controllers\MovimentClassificacioController;
@@ -53,6 +55,18 @@ Route::middleware('auth')->group(function () {
     Route::get('/lloguers/{lloguer}/moviments', [LloguerController::class, 'moviments'])->name('lloguers.moviments');
     Route::get('/lloguers/{lloguer}/exportar', [LloguerController::class, 'exportar'])->name('lloguers.exportar');
     Route::get('/lloguers/{lloguer}/resum', [LloguerController::class, 'resum'])->name('lloguers.resum');
+
+    // Factures
+    Route::get('/lloguers/{lloguer}/factures', [FacturaController::class, 'index']);
+    Route::post('/lloguers/{lloguer}/factures', [FacturaController::class, 'store']);
+    Route::post('/lloguers/{lloguer}/factures/generar', [FacturaController::class, 'generar']);
+    Route::put('/factures/{factura}', [FacturaController::class, 'update']);
+    Route::delete('/factures/{factura}', [FacturaController::class, 'destroy']);
+    Route::post('/factures/{factura}/vincular-moviment', [FacturaController::class, 'vincularMoviment']);
+
+    // Revisions IPC
+    Route::get('/lloguers/{lloguer}/revisions-ipc', [LloguerRevisioIpcController::class, 'index']);
+    Route::post('/lloguers/{lloguer}/revisions-ipc', [LloguerRevisioIpcController::class, 'store']);
 
     // Contractes management
     Route::resource('contractes', ContracteController::class)->only([
