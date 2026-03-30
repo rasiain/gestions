@@ -38,6 +38,11 @@ class Factura extends Model
         'data_emissio'     => 'date',
     ];
 
+    protected function serializeDate(\DateTimeInterface $date): string
+    {
+        return $date->format('Y-m-d');
+    }
+
     public function lloguer(): BelongsTo
     {
         return $this->belongsTo(Lloguer::class);

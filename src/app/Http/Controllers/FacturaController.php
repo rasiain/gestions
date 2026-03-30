@@ -190,6 +190,7 @@ class FacturaController extends Controller
                 'irpf_import'      => $irpfImport,
                 'total'            => $total,
                 'estat'            => 'esborrany',
+                'data_emissio'     => sprintf('%d-%02d-01', $validated['any'], $mes),
             ]);
 
             $factura->linies()->create([
