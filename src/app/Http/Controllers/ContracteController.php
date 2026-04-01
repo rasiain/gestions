@@ -18,6 +18,11 @@ class ContracteController extends Controller
         $llogaterIds  = $validated['llogater_ids'] ?? [];
         unset($validated['tancar_contracte_anterior_id'], $validated['data_fi_anterior'], $validated['llogater_ids']);
 
+        // Normalitzar arrendador_id: string buida → null
+        if (empty($validated['arrendador_id'])) {
+            $validated['arrendador_id'] = null;
+        }
+
         DB::beginTransaction();
         try {
             // Tancar el contracte anterior si s'ha especificat

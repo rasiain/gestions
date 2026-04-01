@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class Persona extends Model
 {
@@ -22,6 +23,11 @@ class Persona extends Model
         'nom',
         'cognoms',
     ];
+
+    public function arrendadors(): MorphMany
+    {
+        return $this->morphMany(Arrendador::class, 'arrendadorable');
+    }
 
     /**
      * Get the comptes corrents associated with this persona (as titular).

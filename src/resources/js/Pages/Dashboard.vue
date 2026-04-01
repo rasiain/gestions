@@ -252,6 +252,12 @@ import { Head, Link } from '@inertiajs/vue3';
                             >
                                 → Proveïdors
                             </Link>
+                            <Link
+                                :href="route('comunitats-bens.index')"
+                                class="block text-sm text-gray-600 hover:text-purple-600 dark:text-gray-400 dark:hover:text-purple-400 transition-colors"
+                            >
+                                → Comunitats de Béns
+                            </Link>
                         </div>
                     </div>
                 </div>

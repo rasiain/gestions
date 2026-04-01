@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use App\Models\Arrendador;
 
 class Contracte extends Model
 {
@@ -14,6 +15,7 @@ class Contracte extends Model
         'lloguer_id',
         'data_inici',
         'data_fi',
+        'arrendador_id',
     ];
 
     protected $casts = [
@@ -29,5 +31,10 @@ class Contracte extends Model
     public function llogaters(): BelongsToMany
     {
         return $this->belongsToMany(Llogater::class, 'g_contracte_llogater');
+    }
+
+    public function arrendador(): BelongsTo
+    {
+        return $this->belongsTo(Arrendador::class);
     }
 }

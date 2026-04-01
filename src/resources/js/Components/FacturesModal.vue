@@ -177,10 +177,25 @@ const openEditFactura = (factura: Factura) => {
 };
 
 const recalculateEdit = () => {
-    const base = editForm.value.base;
+    const base = editForm.value.linies.reduce((s, l) => s + (l.base || 0), 0);
+    editForm.value.base = parseFloat(base.toFixed(2));
     editForm.value.iva_import = parseFloat((base * editForm.value.iva_percentatge / 100).toFixed(2));
     editForm.value.irpf_import = parseFloat((base * editForm.value.irpf_percentatge / 100).toFixed(2));
     editForm.value.total = parseFloat((base + editForm.value.iva_import - editForm.value.irpf_import).toFixed(2));
+    // Recalcular IVA/IRPF per línia proporcionalment
+    editForm.value.linies.forEach(l => {
+        l.iva_import = base > 0 ? parseFloat(((l.base || 0) * editForm.value.iva_percentatge / 100).toFixed(2)) : 0;
+        l.irpf_import = base > 0 ? parseFloat(((l.base || 0) * editForm.value.irpf_percentatge / 100).toFixed(2)) : 0;
+    });
+};
+
+const addLinia = () => {
+    editForm.value.linies.push({ concepte: 'altres', descripcio: '', base: 0, iva_import: 0, irpf_import: 0 });
+};
+
+const removeLinia = (index: number) => {
+    editForm.value.linies.splice(index, 1);
+    recalculateEdit();
 };
 
 const submitEditFactura = async () => {
@@ -435,10 +450,29 @@ const anys = computed(() => {
                                 Editar factura — {{ editingFactura ? nomMes(editingFactura.mes) + ' ' + editingFactura.any : '' }}
                             </h3>
                             <div class="space-y-4">
-                                <div class="grid grid-cols-2 gap-4">
+                                <!-- Línies -->
+                                <div>
+                                    <div class="flex items-center justify-between mb-2">
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Línies</label>
+                                        <button type="button" @click="addLinia" class="text-xs text-amber-600 hover:text-amber-800 dark:text-amber-400">+ Afegir línia</button>
+                                    </div>
+                                    <div v-for="(linia, idx) in editForm.linies" :key="idx" class="flex items-center gap-2 mb-2">
+                                        <select v-model="linia.concepte" class="w-36 rounded-md border-gray-300 text-xs shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                                            <option value="lloguer_base">Lloguer base</option>
+                                            <option value="escombraries">Escombraries</option>
+                                            <option value="regularitzacio_ipc">Regularització IPC</option>
+                                            <option value="altres">Altres</option>
+                                        </select>
+                                        <input v-model="linia.descripcio" type="text" placeholder="Descripció" class="flex-1 rounded-md border-gray-300 text-xs shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                                        <input v-model.number="linia.base" @input="recalculateEdit" type="number" step="0.01" placeholder="Base" class="w-24 rounded-md border-gray-300 text-xs shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-right" />
+                                        <button v-if="editForm.linies.length > 1" type="button" @click="removeLinia(idx)" class="text-red-500 hover:text-red-700 text-xs">✕</button>
+                                    </div>
+                                </div>
+                                <!-- Totals -->
+                                <div class="grid grid-cols-2 gap-4 border-t border-gray-200 dark:border-gray-600 pt-3">
                                     <div>
-                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Base</label>
-                                        <input v-model.number="editForm.base" @input="recalculateEdit" type="number" step="0.01" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Base total</label>
+                                        <input :value="editForm.base" type="number" step="0.01" readonly class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100" />
                                     </div>
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">IVA %</label>
@@ -446,7 +480,7 @@ const anys = computed(() => {
                                     </div>
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">IVA import</label>
-                                        <input v-model.number="editForm.iva_import" type="number" step="0.01" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                                        <input :value="editForm.iva_import" type="number" step="0.01" readonly class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100" />
                                     </div>
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">IRPF %</label>
@@ -454,11 +488,11 @@ const anys = computed(() => {
                                     </div>
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">IRPF import</label>
-                                        <input v-model.number="editForm.irpf_import" type="number" step="0.01" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                                        <input :value="editForm.irpf_import" type="number" step="0.01" readonly class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100" />
                                     </div>
                                     <div>
-                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Total</label>
-                                        <input v-model.number="editForm.total" type="number" step="0.01" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 font-semibold" />
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 font-semibold">Total</label>
+                                        <input :value="editForm.total" type="number" step="0.01" readonly class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 font-semibold" />
                                     </div>
                                 </div>
                                 <div class="grid grid-cols-2 gap-4">

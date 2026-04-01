@@ -22,7 +22,6 @@ class Lloguer extends Model
         'retencio_irpf',
         'iva_percentatge',
         'irpf_percentatge',
-        'despeses_separades',
     ];
 
     protected $casts = [
@@ -32,7 +31,6 @@ class Lloguer extends Model
         'retencio_irpf'        => 'boolean',
         'iva_percentatge'      => 'decimal:2',
         'irpf_percentatge'     => 'decimal:2',
-        'despeses_separades'   => 'boolean',
     ];
 
     public function immoble(): BelongsTo
@@ -64,4 +62,5 @@ class Lloguer extends Model
     {
         return $this->hasMany(LloguerRevisioIpc::class);
     }
+
 }

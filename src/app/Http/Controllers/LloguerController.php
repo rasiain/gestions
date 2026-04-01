@@ -3,12 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\LloguerRequest;
+use App\Models\Arrendador;
 use App\Models\CompteCorrent;
+use App\Models\ComunitatBens;
 use App\Models\Immoble;
 use App\Models\Llogater;
 use App\Models\Lloguer;
 use App\Models\Categoria;
 use App\Models\MovimentCompteCorrent;
+use App\Models\Persona;
 use App\Models\Proveidor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,7 +29,7 @@ class LloguerController extends Controller
     public function index()
     {
         $lloguers = Lloguer::with([
-                'immoble',
+                'immoble.propietaris',
                 'compteCorrent',
                 'gestoria',
                 'contractes' => function ($q) {
@@ -35,6 +38,7 @@ class LloguerController extends Controller
                     })->orderBy('data_inici', 'desc');
                 },
                 'contractes.llogaters',
+                'contractes.arrendador.arrendadorable',
             ])
             ->orderBy('nom')
             ->get()
@@ -61,11 +65,16 @@ class LloguerController extends Controller
                     'retencio_irpf'         => $lloguer->retencio_irpf,
                     'iva_percentatge'       => $lloguer->iva_percentatge,
                     'irpf_percentatge'      => $lloguer->irpf_percentatge,
-                    'despeses_separades'    => $lloguer->despeses_separades,
                     'gestoria'              => $lloguer->gestoria ? [
                         'id'             => $lloguer->gestoria->id,
                         'nom_rao_social' => $lloguer->gestoria->nom_rao_social,
                     ] : null,
+                    'propietaris' => $lloguer->immoble ? $lloguer->immoble->propietaris
+                        ->where('pivot.data_fi', null)
+                        ->map(fn($p) => [
+                            'id'  => $p->id,
+                            'nom' => $p->nom . ' ' . $p->cognoms,
+                        ])->values()->toArray() : [],
                     'contracte_actiu'  => $contracteActiu ? [
                         'id'          => $contracteActiu->id,
                         'lloguer_id'  => $lloguer->id,
@@ -77,6 +86,18 @@ class LloguerController extends Controller
                             'nom'     => $l->nom,
                             'cognoms' => $l->cognoms,
                         ])->values()->toArray(),
+                        'arrendador_id' => $contracteActiu->arrendador_id,
+                        'arrendador' => $contracteActiu->arrendador ? [
+                            'id'    => $contracteActiu->arrendador->id,
+                            'adreca' => $contracteActiu->arrendador->adreca,
+                            'arrendadorable_type' => $contracteActiu->arrendador->arrendadorable_type === \App\Models\Persona::class ? 'persona' : 'comunitat_bens',
+                            'arrendadorable' => $contracteActiu->arrendador->arrendadorable ? [
+                                'id'  => $contracteActiu->arrendador->arrendadorable->id,
+                                'nom' => $contracteActiu->arrendador->arrendadorable instanceof \App\Models\Persona
+                                    ? ($contracteActiu->arrendador->arrendadorable->nom . ' ' . $contracteActiu->arrendador->arrendadorable->cognoms)
+                                    : $contracteActiu->arrendador->arrendadorable->nom,
+                            ] : null,
+                        ] : null,
                     ] : null,
                 ];
             });
@@ -86,12 +107,35 @@ class LloguerController extends Controller
         $llogaters = Llogater::orderBy('cognoms')->orderBy('nom')->get(['id', 'nom', 'cognoms']);
         $proveidors = Proveidor::orderBy('nom_rao_social')->get(['id', 'nom_rao_social']);
 
+        $arrendadors = Arrendador::with('arrendadorable')
+            ->get()
+            ->map(fn($a) => [
+                'id'    => $a->id,
+                'adreca' => $a->adreca,
+                'arrendadorable_type' => $a->arrendadorable_type === \App\Models\Persona::class ? 'persona' : 'comunitat_bens',
+                'arrendadorable' => $a->arrendadorable ? [
+                    'id'  => $a->arrendadorable->id,
+                    'nom' => $a->arrendadorable instanceof \App\Models\Persona
+                        ? ($a->arrendadorable->nom . ' ' . $a->arrendadorable->cognoms)
+                        : $a->arrendadorable->nom,
+                ] : null,
+            ]);
+
+        $persones = Persona::orderBy('cognoms')->orderBy('nom')->get(['id', 'nom', 'cognoms'])
+            ->map(fn($p) => ['id' => $p->id, 'nom' => $p->nom . ' ' . $p->cognoms]);
+
+        $comunitatsBens = ComunitatBens::orderBy('nom')->get(['id', 'nom'])
+            ->map(fn($c) => ['id' => $c->id, 'nom' => $c->nom]);
+
         return Inertia::render('Lloguers/Index', [
             'lloguers'        => $lloguers,
             'immobles'        => $immobles,
             'comptesCorrents' => $comptesCorrents,
             'llogaters'       => $llogaters,
             'proveidors'      => $proveidors,
+            'arrendadors'     => $arrendadors,
+            'persones'        => $persones,
+            'comunitatsBens'  => $comunitatsBens,
         ]);
     }
 

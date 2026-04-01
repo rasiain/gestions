@@ -21,6 +21,28 @@ interface Proveidor {
     nom_rao_social: string;
 }
 
+interface PersonaBasic {
+    id: number;
+    nom: string;
+}
+
+interface ComunitatBensBasic {
+    id: number;
+    nom: string;
+}
+
+interface Arrendadorable {
+    id: number;
+    nom: string;
+}
+
+interface Arrendador {
+    id: number;
+    adreca: string | null;
+    arrendadorable_type: 'persona' | 'comunitat_bens';
+    arrendadorable: Arrendadorable | null;
+}
+
 interface LlogaterBasic {
     id: number;
     nom: string;
@@ -34,6 +56,8 @@ interface ContracteActiu {
     data_fi: string | null;
     llogater_ids: number[];
     llogaters: LlogaterBasic[];
+    arrendador_id: number | null;
+    arrendador: Arrendador | null;
 }
 
 interface Lloguer {
@@ -51,8 +75,8 @@ interface Lloguer {
     retencio_irpf: boolean;
     iva_percentatge: string | null;
     irpf_percentatge: string | null;
-    despeses_separades: boolean;
     gestoria: Proveidor | null;
+    propietaris: PersonaBasic[];
     contracte_actiu: ContracteActiu | null;
 }
 
@@ -62,6 +86,9 @@ interface Props {
     comptesCorrents: CompteCorrent[];
     llogaters: LlogaterBasic[];
     proveidors: Proveidor[];
+    arrendadors: Arrendador[];
+    persones: PersonaBasic[];
+    comunitatsBens: ComunitatBensBasic[];
 }
 
 const props = defineProps<Props>();
@@ -83,7 +110,6 @@ const lloguerForm = useForm({
     retencio_irpf: false,
     iva_percentatge: 21.00 as number | null,
     irpf_percentatge: 19.00 as number | null,
-    despeses_separades: false,
 });
 
 const openCreateLloguerModal = () => {
@@ -107,7 +133,6 @@ const openEditLloguerModal = (lloguer: Lloguer) => {
     lloguerForm.retencio_irpf = lloguer.retencio_irpf;
     lloguerForm.iva_percentatge = lloguer.iva_percentatge ? parseFloat(lloguer.iva_percentatge) : 21.00;
     lloguerForm.irpf_percentatge = lloguer.irpf_percentatge ? parseFloat(lloguer.irpf_percentatge) : 19.00;
-    lloguerForm.despeses_separades = lloguer.despeses_separades;
     showLloguerModal.value = true;
 };
 
@@ -148,6 +173,7 @@ const contracteForm = useForm({
     data_inici: '',
     data_fi: '',
     llogater_ids: [] as number[],
+    arrendador_id: null as number | null,
     tancar_contracte_anterior_id: null as number | null,
     data_fi_anterior: '',
 });
@@ -163,6 +189,7 @@ const iniciarNouContracte = () => {
     contracteForm.data_inici = '';
     contracteForm.data_fi = '';
     contracteForm.llogater_ids = [];
+    contracteForm.arrendador_id = suggerirArrendadorPerDefecte();
     contracteForm.clearErrors();
 };
 
@@ -173,6 +200,7 @@ const cancellarNouContracte = () => {
     contracteForm.data_inici = c?.data_inici ?? '';
     contracteForm.data_fi = c?.data_fi ?? '';
     contracteForm.llogater_ids = c?.llogater_ids ? [...c.llogater_ids] : [];
+    contracteForm.arrendador_id = c?.arrendador_id ?? null;
     contracteForm.clearErrors();
 };
 
@@ -189,6 +217,7 @@ const selectLloguer = (lloguer: Lloguer) => {
     contracteForm.data_inici = c?.data_inici ?? '';
     contracteForm.data_fi = c?.data_fi ?? '';
     contracteForm.llogater_ids = c?.llogater_ids ? [...c.llogater_ids] : [];
+    contracteForm.arrendador_id = c?.arrendador_id ?? suggerirArrendadorPerDefecte();
     contracteForm.clearErrors();
 };
 
@@ -752,6 +781,67 @@ const closeResumModal = () => {
 const showFacturesModal = ref(false);
 const showRevisioIpcModal = ref(false);
 
+// ── Arrendador: suggerir propietaris de l'immoble ───────────────
+const suggerirArrendadorPerDefecte = (): number | null => {
+    const lloguer = selectedLloguer.value;
+    if (!lloguer) return null;
+    // Buscar si algun arrendador existent correspon a un propietari de l'immoble
+    const propietariIds = lloguer.propietaris.map(p => p.id);
+    const arrendadorPropietari = props.arrendadors.find(a =>
+        a.arrendadorable_type === 'persona' && a.arrendadorable && propietariIds.includes(a.arrendadorable.id)
+    );
+    return arrendadorPropietari?.id ?? null;
+};
+
+// ── Nou arrendador (mini-formulari inline) ─────────────────────
+const showNouArrendadorForm = ref(false);
+const nouArrendadorSaving = ref(false);
+const nouArrendadorErrors = ref<Record<string, string>>({});
+const nouArrendadorForm = ref({
+    arrendadorable_type: 'persona' as 'persona' | 'comunitat_bens',
+    arrendadorable_id: null as number | null,
+    adreca: '',
+});
+
+const openNouArrendadorForm = () => {
+    nouArrendadorForm.value = { arrendadorable_type: 'persona', arrendadorable_id: null, adreca: '' };
+    nouArrendadorErrors.value = {};
+    showNouArrendadorForm.value = true;
+};
+
+const cancelNouArrendador = () => {
+    showNouArrendadorForm.value = false;
+    nouArrendadorErrors.value = {};
+};
+
+const submitNouArrendador = async () => {
+    nouArrendadorSaving.value = true;
+    nouArrendadorErrors.value = {};
+    try {
+        const res = await fetch('/arrendadors', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken(),
+            },
+            body: JSON.stringify(nouArrendadorForm.value),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+            nouArrendadorErrors.value = json.errors ?? { general: json.message ?? 'Error desconegut' };
+            return;
+        }
+        // Refrescar la pàgina per obtenir el nou arrendador
+        router.reload({ only: ['arrendadors', 'lloguers'] });
+        showNouArrendadorForm.value = false;
+    } catch {
+        nouArrendadorErrors.value = { general: 'Error de connexió' };
+    } finally {
+        nouArrendadorSaving.value = false;
+    }
+};
+
 // ── Helpers ────────────────────────────────────────────────────
 const formatCurrency = (value: string | null): string => {
     if (value === null) return '-';
@@ -801,6 +891,7 @@ const formatCurrency = (value: string | null): string => {
                                         <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Acrònim</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Immoble</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Base (€/mes)</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Arrendador</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Contracte actiu</th>
                                         <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Accions</th>
                                     </tr>
@@ -826,6 +917,12 @@ const formatCurrency = (value: string | null): string => {
                                         </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                                             {{ formatCurrency(lloguer.base_euros) }}
+                                        </td>
+                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                            <span v-if="lloguer.contracte_actiu?.arrendador">
+                                                {{ lloguer.contracte_actiu.arrendador.arrendadorable?.nom ?? '—' }}
+                                            </span>
+                                            <span v-else class="italic text-gray-400 dark:text-gray-500">—</span>
                                         </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-sm">
                                             <span v-if="lloguer.contracte_actiu" class="text-gray-900 dark:text-gray-100">
@@ -1030,6 +1127,98 @@ const formatCurrency = (value: string | null): string => {
                                     <p v-if="contracteForm.errors.llogater_ids" class="mt-1 text-sm text-red-600 dark:text-red-400">
                                         {{ contracteForm.errors.llogater_ids }}
                                     </p>
+                                </div>
+
+                                <!-- Arrendador -->
+                                <div class="sm:col-span-2">
+                                    <label for="contracte_arrendador_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Arrendador (qui rep les rendes)</label>
+                                    <div class="mt-1 flex gap-2">
+                                        <select
+                                            id="contracte_arrendador_id"
+                                            v-model="contracteForm.arrendador_id"
+                                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        >
+                                            <option :value="null">Sense arrendador</option>
+                                            <option v-for="a in arrendadors" :key="a.id" :value="a.id">
+                                                {{ a.arrendadorable?.nom ?? '—' }}
+                                                ({{ a.arrendadorable_type === 'persona' ? 'Persona' : 'Comunitat de Béns' }})
+                                                <template v-if="a.adreca"> — {{ a.adreca }}</template>
+                                            </option>
+                                        </select>
+                                        <button
+                                            type="button"
+                                            @click="openNouArrendadorForm"
+                                            class="shrink-0 rounded-md border border-amber-500 px-3 py-1.5 text-sm font-medium text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                                        >
+                                            + Nou
+                                        </button>
+                                    </div>
+                                    <p v-if="selectedLloguer?.propietaris.length" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                        Propietaris de l'immoble: {{ selectedLloguer.propietaris.map(p => p.nom).join(', ') }}
+                                    </p>
+                                    <p v-if="contracteForm.errors.arrendador_id" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ contracteForm.errors.arrendador_id }}</p>
+                                </div>
+
+                                <!-- Mini-formulari nou arrendador -->
+                                <div v-if="showNouArrendadorForm" class="sm:col-span-2 rounded-md border border-amber-300 bg-amber-50 p-4 dark:border-amber-600 dark:bg-amber-900/20">
+                                    <h4 class="mb-3 text-sm font-medium text-amber-800 dark:text-amber-200">Nou arrendador</h4>
+                                    <div class="space-y-3">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Tipus</label>
+                                            <select
+                                                v-model="nouArrendadorForm.arrendadorable_type"
+                                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                            >
+                                                <option value="persona">Persona</option>
+                                                <option value="comunitat_bens">Comunitat de Béns</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                {{ nouArrendadorForm.arrendadorable_type === 'persona' ? 'Persona' : 'Comunitat de Béns' }}
+                                            </label>
+                                            <select
+                                                v-model="nouArrendadorForm.arrendadorable_id"
+                                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                            >
+                                                <option :value="null">Selecciona…</option>
+                                                <template v-if="nouArrendadorForm.arrendadorable_type === 'persona'">
+                                                    <option v-for="p in persones" :key="p.id" :value="p.id">{{ p.nom }}</option>
+                                                </template>
+                                                <template v-else>
+                                                    <option v-for="c in comunitatsBens" :key="c.id" :value="c.id">{{ c.nom }}</option>
+                                                </template>
+                                            </select>
+                                            <p v-if="nouArrendadorErrors.arrendadorable_id" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ nouArrendadorErrors.arrendadorable_id }}</p>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Adreça (opcional)</label>
+                                            <input
+                                                v-model="nouArrendadorForm.adreca"
+                                                type="text"
+                                                maxlength="255"
+                                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                            />
+                                        </div>
+                                        <p v-if="nouArrendadorErrors.general" class="text-sm text-red-600 dark:text-red-400">{{ nouArrendadorErrors.general }}</p>
+                                        <div class="flex justify-end gap-2">
+                                            <button
+                                                type="button"
+                                                @click="cancelNouArrendador"
+                                                class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                                            >
+                                                Cancel·lar
+                                            </button>
+                                            <button
+                                                type="button"
+                                                @click="submitNouArrendador"
+                                                :disabled="nouArrendadorSaving"
+                                                class="rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                                            >
+                                                Crear arrendador
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1369,16 +1558,6 @@ const formatCurrency = (value: string | null): string => {
                                     />
                                 </div>
 
-                                <div v-if="!lloguerForm.es_habitatge" class="flex items-center gap-2">
-                                    <input
-                                        id="despeses_separades"
-                                        v-model="lloguerForm.despeses_separades"
-                                        type="checkbox"
-                                        class="rounded border-gray-300 text-amber-500 focus:ring-amber-400 dark:border-gray-600 dark:bg-gray-700"
-                                    />
-                                    <label for="despeses_separades" class="text-sm font-medium text-gray-700 dark:text-gray-300">Despeses separades</label>
-                                </div>
-
                                 <div class="sm:col-span-2">
                                     <label for="immoble_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Immoble *</label>
                                     <select
@@ -1431,6 +1610,7 @@ const formatCurrency = (value: string | null): string => {
                                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                     />
                                 </div>
+
                             </div>
                         </div>
 

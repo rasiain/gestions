@@ -1,8 +1,10 @@
 <?php
 
+use App\Http\Controllers\ArrendadorController;
 use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\CategoryImportController;
 use App\Http\Controllers\CompteCorrentController;
+use App\Http\Controllers\ComunitatBensController;
 use App\Http\Controllers\ImmobleController;
 use App\Http\Controllers\LlogaterController;
 use App\Http\Controllers\ContracteController;
@@ -82,6 +84,16 @@ Route::middleware('auth')->group(function () {
     // Proveidors management
     Route::resource('proveidors', ProveidorController::class)->only([
         'index', 'store', 'update', 'destroy'
+    ]);
+
+    // Comunitats de Béns management
+    Route::resource('comunitats-bens', ComunitatBensController::class)->only([
+        'index', 'store', 'update', 'destroy'
+    ]);
+
+    // Arrendadors management
+    Route::resource('arrendadors', ArrendadorController::class)->only([
+        'store', 'update', 'destroy'
     ]);
 
     // Comptes corrents management

@@ -9,16 +9,18 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('g_lloguers', function (Blueprint $table) {
-            $table->decimal('iva_percentatge', 5, 2)->default(21.00)->after('retencio_irpf');
-            $table->decimal('irpf_percentatge', 5, 2)->default(19.00)->after('iva_percentatge');
-            $table->boolean('taxes_factura_separada')->default(false)->after('irpf_percentatge');
+            $table->foreignId('arrendador_id')
+                ->nullable()
+                ->constrained('g_arrendadors')
+                ->nullOnDelete();
         });
     }
 
     public function down(): void
     {
         Schema::table('g_lloguers', function (Blueprint $table) {
-            $table->dropColumn(['iva_percentatge', 'irpf_percentatge', 'taxes_factura_separada']);
+            $table->dropForeign(['arrendador_id']);
+            $table->dropColumn('arrendador_id');
         });
     }
 };
