@@ -28,10 +28,22 @@ interface TrimesteDades {
     despeses_iva: DespesaIvaDetall[];
 }
 
+interface ArrendadorResum {
+    nom: string;
+    nif: string | null;
+    tipus: 'Persona' | 'CB';
+    adreca?: string | null;
+    activitat?: string | null;
+    codi_activitat?: string | null;
+    epigraf_iae?: number | null;
+    comuners?: string[];
+}
+
 interface LloguerIva {
     id: number;
     nom: string;
     immoble_adreca: string | null;
+    arrendador: ArrendadorResum | null;
     trimestres: Record<number, TrimesteDades>;
     total_base: number;
     total_iva_repercutit: number;
@@ -111,16 +123,29 @@ function obreDetallSuportat(lloguer: LloguerIva, trimestre: number) {
 function tancaDetall() {
     showDetall.value = false;
 }
+
+// ── Modal arrendador ────────────────────────────────────────────
+const showArrendador = ref(false);
+const arrendadorSeleccionat = ref<ArrendadorResum | null>(null);
+
+function obreArrendador(arrendador: ArrendadorResum) {
+    arrendadorSeleccionat.value = arrendador;
+    showArrendador.value = true;
+}
+
+function tancaArrendador() {
+    showArrendador.value = false;
+}
 </script>
 
 <template>
-    <Head title="IVA Lloguers" />
+    <Head title="IVA i model 184 Lloguers" />
 
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
                 <h2 class="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200">
-                    IVA Lloguers
+                    IVA i model 184 Lloguers
                 </h2>
                 <select
                     :value="props.any"
@@ -150,6 +175,9 @@ function tancaDetall() {
                                 </th>
                                 <th rowspan="2" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">
                                     Immoble
+                                </th>
+                                <th rowspan="2" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">
+                                    Arrendador
                                 </th>
                                 <th
                                     v-for="t in trimestres"
@@ -204,6 +232,16 @@ function tancaDetall() {
                                 <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                                     {{ lloguer.immoble_adreca ?? '—' }}
                                 </td>
+                                <td class="whitespace-nowrap px-4 py-3 text-sm">
+                                    <button
+                                        v-if="lloguer.arrendador"
+                                        @click="obreArrendador(lloguer.arrendador)"
+                                        class="text-amber-600 hover:text-amber-800 hover:underline dark:text-amber-400 dark:hover:text-amber-300"
+                                    >
+                                        {{ lloguer.arrendador.nom }}
+                                    </button>
+                                    <span v-else class="italic text-gray-400">—</span>
+                                </td>
 
                                 <template v-for="t in trimestres" :key="t">
                                     <!-- Base -->
@@ -256,7 +294,7 @@ function tancaDetall() {
                         </tbody>
                         <tfoot class="bg-gray-50 dark:bg-gray-700">
                             <tr class="font-bold">
-                                <td colspan="2" class="whitespace-nowrap px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
+                                <td colspan="3" class="whitespace-nowrap px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
                                     Totals
                                 </td>
                                 <template v-for="t in trimestres" :key="t">
@@ -297,6 +335,62 @@ function tancaDetall() {
                 </div>
             </div>
         </div>
+
+        <!-- Modal arrendador -->
+        <Modal :show="showArrendador" max-width="sm" @close="tancaArrendador">
+            <div v-if="arrendadorSeleccionat" class="p-6">
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        {{ arrendadorSeleccionat.nom }}
+                    </h3>
+                    <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                        {{ arrendadorSeleccionat.tipus === 'CB' ? 'Comunitat de Béns' : 'Persona física' }}
+                    </span>
+                </div>
+
+                <dl class="space-y-2 text-sm">
+                    <div v-if="arrendadorSeleccionat.nif" class="flex gap-2">
+                        <dt class="w-32 shrink-0 font-medium text-gray-500 dark:text-gray-400">NIF</dt>
+                        <dd class="text-gray-900 dark:text-gray-100">{{ arrendadorSeleccionat.nif }}</dd>
+                    </div>
+                    <template v-if="arrendadorSeleccionat.tipus === 'CB'">
+                        <div v-if="arrendadorSeleccionat.adreca" class="flex gap-2">
+                            <dt class="w-32 shrink-0 font-medium text-gray-500 dark:text-gray-400">Adreça</dt>
+                            <dd class="text-gray-900 dark:text-gray-100">{{ arrendadorSeleccionat.adreca }}</dd>
+                        </div>
+                        <div v-if="arrendadorSeleccionat.activitat" class="flex gap-2">
+                            <dt class="w-32 shrink-0 font-medium text-gray-500 dark:text-gray-400">Activitat</dt>
+                            <dd class="text-gray-900 dark:text-gray-100">{{ arrendadorSeleccionat.activitat }}</dd>
+                        </div>
+                        <div v-if="arrendadorSeleccionat.codi_activitat" class="flex gap-2">
+                            <dt class="w-32 shrink-0 font-medium text-gray-500 dark:text-gray-400">Codi activitat</dt>
+                            <dd class="text-gray-900 dark:text-gray-100">{{ arrendadorSeleccionat.codi_activitat }}</dd>
+                        </div>
+                        <div v-if="arrendadorSeleccionat.epigraf_iae" class="flex gap-2">
+                            <dt class="w-32 shrink-0 font-medium text-gray-500 dark:text-gray-400">Epígraf IAE</dt>
+                            <dd class="text-gray-900 dark:text-gray-100">{{ arrendadorSeleccionat.epigraf_iae }}</dd>
+                        </div>
+                        <div v-if="arrendadorSeleccionat.comuners?.length" class="flex gap-2">
+                            <dt class="w-32 shrink-0 font-medium text-gray-500 dark:text-gray-400">Comuners</dt>
+                            <dd class="text-gray-900 dark:text-gray-100">
+                                <ul class="space-y-0.5">
+                                    <li v-for="(c, i) in arrendadorSeleccionat.comuners" :key="i">{{ c }}</li>
+                                </ul>
+                            </dd>
+                        </div>
+                    </template>
+                </dl>
+
+                <div class="mt-5 flex justify-end">
+                    <button
+                        @click="tancaArrendador"
+                        class="rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500"
+                    >
+                        Tancar
+                    </button>
+                </div>
+            </div>
+        </Modal>
 
         <!-- Modal detall -->
         <Modal :show="showDetall" max-width="lg" @close="tancaDetall">

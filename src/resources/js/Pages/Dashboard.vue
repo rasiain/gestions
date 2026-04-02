@@ -199,7 +199,7 @@ import { Head, Link } from '@inertiajs/vue3';
                                 :href="route('impostos.iva')"
                                 class="block text-sm text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors"
                             >
-                                → IVA Lloguers
+                                → IVA i model 184 Lloguers
                             </Link>
                         </div>
                     </div>

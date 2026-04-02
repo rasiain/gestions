@@ -15,7 +15,15 @@ class ImpostosIvaController extends Controller
         $any = $request->integer('any', (int) date('Y'));
 
         $lloguers = Lloguer::where('es_habitatge', false)
-            ->with(['immoble'])
+            ->with([
+                'immoble',
+                'contractes' => function ($q) {
+                    $q->where(function ($q2) {
+                        $q2->whereNull('data_fi')->orWhere('data_fi', '>', now()->toDateString());
+                    })->orderBy('data_inici', 'desc');
+                },
+                'contractes.arrendador.arrendadorable',
+            ])
             ->orderBy('nom')
             ->get();
 
@@ -96,10 +104,36 @@ class ImpostosIvaController extends Controller
             $totals['total_iva_suportat']  += $totalIvaSuportat;
             $totals['total_resultat']      += $totalResultat;
 
+            $contracteActiu = $lloguer->contractes->first();
+            $arrendador = $contracteActiu?->arrendador;
+            $arrendadorable = $arrendador?->arrendadorable;
+
             return [
                 'id'            => $lloguer->id,
                 'nom'           => $lloguer->nom,
                 'immoble_adreca' => $lloguer->immoble?->adreca,
+                'arrendador'    => $arrendadorable ? (function () use ($arrendadorable) {
+                    $isPersona = $arrendadorable instanceof \App\Models\Persona;
+                    $base = [
+                        'nom'   => $isPersona
+                            ? trim($arrendadorable->nom . ' ' . $arrendadorable->cognoms)
+                            : $arrendadorable->nom,
+                        'nif'   => $arrendadorable->nif,
+                        'tipus' => $isPersona ? 'Persona' : 'CB',
+                    ];
+                    if (! $isPersona) {
+                        $base['adreca']         = $arrendadorable->adreca;
+                        $base['activitat']      = $arrendadorable->activitat;
+                        $base['codi_activitat'] = $arrendadorable->codi_activitat;
+                        $base['epigraf_iae']    = $arrendadorable->epigraf_iae;
+                        $base['comuners']       = $arrendadorable->comuners()
+                            ->get()
+                            ->map(fn ($c) => trim($c->nom . ' ' . $c->cognoms))
+                            ->values()
+                            ->toArray();
+                    }
+                    return $base;
+                })() : null,
                 'trimestres'    => $trimestres,
                 'total_base'    => $totalBase,
                 'total_iva_repercutit' => $totalIvaRepercutit,
