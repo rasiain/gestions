@@ -20,8 +20,11 @@ class MovimentClassificacioController extends Controller
             'categoria'              => ['nullable', 'string', 'max:20'],
             'proveidor_id'           => ['nullable', 'integer', 'exists:g_proveidors,id'],
             'tipus_despesa_fiscal_id' => ['nullable', 'integer', 'exists:g_tipus_despesa_fiscal,id'],
+            'numero_factura'         => ['nullable', 'string', 'max:50'],
+            'concepte'               => ['nullable', 'string', 'max:255'],
             'notes'                  => ['nullable', 'string', 'max:500'],
             'base_imposable'         => ['nullable', 'numeric'],
+            'iva_percentatge'        => ['nullable', 'numeric', 'min:0', 'max:100'],
             'iva_import'             => ['nullable', 'numeric'],
             'base_lloguer'           => ['nullable', 'numeric'],
             'linies'                 => ['nullable', 'array'],
@@ -91,11 +94,14 @@ class MovimentClassificacioController extends Controller
                 MovimentLloguerDespesa::create([
                     'moviment_id'             => $moviment->id,
                     'lloguer_id'              => $data['lloguer_id'],
+                    'numero_factura'          => $data['numero_factura'] ?? null,
+                    'concepte'                => $data['concepte'] ?? null,
                     'categoria'               => $data['categoria'] ?? null,
                     'proveidor_id'            => $data['proveidor_id'] ?? null,
                     'tipus_despesa_fiscal_id' => $data['tipus_despesa_fiscal_id'] ?? null,
                     'notes'                   => $data['notes'] ?? null,
                     'base_imposable'          => $data['base_imposable'] ?? null,
+                    'iva_percentatge'         => $data['iva_percentatge'] ?? null,
                     'iva_import'              => $data['iva_import'] ?? null,
                 ]);
             } else {
@@ -130,11 +136,14 @@ class MovimentClassificacioController extends Controller
             'despesa' => $moviment->despesa ? [
                 'id'                      => $moviment->despesa->id,
                 'lloguer_id'              => $moviment->despesa->lloguer_id,
+                'numero_factura'          => $moviment->despesa->numero_factura,
+                'concepte'                => $moviment->despesa->concepte,
                 'categoria'               => $moviment->despesa->categoria,
                 'proveidor_id'            => $moviment->despesa->proveidor_id,
                 'tipus_despesa_fiscal_id' => $moviment->despesa->tipus_despesa_fiscal_id,
                 'notes'                   => $moviment->despesa->notes,
                 'base_imposable'          => $moviment->despesa->base_imposable,
+                'iva_percentatge'         => $moviment->despesa->iva_percentatge,
                 'iva_import'              => $moviment->despesa->iva_import,
             ] : null,
             'ingres' => $moviment->ingres ? [

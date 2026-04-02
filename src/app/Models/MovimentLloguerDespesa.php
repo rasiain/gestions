@@ -12,17 +12,21 @@ class MovimentLloguerDespesa extends Model
     protected $fillable = [
         'moviment_id',
         'lloguer_id',
+        'numero_factura',
+        'concepte',
         'categoria',
         'proveidor_id',
         'notes',
         'base_imposable',
+        'iva_percentatge',
         'iva_import',
         'tipus_despesa_fiscal_id',
     ];
 
     protected $casts = [
-        'base_imposable' => 'decimal:2',
-        'iva_import'     => 'decimal:2',
+        'base_imposable'  => 'decimal:2',
+        'iva_percentatge' => 'decimal:2',
+        'iva_import'      => 'decimal:2',
     ];
 
     public function moviment(): BelongsTo

@@ -277,11 +277,14 @@ interface Categoria {
 interface MovimentDespesa {
     id: number;
     lloguer_id: number;
+    numero_factura: string | null;
+    concepte: string | null;
     categoria: string;
     proveidor_id: number | null;
     tipus_despesa_fiscal_id: number | null;
     notes: string | null;
     base_imposable: number | null;
+    iva_percentatge: number | null;
     iva_import: number | null;
 }
 
@@ -482,11 +485,14 @@ const classificacioSaving = ref(false);
 const classificacioErrors = ref<Record<string, string>>({});
 
 const classificacioDespesa = ref({
+    numero_factura: '' as string,
+    concepte: '' as string,
     categoria: '',
     proveidor_id: null as number | null,
     tipus_despesa_fiscal_id: null as number | null,
     notes: '',
     base_imposable: null as number | null,
+    iva_percentatge: null as number | null,
     iva_import: null as number | null,
 });
 
@@ -571,11 +577,14 @@ const openClassificacioModal = (moviment: Moviment) => {
     if (cls?.tipus === 'despesa') {
         classificacioTipus.value = 'despesa';
         classificacioDespesa.value = {
+            numero_factura: cls.data.numero_factura ?? '',
+            concepte: cls.data.concepte ?? '',
             categoria: cls.data.categoria,
             proveidor_id: cls.data.proveidor_id,
             tipus_despesa_fiscal_id: cls.data.tipus_despesa_fiscal_id ?? null,
             notes: cls.data.notes ?? '',
             base_imposable: cls.data.base_imposable ?? null,
+            iva_percentatge: cls.data.iva_percentatge ?? null,
             iva_import: cls.data.iva_import ?? null,
         };
     } else if (cls?.tipus === 'ingres') {
@@ -592,7 +601,7 @@ const openClassificacioModal = (moviment: Moviment) => {
         };
     } else {
         classificacioTipus.value = parseFloat(moviment.import) >= 0 ? 'ingres' : 'despesa';
-        classificacioDespesa.value = { categoria: '', proveidor_id: null, tipus_despesa_fiscal_id: null, notes: '', base_imposable: null, iva_import: null };
+        classificacioDespesa.value = { numero_factura: '', concepte: '', categoria: '', proveidor_id: null, tipus_despesa_fiscal_id: null, notes: '', base_imposable: null, iva_percentatge: null, iva_import: null };
         const liniesInicials: { tipus: string; descripcio: string; import: number | null; proveidor_id: number | null }[] = [];
         if (computedGestoriaImport.value) {
             liniesInicials.push({
@@ -632,11 +641,14 @@ const submitClassificacio = async () => {
     };
 
     if (classificacioTipus.value === 'despesa') {
+        body.numero_factura = classificacioDespesa.value.numero_factura || null;
+        body.concepte = classificacioDespesa.value.concepte || null;
         body.categoria = classificacioDespesa.value.categoria;
         body.proveidor_id = classificacioDespesa.value.proveidor_id || null;
         body.tipus_despesa_fiscal_id = classificacioDespesa.value.tipus_despesa_fiscal_id || null;
         body.notes = classificacioDespesa.value.notes || null;
         body.base_imposable = classificacioDespesa.value.base_imposable ?? null;
+        body.iva_percentatge = classificacioDespesa.value.iva_percentatge ?? null;
         body.iva_import = classificacioDespesa.value.iva_import ?? null;
     } else {
         body.base_lloguer = classificacioIngres.value.base_lloguer;
@@ -1832,6 +1844,40 @@ const formatCurrency = (value: string | null): string => {
                                         <option v-for="t in tipusDespesaFiscalOpcions" :key="t.id" :value="t.id">{{ t.codi }} - {{ t.descripcio }}</option>
                                     </select>
                                     <p v-if="classificacioErrors['tipus_despesa_fiscal_id']" class="mt-1 text-sm text-red-600">{{ classificacioErrors['tipus_despesa_fiscal_id'] }}</p>
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Número factura</label>
+                                    <input
+                                        v-model="classificacioDespesa.numero_factura"
+                                        type="text"
+                                        maxlength="50"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Concepte</label>
+                                    <input
+                                        v-model="classificacioDespesa.concepte"
+                                        type="text"
+                                        maxlength="255"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                </div>
+
+                                <!-- % IVA: només per lloguers no-habitatge -->
+                                <div v-if="selectedLloguer && selectedLloguer.es_habitatge === false">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">% IVA</label>
+                                    <input
+                                        v-model="classificacioDespesa.iva_percentatge"
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        max="100"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                    <p v-if="classificacioErrors['iva_percentatge']" class="mt-1 text-sm text-red-600">{{ classificacioErrors['iva_percentatge'] }}</p>
                                 </div>
 
                                 <div>

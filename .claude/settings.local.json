@@ -16,7 +16,8 @@
       "Bash(echo \"=== $f ===\")",
       "Read(//Users/ricardasiain/Documents/src/gestions/**)",
       "Bash(done)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(grep -r 'fillable\\\\|protected $table' /Users/ricardasiain/Documents/src/gestions/src/app/Models/Factura.php /Users/ricardasiain/Documents/src/gestions/src/app/Models/FacturaLinia.php /Users/ricardasiain/Documents/src/gestions/src/app/Models/Llogater.php)"
     ],
     "deny": [],
     "ask": []

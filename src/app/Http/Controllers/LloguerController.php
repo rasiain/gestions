@@ -212,10 +212,15 @@ class LloguerController extends Controller
                 'despesa'         => $m->despesa ? [
                     'id'                      => $m->despesa->id,
                     'lloguer_id'              => $m->despesa->lloguer_id,
+                    'numero_factura'          => $m->despesa->numero_factura,
+                    'concepte'                => $m->despesa->concepte,
                     'categoria'               => $m->despesa->categoria,
                     'proveidor_id'            => $m->despesa->proveidor_id,
                     'tipus_despesa_fiscal_id' => $m->despesa->tipus_despesa_fiscal_id,
                     'notes'                   => $m->despesa->notes,
+                    'base_imposable'          => $m->despesa->base_imposable,
+                    'iva_percentatge'         => $m->despesa->iva_percentatge,
+                    'iva_import'              => $m->despesa->iva_import,
                 ] : null,
                 'ingres'          => $m->ingres ? [
                     'id'              => $m->ingres->id,
