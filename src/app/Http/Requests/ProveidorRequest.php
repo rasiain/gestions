@@ -37,6 +37,26 @@ class ProveidorRequest extends FormRequest
                 'string',
                 'max:255',
             ],
+            'codi_postal' => [
+                'nullable',
+                'string',
+                'max:10',
+            ],
+            'poblacio' => [
+                'nullable',
+                'string',
+                'max:100',
+            ],
+            'provincia' => [
+                'nullable',
+                'string',
+                'max:100',
+            ],
+            'pais' => [
+                'nullable',
+                'string',
+                'max:100',
+            ],
             'correu_electronic' => [
                 'nullable',
                 'email',
@@ -62,6 +82,10 @@ class ProveidorRequest extends FormRequest
             'nom_rao_social.max' => 'El nom o raó social no pot superar els :max caràcters.',
             'nif_cif.max' => 'El NIF/CIF no pot superar els :max caràcters.',
             'adreca.max' => "L'adreça no pot superar els :max caràcters.",
+            'codi_postal.max' => 'El codi postal no pot superar els :max caràcters.',
+            'poblacio.max' => 'La població no pot superar els :max caràcters.',
+            'provincia.max' => 'La província no pot superar els :max caràcters.',
+            'pais.max' => 'El país no pot superar els :max caràcters.',
             'correu_electronic.email' => 'El correu electrònic ha de ser una adreça vàlida.',
             'correu_electronic.max' => 'El correu electrònic no pot superar els :max caràcters.',
             'telefons.max' => 'Els telèfons no poden superar els :max caràcters.',

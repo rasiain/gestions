@@ -8,6 +8,10 @@ interface Proveidor {
     nom_rao_social: string;
     nif_cif: string | null;
     adreca: string | null;
+    codi_postal: string | null;
+    poblacio: string | null;
+    provincia: string | null;
+    pais: string | null;
     correu_electronic: string | null;
     telefons: string | null;
     created_at: string;
@@ -28,6 +32,10 @@ const form = useForm({
     nom_rao_social: '',
     nif_cif: '',
     adreca: '',
+    codi_postal: '',
+    poblacio: '',
+    provincia: '',
+    pais: 'Espanya',
     correu_electronic: '',
     telefons: '',
 });
@@ -45,6 +53,10 @@ const openEditModal = (proveidor: Proveidor) => {
     form.nom_rao_social = proveidor.nom_rao_social;
     form.nif_cif = proveidor.nif_cif || '';
     form.adreca = proveidor.adreca || '';
+    form.codi_postal = proveidor.codi_postal || '';
+    form.poblacio = proveidor.poblacio || '';
+    form.provincia = proveidor.provincia || '';
+    form.pais = proveidor.pais || 'Espanya';
     form.correu_electronic = proveidor.correu_electronic || '';
     form.telefons = proveidor.telefons || '';
     showModal.value = true;
@@ -115,6 +127,18 @@ const deleteProveidor = (proveidor: Proveidor) => {
                                             Adreça
                                         </th>
                                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">
+                                            CP
+                                        </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">
+                                            Població
+                                        </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">
+                                            Província
+                                        </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">
+                                            País
+                                        </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">
                                             Correu Electrònic
                                         </th>
                                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">
@@ -135,6 +159,18 @@ const deleteProveidor = (proveidor: Proveidor) => {
                                         </td>
                                         <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                                             {{ proveidor.adreca || '-' }}
+                                        </td>
+                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                            {{ proveidor.codi_postal || '-' }}
+                                        </td>
+                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                            {{ proveidor.poblacio || '-' }}
+                                        </td>
+                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                            {{ proveidor.provincia || '-' }}
+                                        </td>
+                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                            {{ proveidor.pais || '-' }}
                                         </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                                             {{ proveidor.correu_electronic || '-' }}
@@ -158,7 +194,7 @@ const deleteProveidor = (proveidor: Proveidor) => {
                                         </td>
                                     </tr>
                                     <tr v-if="proveidors.length === 0">
-                                        <td colspan="6" class="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                                        <td colspan="10" class="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
                                             No hi ha proveïdors registrats
                                         </td>
                                     </tr>
@@ -229,6 +265,72 @@ const deleteProveidor = (proveidor: Proveidor) => {
                                             />
                                             <div v-if="form.errors.adreca" class="mt-1 text-sm text-red-600 dark:text-red-400">
                                                 {{ form.errors.adreca }}
+                                            </div>
+                                        </div>
+
+                                        <div class="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label for="codi_postal" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                    Codi Postal
+                                                </label>
+                                                <input
+                                                    id="codi_postal"
+                                                    v-model="form.codi_postal"
+                                                    type="text"
+                                                    maxlength="10"
+                                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                                />
+                                                <div v-if="form.errors.codi_postal" class="mt-1 text-sm text-red-600 dark:text-red-400">
+                                                    {{ form.errors.codi_postal }}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label for="poblacio" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                    Població
+                                                </label>
+                                                <input
+                                                    id="poblacio"
+                                                    v-model="form.poblacio"
+                                                    type="text"
+                                                    maxlength="100"
+                                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                                />
+                                                <div v-if="form.errors.poblacio" class="mt-1 text-sm text-red-600 dark:text-red-400">
+                                                    {{ form.errors.poblacio }}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label for="provincia" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                    Província
+                                                </label>
+                                                <input
+                                                    id="provincia"
+                                                    v-model="form.provincia"
+                                                    type="text"
+                                                    maxlength="100"
+                                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                                />
+                                                <div v-if="form.errors.provincia" class="mt-1 text-sm text-red-600 dark:text-red-400">
+                                                    {{ form.errors.provincia }}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label for="pais" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                    País
+                                                </label>
+                                                <input
+                                                    id="pais"
+                                                    v-model="form.pais"
+                                                    type="text"
+                                                    maxlength="100"
+                                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                                />
+                                                <div v-if="form.errors.pais" class="mt-1 text-sm text-red-600 dark:text-red-400">
+                                                    {{ form.errors.pais }}
+                                                </div>
                                             </div>
                                         </div>
 

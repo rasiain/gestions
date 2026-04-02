@@ -22,6 +22,10 @@ class Proveidor extends Model
         'nom_rao_social',
         'nif_cif',
         'adreca',
+        'codi_postal',
+        'poblacio',
+        'provincia',
+        'pais',
         'correu_electronic',
         'telefons',
     ];
