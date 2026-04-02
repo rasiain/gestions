@@ -1,18 +1,28 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
+
+interface PersonaBasic {
+    id: number;
+    nom: string;
+}
 
 interface ComunitatBens {
     id: number;
     nom: string;
     nif: string | null;
-    created_at: string;
-    updated_at: string;
+    adreca: string | null;
+    activitat: string | null;
+    codi_activitat: string | null;
+    epigraf_iae: number | null;
+    comuner_ids: number[];
+    comuners: PersonaBasic[];
 }
 
 interface Props {
     comunitatsBens: ComunitatBens[];
+    persones: PersonaBasic[];
 }
 
 const props = defineProps<Props>();
@@ -24,6 +34,11 @@ const editingComunitat = ref<ComunitatBens | null>(null);
 const form = useForm({
     nom: '',
     nif: '',
+    adreca: '',
+    activitat: '',
+    codi_activitat: '',
+    epigraf_iae: null as number | null,
+    comuner_ids: [] as number[],
 });
 
 const openCreateModal = () => {
@@ -38,6 +53,11 @@ const openEditModal = (comunitat: ComunitatBens) => {
     editingComunitat.value = comunitat;
     form.nom = comunitat.nom;
     form.nif = comunitat.nif || '';
+    form.adreca = comunitat.adreca || '';
+    form.activitat = comunitat.activitat || '';
+    form.codi_activitat = comunitat.codi_activitat || '';
+    form.epigraf_iae = comunitat.epigraf_iae;
+    form.comuner_ids = [...comunitat.comuner_ids];
     showModal.value = true;
 };
 
@@ -68,6 +88,27 @@ const deleteComunitat = (comunitat: ComunitatBens) => {
         });
     }
 };
+
+const addComuner = (event: Event) => {
+    const id = parseInt((event.target as HTMLSelectElement).value);
+    if (id && !form.comuner_ids.includes(id)) {
+        form.comuner_ids.push(id);
+    }
+    (event.target as HTMLSelectElement).value = '';
+};
+
+const removeComuner = (id: number) => {
+    const idx = form.comuner_ids.indexOf(id);
+    if (idx !== -1) form.comuner_ids.splice(idx, 1);
+};
+
+const selectedComuners = computed(() =>
+    props.persones.filter(p => form.comuner_ids.includes(p.id))
+);
+
+const availableComuners = computed(() =>
+    props.persones.filter(p => !form.comuner_ids.includes(p.id))
+);
 </script>
 
 <template>
@@ -102,6 +143,12 @@ const deleteComunitat = (comunitat: ComunitatBens) => {
                                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">
                                             NIF
                                         </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">
+                                            Activitat
+                                        </th>
+                                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">
+                                            Comuners
+                                        </th>
                                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">
                                             Accions
                                         </th>
@@ -114,6 +161,19 @@ const deleteComunitat = (comunitat: ComunitatBens) => {
                                         </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                                             {{ comunitat.nif || '-' }}
+                                        </td>
+                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                            <span v-if="comunitat.activitat">
+                                                {{ comunitat.activitat }}
+                                                <span v-if="comunitat.epigraf_iae" class="text-xs text-gray-400">({{ comunitat.epigraf_iae }})</span>
+                                            </span>
+                                            <span v-else>-</span>
+                                        </td>
+                                        <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                            <span v-if="comunitat.comuners.length">
+                                                {{ comunitat.comuners.map(c => c.nom).join(', ') }}
+                                            </span>
+                                            <span v-else>-</span>
                                         </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                                             <button
@@ -131,7 +191,7 @@ const deleteComunitat = (comunitat: ComunitatBens) => {
                                         </td>
                                     </tr>
                                     <tr v-if="comunitatsBens.length === 0">
-                                        <td colspan="3" class="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                                        <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
                                             No hi ha comunitats de béns registrades
                                         </td>
                                     </tr>
@@ -153,42 +213,100 @@ const deleteComunitat = (comunitat: ComunitatBens) => {
                 <div class="inline-block transform overflow-hidden rounded-lg bg-white text-left align-bottom shadow-xl transition-all dark:bg-gray-800 sm:my-8 sm:w-full sm:max-w-lg sm:align-middle">
                     <form @submit.prevent="submit">
                         <div class="bg-white px-4 pb-4 pt-5 dark:bg-gray-800 sm:p-6 sm:pb-4">
-                            <div class="sm:flex sm:items-start">
-                                <div class="mt-3 w-full text-center sm:ml-4 sm:mt-0 sm:text-left">
-                                    <h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-gray-100" id="modal-title">
-                                        {{ isEditing ? 'Editar Comunitat de Béns' : 'Afegir Comunitat de Béns' }}
-                                    </h3>
-                                    <div class="mt-4 space-y-4">
-                                        <div>
-                                            <label for="nom" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                Nom <span class="text-red-500">*</span>
-                                            </label>
-                                            <input
-                                                id="nom"
-                                                v-model="form.nom"
-                                                type="text"
-                                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
-                                                required
-                                            />
-                                            <div v-if="form.errors.nom" class="mt-1 text-sm text-red-600 dark:text-red-400">
-                                                {{ form.errors.nom }}
+                            <div class="w-full">
+                                <h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-gray-100 mb-4" id="modal-title">
+                                    {{ isEditing ? 'Editar Comunitat de Béns' : 'Afegir Comunitat de Béns' }}
+                                </h3>
+                                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                    <div class="sm:col-span-2">
+                                        <label for="nom" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            Nom <span class="text-red-500">*</span>
+                                        </label>
+                                        <input id="nom" v-model="form.nom" type="text" required
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        />
+                                        <div v-if="form.errors.nom" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.nom }}</div>
+                                    </div>
+
+                                    <div>
+                                        <label for="nif" class="block text-sm font-medium text-gray-700 dark:text-gray-300">NIF</label>
+                                        <input id="nif" v-model="form.nif" type="text" maxlength="20"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        />
+                                        <div v-if="form.errors.nif" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.nif }}</div>
+                                    </div>
+
+                                    <div class="sm:col-span-2">
+                                        <label for="adreca" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Adreça</label>
+                                        <input id="adreca" v-model="form.adreca" type="text" maxlength="255"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        />
+                                        <div v-if="form.errors.adreca" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.adreca }}</div>
+                                    </div>
+
+                                    <!-- Activitat econòmica -->
+                                    <div class="sm:col-span-2 rounded-md border border-gray-200 p-4 dark:border-gray-600">
+                                        <h4 class="mb-3 text-sm font-medium text-gray-700 dark:text-gray-300">Activitat econòmica</h4>
+                                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                            <div class="sm:col-span-2">
+                                                <label for="activitat" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Descripció</label>
+                                                <input id="activitat" v-model="form.activitat" type="text" maxlength="50"
+                                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                                />
+                                                <div v-if="form.errors.activitat" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.activitat }}</div>
                                             </div>
+                                            <div>
+                                                <label for="codi_activitat" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Codi</label>
+                                                <input id="codi_activitat" v-model="form.codi_activitat" type="text" maxlength="3"
+                                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                                />
+                                                <div v-if="form.errors.codi_activitat" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.codi_activitat }}</div>
+                                            </div>
+                                            <div>
+                                                <label for="epigraf_iae" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Epigraf IAE</label>
+                                                <input id="epigraf_iae" v-model="form.epigraf_iae" type="number" min="0" max="9999"
+                                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                                />
+                                                <div v-if="form.errors.epigraf_iae" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.epigraf_iae }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Comuners -->
+                                    <div class="sm:col-span-2">
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Comuners</label>
+
+                                        <div v-if="selectedComuners.length > 0" class="mb-2 flex flex-wrap gap-2">
+                                            <span
+                                                v-for="comuner in selectedComuners"
+                                                :key="comuner.id"
+                                                class="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-3 py-1 text-sm text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200"
+                                            >
+                                                {{ comuner.nom }}
+                                                <button
+                                                    type="button"
+                                                    @click="removeComuner(comuner.id)"
+                                                    class="ml-1 rounded-full text-indigo-600 hover:text-indigo-900 dark:text-indigo-300 dark:hover:text-indigo-100 focus:outline-none"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </span>
                                         </div>
 
-                                        <div>
-                                            <label for="nif" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                NIF
-                                            </label>
-                                            <input
-                                                id="nif"
-                                                v-model="form.nif"
-                                                type="text"
-                                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
-                                            />
-                                            <div v-if="form.errors.nif" class="mt-1 text-sm text-red-600 dark:text-red-400">
-                                                {{ form.errors.nif }}
-                                            </div>
-                                        </div>
+                                        <select
+                                            v-if="availableComuners.length > 0"
+                                            @change="addComuner"
+                                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        >
+                                            <option value="">Afegir comuner...</option>
+                                            <option v-for="persona in availableComuners" :key="persona.id" :value="persona.id">
+                                                {{ persona.nom }}
+                                            </option>
+                                        </select>
+                                        <p v-else-if="persones.length === 0" class="text-sm italic text-gray-400">
+                                            No hi ha persones. <a :href="route('persones.index')" class="text-indigo-600 hover:underline">Afegeix-ne</a>.
+                                        </p>
+                                        <p v-else-if="selectedComuners.length > 0" class="text-sm italic text-gray-400">Totes les persones ja estan afegides.</p>
                                     </div>
                                 </div>
                             </div>
