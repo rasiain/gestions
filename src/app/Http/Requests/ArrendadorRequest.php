@@ -17,7 +17,6 @@ class ArrendadorRequest extends FormRequest
         return [
             'arrendadorable_type' => ['required', 'string', Rule::in(['persona', 'comunitat_bens'])],
             'arrendadorable_id'   => ['required', 'integer'],
-            'adreca'              => ['nullable', 'string', 'max:255'],
         ];
     }
 
@@ -28,7 +27,6 @@ class ArrendadorRequest extends FormRequest
             'arrendadorable_type.in'       => 'El tipus d\'arrendador ha de ser persona o comunitat_bens.',
             'arrendadorable_id.required'   => 'L\'identificador de l\'arrendador és obligatori.',
             'arrendadorable_id.integer'    => 'L\'identificador de l\'arrendador ha de ser un número enter.',
-            'adreca.max'                   => 'L\'adreça no pot superar els :max caràcters.',
         ];
     }
 

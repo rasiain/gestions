@@ -19,7 +19,6 @@ class ArrendadorController extends Controller
         $arrendador = Arrendador::create([
             'arrendadorable_type' => $typeMap[$validated['arrendadorable_type']],
             'arrendadorable_id'   => $validated['arrendadorable_id'],
-            'adreca'              => $validated['adreca'] ?? null,
         ]);
 
         if ($request->wantsJson()) {
@@ -42,7 +41,6 @@ class ArrendadorController extends Controller
         $arrendador->update([
             'arrendadorable_type' => $typeMap[$validated['arrendadorable_type']],
             'arrendadorable_id'   => $validated['arrendadorable_id'],
-            'adreca'              => $validated['adreca'] ?? null,
         ]);
 
         if ($request->wantsJson()) {

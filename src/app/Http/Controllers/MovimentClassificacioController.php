@@ -19,6 +19,7 @@ class MovimentClassificacioController extends Controller
             'lloguer_id'             => ['required', 'integer', 'exists:g_lloguers,id'],
             'categoria'              => ['nullable', 'string', 'max:20'],
             'proveidor_id'           => ['nullable', 'integer', 'exists:g_proveidors,id'],
+            'tipus_despesa_fiscal_id' => ['nullable', 'integer', 'exists:g_tipus_despesa_fiscal,id'],
             'notes'                  => ['nullable', 'string', 'max:500'],
             'base_imposable'         => ['nullable', 'numeric'],
             'iva_import'             => ['nullable', 'numeric'],
@@ -88,13 +89,14 @@ class MovimentClassificacioController extends Controller
         try {
             if ($data['tipus'] === 'despesa') {
                 MovimentLloguerDespesa::create([
-                    'moviment_id'    => $moviment->id,
-                    'lloguer_id'     => $data['lloguer_id'],
-                    'categoria'      => $data['categoria'] ?? null,
-                    'proveidor_id'   => $data['proveidor_id'] ?? null,
-                    'notes'          => $data['notes'] ?? null,
-                    'base_imposable' => $data['base_imposable'] ?? null,
-                    'iva_import'     => $data['iva_import'] ?? null,
+                    'moviment_id'             => $moviment->id,
+                    'lloguer_id'              => $data['lloguer_id'],
+                    'categoria'               => $data['categoria'] ?? null,
+                    'proveidor_id'            => $data['proveidor_id'] ?? null,
+                    'tipus_despesa_fiscal_id' => $data['tipus_despesa_fiscal_id'] ?? null,
+                    'notes'                   => $data['notes'] ?? null,
+                    'base_imposable'          => $data['base_imposable'] ?? null,
+                    'iva_import'              => $data['iva_import'] ?? null,
                 ]);
             } else {
                 $ingres = MovimentLloguerIngres::create([
@@ -126,13 +128,14 @@ class MovimentClassificacioController extends Controller
     {
         return response()->json([
             'despesa' => $moviment->despesa ? [
-                'id'             => $moviment->despesa->id,
-                'lloguer_id'     => $moviment->despesa->lloguer_id,
-                'categoria'      => $moviment->despesa->categoria,
-                'proveidor_id'   => $moviment->despesa->proveidor_id,
-                'notes'          => $moviment->despesa->notes,
-                'base_imposable' => $moviment->despesa->base_imposable,
-                'iva_import'     => $moviment->despesa->iva_import,
+                'id'                      => $moviment->despesa->id,
+                'lloguer_id'              => $moviment->despesa->lloguer_id,
+                'categoria'               => $moviment->despesa->categoria,
+                'proveidor_id'            => $moviment->despesa->proveidor_id,
+                'tipus_despesa_fiscal_id' => $moviment->despesa->tipus_despesa_fiscal_id,
+                'notes'                   => $moviment->despesa->notes,
+                'base_imposable'          => $moviment->despesa->base_imposable,
+                'iva_import'              => $moviment->despesa->iva_import,
             ] : null,
             'ingres' => $moviment->ingres ? [
                 'id'              => $moviment->ingres->id,

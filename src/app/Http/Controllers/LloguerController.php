@@ -89,7 +89,6 @@ class LloguerController extends Controller
                         'arrendador_id' => $contracteActiu->arrendador_id,
                         'arrendador' => $contracteActiu->arrendador ? [
                             'id'    => $contracteActiu->arrendador->id,
-                            'adreca' => $contracteActiu->arrendador->adreca,
                             'arrendadorable_type' => $contracteActiu->arrendador->arrendadorable_type === \App\Models\Persona::class ? 'persona' : 'comunitat_bens',
                             'arrendadorable' => $contracteActiu->arrendador->arrendadorable ? [
                                 'id'  => $contracteActiu->arrendador->arrendadorable->id,
@@ -111,7 +110,6 @@ class LloguerController extends Controller
             ->get()
             ->map(fn($a) => [
                 'id'    => $a->id,
-                'adreca' => $a->adreca,
                 'arrendadorable_type' => $a->arrendadorable_type === \App\Models\Persona::class ? 'persona' : 'comunitat_bens',
                 'arrendadorable' => $a->arrendadorable ? [
                     'id'  => $a->arrendadorable->id,
@@ -212,11 +210,12 @@ class LloguerController extends Controller
                 'categoria_id'    => $m->categoria_id,
                 'categoria_nom'   => $m->categoria?->nom,
                 'despesa'         => $m->despesa ? [
-                    'id'           => $m->despesa->id,
-                    'lloguer_id'   => $m->despesa->lloguer_id,
-                    'categoria'    => $m->despesa->categoria,
-                    'proveidor_id' => $m->despesa->proveidor_id,
-                    'notes'        => $m->despesa->notes,
+                    'id'                      => $m->despesa->id,
+                    'lloguer_id'              => $m->despesa->lloguer_id,
+                    'categoria'               => $m->despesa->categoria,
+                    'proveidor_id'            => $m->despesa->proveidor_id,
+                    'tipus_despesa_fiscal_id' => $m->despesa->tipus_despesa_fiscal_id,
+                    'notes'                   => $m->despesa->notes,
                 ] : null,
                 'ingres'          => $m->ingres ? [
                     'id'              => $m->ingres->id,
@@ -242,13 +241,16 @@ class LloguerController extends Controller
             ->get(['id', 'nom', 'compte_corrent_id', 'categoria_pare_id', 'ordre'])
             ->toArray();
 
+        $tipusDespesaFiscal = \App\Models\TipusDespesaFiscal::orderBy('codi')->get(['id', 'codi', 'descripcio'])->toArray();
+
         $response = [
-            'data'       => $moviments,
-            'total'      => $total,
-            'page'       => $page,
-            'per_page'   => $perPage,
-            'has_more'   => ($page * $perPage) < $total,
-            'categories' => $categories,
+            'data'                  => $moviments,
+            'total'                 => $total,
+            'page'                  => $page,
+            'per_page'              => $perPage,
+            'has_more'              => ($page * $perPage) < $total,
+            'categories'            => $categories,
+            'tipusDespesaFiscal'    => $tipusDespesaFiscal,
         ];
 
         if ($page === 1) {

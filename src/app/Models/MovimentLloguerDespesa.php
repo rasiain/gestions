@@ -17,6 +17,7 @@ class MovimentLloguerDespesa extends Model
         'notes',
         'base_imposable',
         'iva_import',
+        'tipus_despesa_fiscal_id',
     ];
 
     protected $casts = [
@@ -37,5 +38,10 @@ class MovimentLloguerDespesa extends Model
     public function proveidor(): BelongsTo
     {
         return $this->belongsTo(Proveidor::class);
+    }
+
+    public function tipusDespesaFiscal(): BelongsTo
+    {
+        return $this->belongsTo(TipusDespesaFiscal::class, 'tipus_despesa_fiscal_id');
     }
 }

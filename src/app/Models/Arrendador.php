@@ -13,7 +13,6 @@ class Arrendador extends Model
     protected $fillable = [
         'arrendadorable_type',
         'arrendadorable_id',
-        'adreca',
     ];
 
     public function arrendadorable(): MorphTo

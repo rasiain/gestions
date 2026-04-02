@@ -38,7 +38,6 @@ interface Arrendadorable {
 
 interface Arrendador {
     id: number;
-    adreca: string | null;
     arrendadorable_type: 'persona' | 'comunitat_bens';
     arrendadorable: Arrendadorable | null;
 }
@@ -280,6 +279,7 @@ interface MovimentDespesa {
     lloguer_id: number;
     categoria: string;
     proveidor_id: number | null;
+    tipus_despesa_fiscal_id: number | null;
     notes: string | null;
     base_imposable: number | null;
     iva_import: number | null;
@@ -334,6 +334,13 @@ const movimentsFilterPendents = ref(false);
 const movimentsAnys = ref<number[]>([]);
 const movimentCategories = ref<Categoria[]>([]);
 
+interface TipusDespesaFiscal {
+    id: number;
+    codi: string;
+    descripcio: string;
+}
+const tipusDespesaFiscalOpcions = ref<TipusDespesaFiscal[]>([]);
+
 const csrfToken = (): string =>
     (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
 
@@ -355,6 +362,7 @@ const fetchMoviments = async (lloguer: Lloguer, page: number, append = false) =>
         movimentsPage.value = page;
         if (json.categories) movimentCategories.value = json.categories;
         if (json.anys) movimentsAnys.value = json.anys;
+        if (json.tipusDespesaFiscal) tipusDespesaFiscalOpcions.value = json.tipusDespesaFiscal;
     } finally {
         movimentsLoading.value = false;
     }
@@ -476,6 +484,7 @@ const classificacioErrors = ref<Record<string, string>>({});
 const classificacioDespesa = ref({
     categoria: '',
     proveidor_id: null as number | null,
+    tipus_despesa_fiscal_id: null as number | null,
     notes: '',
     base_imposable: null as number | null,
     iva_import: null as number | null,
@@ -564,6 +573,7 @@ const openClassificacioModal = (moviment: Moviment) => {
         classificacioDespesa.value = {
             categoria: cls.data.categoria,
             proveidor_id: cls.data.proveidor_id,
+            tipus_despesa_fiscal_id: cls.data.tipus_despesa_fiscal_id ?? null,
             notes: cls.data.notes ?? '',
             base_imposable: cls.data.base_imposable ?? null,
             iva_import: cls.data.iva_import ?? null,
@@ -582,7 +592,7 @@ const openClassificacioModal = (moviment: Moviment) => {
         };
     } else {
         classificacioTipus.value = parseFloat(moviment.import) >= 0 ? 'ingres' : 'despesa';
-        classificacioDespesa.value = { categoria: '', proveidor_id: null, notes: '', base_imposable: null, iva_import: null };
+        classificacioDespesa.value = { categoria: '', proveidor_id: null, tipus_despesa_fiscal_id: null, notes: '', base_imposable: null, iva_import: null };
         const liniesInicials: { tipus: string; descripcio: string; import: number | null; proveidor_id: number | null }[] = [];
         if (computedGestoriaImport.value) {
             liniesInicials.push({
@@ -624,6 +634,7 @@ const submitClassificacio = async () => {
     if (classificacioTipus.value === 'despesa') {
         body.categoria = classificacioDespesa.value.categoria;
         body.proveidor_id = classificacioDespesa.value.proveidor_id || null;
+        body.tipus_despesa_fiscal_id = classificacioDespesa.value.tipus_despesa_fiscal_id || null;
         body.notes = classificacioDespesa.value.notes || null;
         body.base_imposable = classificacioDespesa.value.base_imposable ?? null;
         body.iva_import = classificacioDespesa.value.iva_import ?? null;
@@ -800,11 +811,10 @@ const nouArrendadorErrors = ref<Record<string, string>>({});
 const nouArrendadorForm = ref({
     arrendadorable_type: 'persona' as 'persona' | 'comunitat_bens',
     arrendadorable_id: null as number | null,
-    adreca: '',
 });
 
 const openNouArrendadorForm = () => {
-    nouArrendadorForm.value = { arrendadorable_type: 'persona', arrendadorable_id: null, adreca: '' };
+    nouArrendadorForm.value = { arrendadorable_type: 'persona', arrendadorable_id: null };
     nouArrendadorErrors.value = {};
     showNouArrendadorForm.value = true;
 };
@@ -1142,7 +1152,6 @@ const formatCurrency = (value: string | null): string => {
                                             <option v-for="a in arrendadors" :key="a.id" :value="a.id">
                                                 {{ a.arrendadorable?.nom ?? '—' }}
                                                 ({{ a.arrendadorable_type === 'persona' ? 'Persona' : 'Comunitat de Béns' }})
-                                                <template v-if="a.adreca"> — {{ a.adreca }}</template>
                                             </option>
                                         </select>
                                         <button
@@ -1190,15 +1199,6 @@ const formatCurrency = (value: string | null): string => {
                                                 </template>
                                             </select>
                                             <p v-if="nouArrendadorErrors.arrendadorable_id" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ nouArrendadorErrors.arrendadorable_id }}</p>
-                                        </div>
-                                        <div>
-                                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Adreça (opcional)</label>
-                                            <input
-                                                v-model="nouArrendadorForm.adreca"
-                                                type="text"
-                                                maxlength="255"
-                                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
-                                            />
                                         </div>
                                         <p v-if="nouArrendadorErrors.general" class="text-sm text-red-600 dark:text-red-400">{{ nouArrendadorErrors.general }}</p>
                                         <div class="flex justify-end gap-2">
@@ -1316,6 +1316,17 @@ const formatCurrency = (value: string | null): string => {
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                     </svg>
                                     Exportar
+                                </a>
+                                <a
+                                    v-if="!selectedLloguer.es_habitatge"
+                                    :href="`/lloguers/${selectedLloguer.id}/exportar-llibre-iva?any=${movimentsFilterAny}`"
+                                    target="_blank"
+                                    class="inline-flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-green-700 transition-colors"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    Llibre IVA
                                 </a>
                             </div>
                         </div>
@@ -1808,6 +1819,19 @@ const formatCurrency = (value: string | null): string => {
                                         <option :value="null">Sense proveïdor</option>
                                         <option v-for="p in proveidors" :key="p.id" :value="p.id">{{ p.nom_rao_social }}</option>
                                     </select>
+                                </div>
+
+                                <!-- Tipus despesa fiscal: només per lloguers no-habitatge -->
+                                <div v-if="selectedLloguer && selectedLloguer.es_habitatge === false">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Tipus de despesa fiscal</label>
+                                    <select
+                                        v-model="classificacioDespesa.tipus_despesa_fiscal_id"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    >
+                                        <option :value="null">Sense tipus fiscal</option>
+                                        <option v-for="t in tipusDespesaFiscalOpcions" :key="t.id" :value="t.id">{{ t.codi }} - {{ t.descripcio }}</option>
+                                    </select>
+                                    <p v-if="classificacioErrors['tipus_despesa_fiscal_id']" class="mt-1 text-sm text-red-600">{{ classificacioErrors['tipus_despesa_fiscal_id'] }}</p>
                                 </div>
 
                                 <div>
