@@ -10,7 +10,13 @@
       "Bash(docker compose:*)",
       "Bash(npm run build:*)",
       "Bash(docker-compose exec:*)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(for f:*)",
+      "Bash(do)",
+      "Bash(echo \"=== $f ===\")",
+      "Read(//Users/ricardasiain/Documents/src/gestions/**)",
+      "Bash(done)",
+      "Bash(python3:*)"
     ],
     "deny": [],
     "ask": []

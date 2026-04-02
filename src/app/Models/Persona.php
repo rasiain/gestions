@@ -22,6 +22,7 @@ class Persona extends Model
     protected $fillable = [
         'nom',
         'cognoms',
+        'nif',
     ];
 
     public function arrendadors(): MorphMany

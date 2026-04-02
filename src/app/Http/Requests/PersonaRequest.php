@@ -32,6 +32,11 @@ class PersonaRequest extends FormRequest
                 'string',
                 'max:50',
             ],
+            'nif' => [
+                'nullable',
+                'string',
+                'max:20',
+            ],
         ];
     }
 
@@ -49,6 +54,8 @@ class PersonaRequest extends FormRequest
             'cognoms.required' => 'Els cognoms són obligatoris.',
             'cognoms.string' => 'Els cognoms han de ser text.',
             'cognoms.max' => 'Els cognoms no poden superar els :max caràcters.',
+            'nif.string' => 'El NIF ha de ser text.',
+            'nif.max' => 'El NIF no pot superar els :max caràcters.',
         ];
     }
 

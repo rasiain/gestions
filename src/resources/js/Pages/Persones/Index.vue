@@ -7,6 +7,7 @@ interface Persona {
     id: number;
     nom: string;
     cognoms: string;
+    nif: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -24,6 +25,7 @@ const editingPersona = ref<Persona | null>(null);
 const form = useForm({
     nom: '',
     cognoms: '',
+    nif: '',
 });
 
 const openCreateModal = () => {
@@ -38,6 +40,7 @@ const openEditModal = (persona: Persona) => {
     editingPersona.value = persona;
     form.nom = persona.nom;
     form.cognoms = persona.cognoms;
+    form.nif = persona.nif || '';
     showModal.value = true;
 };
 
@@ -284,6 +287,26 @@ const deletePersona = (persona: Persona) => {
                                     />
                                     <p v-if="form.errors.cognoms" class="mt-1 text-sm text-red-600 dark:text-red-400">
                                         {{ form.errors.cognoms }}
+                                    </p>
+                                </div>
+
+                                <!-- NIF -->
+                                <div>
+                                    <label
+                                        for="nif"
+                                        class="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                                    >
+                                        NIF
+                                    </label>
+                                    <input
+                                        id="nif"
+                                        v-model="form.nif"
+                                        type="text"
+                                        maxlength="20"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                    <p v-if="form.errors.nif" class="mt-1 text-sm text-red-600 dark:text-red-400">
+                                        {{ form.errors.nif }}
                                     </p>
                                 </div>
                             </div>
