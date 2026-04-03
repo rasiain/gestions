@@ -111,6 +111,7 @@ Route::middleware('auth')->group(function () {
     ]);
 
     // Moviments management
+    Route::post('/moviments/duplicar', [MovimentCompteCorrentController::class, 'duplicar'])->name('moviments.duplicar');
     Route::resource('moviments', MovimentCompteCorrentController::class)->only([
         'index', 'store', 'update', 'destroy'
     ]);
