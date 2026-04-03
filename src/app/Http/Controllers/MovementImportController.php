@@ -180,12 +180,34 @@ class MovementImportController extends Controller
                 $message .= sprintf(' (%d duplicats saltats)', $stats['skipped']);
             }
 
+            // Validació del recompte: els processats han de coincidir amb els esperats del fitxer
+            $countWarning = null;
+            $toImportCount = $result['to_import_count'] ?? null;
+            $processats = $stats['created'] + $stats['skipped'];
+            if ($toImportCount !== null && $processats !== $toImportCount) {
+                $countWarning = sprintf(
+                    'El fitxer contenia %d moviments a importar, però se n\'han processat %d (%d creats, %d saltats).',
+                    $toImportCount,
+                    $processats,
+                    $stats['created'],
+                    $stats['skipped']
+                );
+                Log::warning('Movement import count mismatch', [
+                    'compte_corrent_id' => $compteCorrentId,
+                    'to_import_count'   => $toImportCount,
+                    'processats'        => $processats,
+                    'created'           => $stats['created'],
+                    'skipped'           => $stats['skipped'],
+                ]);
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => $message,
                 'data' => [
-                    'stats' => $stats,
+                    'stats'            => $stats,
                     'balance_warnings' => $result['balance_warnings'] ?? [],
+                    'count_warning'    => $countWarning,
                 ],
             ]);
         } catch (\Exception $e) {

@@ -61,6 +61,7 @@ const isParsed = ref<boolean>(false);
 const parsedData = ref<ParsedData | null>(null);
 const errorMessage = ref<string>('');
 const successMessage = ref<string>('');
+const countWarning = ref<string | null>(null);
 
 const selectedCompte = computed(() => {
     if (!selectedCompteCorrent.value) return null;
@@ -108,6 +109,7 @@ const handleFileChange = (event: Event) => {
         parsedData.value = null;
         errorMessage.value = '';
         successMessage.value = '';
+        countWarning.value = null;
 
         // Auto-select bank type based on file extension if not already selected
         if (!selectedBankType.value) {
@@ -194,6 +196,7 @@ const importMovements = async () => {
 
         const stats = response.data.data.stats;
         successMessage.value = `Moviments importats: ${stats.created} creats`;
+        countWarning.value = response.data.data.count_warning ?? null;
 
         // Reset form
         resetForm();
@@ -350,6 +353,21 @@ const formatDate = (date: string) => {
                                 <p class="text-sm text-green-800 dark:text-green-200">
                                     {{ successMessage }}
                                 </p>
+                            </div>
+
+                            <!-- Count Warning -->
+                            <div
+                                v-if="countWarning"
+                                class="rounded-md bg-amber-50 dark:bg-amber-900/20 p-4"
+                            >
+                                <div class="flex items-start gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                    </svg>
+                                    <p class="text-sm text-amber-800 dark:text-amber-200">
+                                        <strong>Discrepància en el recompte:</strong> {{ countWarning }}
+                                    </p>
+                                </div>
                             </div>
 
                             <!-- Error Message -->
