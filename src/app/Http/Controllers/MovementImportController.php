@@ -10,6 +10,7 @@ use App\Http\Services\ImportFiles\KMyMoneyMovementParserService;
 use App\Http\Services\MovementImportService;
 use App\Models\CompteCorrent;
 use App\Models\MovimentCompteCorrent;
+use App\Services\SaldoRecalculationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -23,7 +24,8 @@ class MovementImportController extends Controller
         private CaixaEnginyersParserService $caixaEnginyersParser,
         private CaixaBankParserService $caixaBankParser,
         private KMyMoneyMovementParserService $kmymoneyParser,
-        private MovementImportService $importService
+        private MovementImportService $importService,
+        private SaldoRecalculationService $saldoService
     ) {}
 
     /**
@@ -87,17 +89,6 @@ class MovementImportController extends Controller
                 'import_mode' => $importMode,
             ]);
 
-            // Check for balance validation errors
-            if (isset($result['balance_validation_failed']) && $result['balance_validation_failed']) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Error de validació: els saldos no coincideixen',
-                    'data' => [
-                        'errors' => $result['errors'],
-                    ],
-                ], 422);
-            }
-
             // Limit movements in preview to avoid memory/timeout issues with large files
             // Show last 100 movements (most recent) for preview
             $totalMovements = count($result['movements']);
@@ -117,7 +108,9 @@ class MovementImportController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Fitxer analitzat correctament',
-                'data' => $result,
+                'data' => array_merge($result, [
+                    'balance_warnings' => $result['balance_warnings'] ?? [],
+                ]),
             ]);
         } catch (\Exception $e) {
             Log::error('Error parsing movement file', [
@@ -168,22 +161,19 @@ class MovementImportController extends Controller
             // Process movements
             $result = $this->importService->processMovements($parsedMovements, $compteCorrentId, $importMode);
 
-            // Check for balance validation errors
-            if (isset($result['balance_validation_failed']) && $result['balance_validation_failed']) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Error de validació: els saldos no coincideixen',
-                    'data' => [
-                        'errors' => $result['errors'],
-                    ],
-                ], 422);
-            }
-
             // Import to database
             $stats = $this->importService->import($result['movements'], $compteCorrentId);
 
             // Guardar el tipus d'importació usat
             CompteCorrent::where('id', $compteCorrentId)->update(['last_import_type' => $bankType]);
+
+            // Recalcular saldos des del primer moviment importat
+            if (!empty($result['movements'])) {
+                $primeraData = collect($result['movements'])->min('data_moviment');
+                if ($primeraData) {
+                    $this->saldoService->recalcularDesde($compteCorrentId, $primeraData);
+                }
+            }
 
             $message = sprintf('S\'han importat %d moviments correctament', $stats['created']);
             if ($stats['skipped'] > 0) {
@@ -195,6 +185,7 @@ class MovementImportController extends Controller
                 'message' => $message,
                 'data' => [
                     'stats' => $stats,
+                    'balance_warnings' => $result['balance_warnings'] ?? [],
                 ],
             ]);
         } catch (\Exception $e) {

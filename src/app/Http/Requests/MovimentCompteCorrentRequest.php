@@ -44,10 +44,6 @@ class MovimentCompteCorrentRequest extends FormRequest
                 'required',
                 'numeric',
             ],
-            'saldo_posterior' => [
-                'nullable',
-                'numeric',
-            ],
             'categoria_id' => [
                 'nullable',
                 'integer',
@@ -73,7 +69,6 @@ class MovimentCompteCorrentRequest extends FormRequest
             'concepte.max' => 'El concepte no pot superar els :max caràcters.',
             'import.required' => 'L\'import és obligatori.',
             'import.numeric' => 'L\'import ha de ser un número.',
-            'saldo_posterior.numeric' => 'El saldo ha de ser un número.',
             'categoria_id.exists' => 'La categoria seleccionada no existeix.',
         ];
     }
@@ -90,7 +85,6 @@ class MovimentCompteCorrentRequest extends FormRequest
             'data_moviment' => 'data del moviment',
             'concepte' => 'concepte',
             'import' => 'import',
-            'saldo_posterior' => 'saldo posterior',
             'categoria_id' => 'categoria',
         ];
     }

@@ -834,21 +834,11 @@ class MovementImportService
         $hasBalance = $result['movements'][0]['saldo_posterior'] !== null;
 
         if ($hasBalance) {
-            // Balance validation disabled - different import sources may order same-day movements differently
-            // Users can verify balances by reviewing the imported data
-            // $balanceErrors = $this->validateBalances($result['movements'], $compteCorrentId);
-            // if (!empty($balanceErrors)) {
-            //     return [
-            //         'movements' => [],
-            //         'last_hash_found' => $lastMatch['found'],
-            //         'last_db_movement' => $lastMatch['movement'],
-            //         'duplicates_skipped' => 0,
-            //         'to_import_count' => 0,
-            //         'warnings' => [],
-            //         'errors' => $balanceErrors,
-            //         'balance_validation_failed' => true,
-            //     ];
-            // }
+            // Validació de saldos: retorna warnings (no bloquejant)
+            $balanceErrors = $this->validateBalances($result['movements'], $compteCorrentId);
+            if (!empty($balanceErrors)) {
+                $result['balance_warnings'] = $balanceErrors;
+            }
         } else {
             // No balance in file: calculate balances
             $result['movements'] = $this->calculateBalances($result['movements'], $compteCorrentId);

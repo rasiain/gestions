@@ -88,7 +88,6 @@ const form = useForm({
     concepte: '',
     notes: '' as string | null,
     import: 0 as number | string,
-    saldo_posterior: null as number | string | null,
     categoria_id: null as number | null,
 });
 
@@ -148,7 +147,6 @@ const openEditModal = (moviment: MovimentCompteCorrent) => {
     form.concepte = moviment.concepte;
     form.notes = moviment.notes;
     form.import = moviment.import;
-    form.saldo_posterior = moviment.saldo_posterior;
     form.categoria_id = moviment.categoria_id;
     showModal.value = true;
 };
@@ -209,6 +207,41 @@ const getImportClass = (import_val: number): string => {
     if (import_val > 0) return 'text-green-600 dark:text-green-400';
     if (import_val < 0) return 'text-red-600 dark:text-red-400';
     return 'text-gray-600 dark:text-gray-400';
+};
+
+// ── Selecció i duplicació ────────────────────────────────────
+const selectedIds = ref<Set<number>>(new Set());
+
+const toggleSelect = (id: number) => {
+    if (selectedIds.value.has(id)) {
+        selectedIds.value.delete(id);
+    } else {
+        selectedIds.value.add(id);
+    }
+};
+
+const allSelected = computed(() =>
+    props.moviments.data.length > 0 &&
+    props.moviments.data.every(m => selectedIds.value.has(m.id))
+);
+
+const toggleSelectAll = () => {
+    if (allSelected.value) {
+        props.moviments.data.forEach(m => selectedIds.value.delete(m.id));
+    } else {
+        props.moviments.data.forEach(m => selectedIds.value.add(m.id));
+    }
+};
+
+const duplicarSeleccionats = () => {
+    const ids = Array.from(selectedIds.value);
+    router.post(route('moviments.duplicar'), { ids }, {
+        onSuccess: () => { selectedIds.value.clear(); },
+    });
+};
+
+const duplicarUn = (moviment: MovimentCompteCorrent) => {
+    router.post(route('moviments.duplicar'), { ids: [moviment.id] });
 };
 </script>
 
@@ -390,6 +423,28 @@ const getImportClass = (import_val: number): string => {
                             </div>
                         </div>
 
+                        <!-- Toolbar de selecció -->
+                        <div v-if="selectedIds.size > 0" class="mb-3 flex items-center gap-3 rounded-md bg-indigo-50 dark:bg-indigo-900/20 px-4 py-2">
+                            <span class="text-sm font-medium text-indigo-700 dark:text-indigo-300">
+                                {{ selectedIds.size }} seleccionat{{ selectedIds.size !== 1 ? 's' : '' }}
+                            </span>
+                            <button
+                                @click="duplicarSeleccionats"
+                                class="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                Duplicar seleccionats
+                            </button>
+                            <button
+                                @click="selectedIds.clear()"
+                                class="text-xs text-indigo-500 hover:text-indigo-700 dark:text-indigo-400"
+                            >
+                                Deseleccionar tot
+                            </button>
+                        </div>
+
                         <div v-if="moviments.data.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
                             No s'han trobat moviments
                         </div>
@@ -398,6 +453,14 @@ const getImportClass = (import_val: number): string => {
                             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                 <thead class="bg-gray-50 dark:bg-gray-700">
                                     <tr>
+                                        <th scope="col" class="w-10 px-3 py-3">
+                                            <input
+                                                type="checkbox"
+                                                :checked="allSelected"
+                                                @change="toggleSelectAll"
+                                                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700"
+                                            />
+                                        </th>
                                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">
                                             Data
                                         </th>
@@ -419,7 +482,19 @@ const getImportClass = (import_val: number): string => {
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-                                    <tr v-for="moviment in moviments.data" :key="moviment.id">
+                                    <tr
+                                        v-for="moviment in moviments.data"
+                                        :key="moviment.id"
+                                        :class="{ 'bg-indigo-50 dark:bg-indigo-900/10': selectedIds.has(moviment.id) }"
+                                    >
+                                        <td class="w-10 px-3 py-4">
+                                            <input
+                                                type="checkbox"
+                                                :checked="selectedIds.has(moviment.id)"
+                                                @change="toggleSelect(moviment.id)"
+                                                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700"
+                                            />
+                                        </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                                             {{ formatDate(moviment.data_moviment) }}
                                         </td>
@@ -441,6 +516,13 @@ const getImportClass = (import_val: number): string => {
                                                 class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mr-3"
                                             >
                                                 Editar
+                                            </button>
+                                            <button
+                                                @click="duplicarUn(moviment)"
+                                                class="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 mr-3"
+                                                title="Duplicar amb data d'avui"
+                                            >
+                                                Duplicar
                                             </button>
                                             <button
                                                 @click="confirmDelete(moviment)"
@@ -563,23 +645,6 @@ const getImportClass = (import_val: number): string => {
                                     </p>
                                     <p v-if="form.errors.import" class="mt-1 text-sm text-red-600 dark:text-red-400">
                                         {{ form.errors.import }}
-                                    </p>
-                                </div>
-
-                                <!-- Saldo Posterior -->
-                                <div>
-                                    <label for="saldo_posterior" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Saldo posterior (opcional)
-                                    </label>
-                                    <input
-                                        id="saldo_posterior"
-                                        v-model="form.saldo_posterior"
-                                        type="number"
-                                        step="0.01"
-                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
-                                    />
-                                    <p v-if="form.errors.saldo_posterior" class="mt-1 text-sm text-red-600 dark:text-red-400">
-                                        {{ form.errors.saldo_posterior }}
                                     </p>
                                 </div>
 

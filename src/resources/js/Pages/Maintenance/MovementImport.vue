@@ -31,6 +31,7 @@ interface ParsedData {
     duplicates_skipped: number;
     to_import_count: number;
     warnings: string[];
+    balance_warnings?: string[];
     requires_import_mode_selection?: boolean;
     errors?: string[];
     balance_validation_failed?: boolean;
@@ -367,13 +368,31 @@ const formatDate = (date: string) => {
 
                 <!-- Preview Section -->
                 <div
-                    v-if="isParsed && parsedData && !parsedData.balance_validation_failed"
+                    v-if="isParsed && parsedData"
                     class="overflow-hidden bg-white shadow-sm sm:rounded-lg dark:bg-gray-800"
                 >
                     <div class="p-6">
                         <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
                             Vista prèvia de moviments a importar
                         </h3>
+
+                        <!-- Balance Warnings (no bloquejants) -->
+                        <div
+                            v-if="parsedData.balance_warnings && parsedData.balance_warnings.length > 0"
+                            class="mb-4 rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-4 border-2 border-yellow-400 dark:border-yellow-600"
+                        >
+                            <p class="text-sm font-medium text-yellow-800 dark:text-yellow-200 mb-2">
+                                Avis: discrepancies de saldo detectades
+                            </p>
+                            <p class="text-xs text-yellow-700 dark:text-yellow-300 mb-2">
+                                Els saldos del fitxer no coincideixen amb els calculats per l'aplicació. La importacio continuara igualment, pero convé verificar les dades.
+                            </p>
+                            <ul class="list-disc list-inside text-xs text-yellow-700 dark:text-yellow-300 space-y-1">
+                                <li v-for="(warning, index) in parsedData.balance_warnings" :key="index">
+                                    {{ warning }}
+                                </li>
+                            </ul>
+                        </div>
 
                         <!-- Balance Validation Errors -->
                         <div
@@ -502,27 +521,6 @@ const formatDate = (date: string) => {
                     </div>
                 </div>
 
-                <!-- Balance Validation Failed Section -->
-                <div
-                    v-if="isParsed && parsedData?.balance_validation_failed"
-                    class="overflow-hidden bg-red-50 dark:bg-red-900/20 shadow-sm sm:rounded-lg border-2 border-red-300 dark:border-red-700"
-                >
-                    <div class="p-6">
-                        <h3 class="text-lg font-medium text-red-900 dark:text-red-100 mb-4">
-                            ❌ Error crític: Validació de saldos fallida
-                        </h3>
-                        <div v-if="parsedData.errors && parsedData.errors.length > 0">
-                            <ul class="list-disc list-inside text-sm text-red-700 dark:text-red-300 space-y-1">
-                                <li v-for="(error, index) in parsedData.errors" :key="index">
-                                    {{ error }}
-                                </li>
-                            </ul>
-                            <p class="mt-4 text-sm text-red-800 dark:text-red-200">
-                                Els saldos del fitxer no coincideixen amb els calculats. Comprova el fitxer abans de continuar.
-                            </p>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
 

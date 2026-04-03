@@ -7,6 +7,7 @@ use App\Models\Categoria;
 use App\Models\CompteCorrent;
 use App\Models\MovimentCompteCorrent;
 use App\Models\MovimentConcepte;
+use App\Services\SaldoRecalculationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,6 +17,10 @@ use Inertia\Response;
 
 class MovimentCompteCorrentController extends Controller
 {
+    public function __construct(
+        private SaldoRecalculationService $saldoService
+    ) {}
+
     /**
      * Display a listing of movements.
      */
@@ -153,7 +158,13 @@ class MovimentCompteCorrentController extends Controller
             $validated['concepte_original'] = $concepteText;
             $validated['hash'] = $hash;
 
-            MovimentCompteCorrent::create($validated);
+            $moviment = MovimentCompteCorrent::create($validated);
+
+            $this->saldoService->recalcularDesde(
+                $moviment->compte_corrent_id,
+                $moviment->data_moviment->format('Y-m-d'),
+                $moviment->id
+            );
 
             DB::commit();
 
@@ -172,6 +183,10 @@ class MovimentCompteCorrentController extends Controller
     public function update(MovimentCompteCorrentRequest $request, MovimentCompteCorrent $moviment): RedirectResponse
     {
         $validated = $request->validated();
+
+        // Guardar valors anteriors per recalcular saldos
+        $dataAnterior = $moviment->data_moviment->format('Y-m-d');
+        $compteAnteriorId = $moviment->compte_corrent_id;
 
         DB::beginTransaction();
         try {
@@ -204,6 +219,8 @@ class MovimentCompteCorrentController extends Controller
 
             $moviment->update($validated);
 
+            $this->saldoService->recalcularPerUpdate($moviment, $dataAnterior, $compteAnteriorId);
+
             DB::commit();
 
             if ($request->wantsJson()) {
@@ -235,6 +252,66 @@ class MovimentCompteCorrentController extends Controller
     }
 
     /**
+     * Duplicate one or more movements with today's date.
+     */
+    public function duplicar(Request $request): RedirectResponse
+    {
+        $ids = $request->input('ids', []);
+        if (empty($ids) || !is_array($ids)) {
+            return redirect()->back()->withErrors(['error' => 'No s\'han indicat moviments a duplicar.']);
+        }
+
+        $avui = now()->toDateString();
+
+        DB::beginTransaction();
+        try {
+            $moviments = MovimentCompteCorrent::whereIn('id', $ids)->get();
+
+            // Recollim els comptes afectats per recalcular un cop al final
+            $comptesAfectats = [];
+
+            foreach ($moviments as $moviment) {
+                $hash = hash('sha256',
+                    $avui . '|' .
+                    $moviment->import . '|' .
+                    $moviment->compte_corrent_id . '|' .
+                    $moviment->id
+                );
+
+                MovimentCompteCorrent::create([
+                    'compte_corrent_id' => $moviment->compte_corrent_id,
+                    'data_moviment'     => $avui,
+                    'concepte_id'       => $moviment->concepte_id,
+                    'concepte_original' => $moviment->concepte_original,
+                    'import'            => $moviment->import,
+                    'saldo_posterior'   => null,
+                    'notes'             => $moviment->notes,
+                    'categoria_id'      => $moviment->categoria_id,
+                    'conciliat'         => false,
+                    'exclou_lloguer'    => $moviment->exclou_lloguer,
+                    'hash'              => $hash,
+                ]);
+
+                $comptesAfectats[$moviment->compte_corrent_id] = true;
+            }
+
+            DB::commit();
+
+            // Recalcular saldos des d'avui per a cada compte afectat
+            foreach (array_keys($comptesAfectats) as $compteId) {
+                $this->saldoService->recalcularDesde($compteId, $avui);
+            }
+
+            $n = count($moviments);
+            $msg = $n === 1 ? 'Moviment duplicat correctament.' : "{$n} moviments duplicats correctament.";
+            return redirect()->back()->with('success', $msg);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()->withErrors(['error' => 'Error duplicant els moviments: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
      * Toggle exclou_lloguer flag on a movement.
      */
     public function toggleExclou(MovimentCompteCorrent $moviment): JsonResponse
@@ -250,7 +327,13 @@ class MovimentCompteCorrentController extends Controller
     public function destroy(MovimentCompteCorrent $moviment): RedirectResponse
     {
         try {
+            $compteCorrentId = $moviment->compte_corrent_id;
+            $dataMoviment = $moviment->data_moviment->format('Y-m-d');
+
             $moviment->delete();
+
+            $this->saldoService->recalcularDesde($compteCorrentId, $dataMoviment);
+
             return redirect()->back()->with('success', 'Moviment eliminat correctament.');
         } catch (\Exception $e) {
             return redirect()->back()
