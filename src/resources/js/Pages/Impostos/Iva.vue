@@ -190,6 +190,8 @@ function tancaArrendador() {
                                 <th colspan="4" class="px-4 py-2 text-center text-xs font-medium uppercase tracking-wider text-gray-700 dark:text-gray-200 border-l border-gray-200 dark:border-gray-600">
                                     Total anual
                                 </th>
+                                <th rowspan="2" class="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300 border-l border-gray-200 dark:border-gray-600">
+                                </th>
                             </tr>
                             <tr>
                                 <template v-for="t in trimestres" :key="t">
@@ -290,6 +292,19 @@ function tancaArrendador() {
                                 >
                                     {{ formatEur(lloguer.total_resultat) }}
                                 </td>
+                                <td class="whitespace-nowrap px-3 py-3 text-center border-l border-gray-100 dark:border-gray-700">
+                                    <a
+                                        :href="`/lloguers/${lloguer.id}/exportar-llibre-iva?any=${props.any}`"
+                                        target="_blank"
+                                        title="Exportar llibre IVA"
+                                        class="inline-flex items-center gap-1 rounded-md bg-green-100 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                        </svg>
+                                        Excel
+                                    </a>
+                                </td>
                             </tr>
                         </tbody>
                         <tfoot class="bg-gray-50 dark:bg-gray-700">
@@ -329,6 +344,7 @@ function tancaArrendador() {
                                 >
                                     {{ formatEur(props.totals.total_resultat) }}
                                 </td>
+                                <td></td>
                             </tr>
                         </tfoot>
                     </table>

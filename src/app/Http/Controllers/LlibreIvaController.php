@@ -99,12 +99,12 @@ class LlibreIvaController extends Controller
         $sheet1->getStyle('M6')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
         // Capçaleres fila 7
-        $sheet1->setCellValue('A7', 'NUM. REG.');
-        $sheet1->setCellValue('B7', 'NUMERO');
+        $sheet1->setCellValue('A7', 'NÚM. REG.');
+        $sheet1->setCellValue('B7', 'NÚMERO');
         $sheet1->setCellValue('C7', 'DATA');
         $sheet1->setCellValue('D7', 'CONCEPTE');
         $sheet1->setCellValue('E7', '% IMPUTACIÓ');
-        $sheet1->setCellValue('F7', 'BASE IMPONIBLE IMPUTABLE');
+        $sheet1->setCellValue('F7', 'BASE IMPOSABLE IMPUTABLE');
         $sheet1->setCellValue('G7', '% RETENCIÓ');
         $sheet1->setCellValue('H7', 'RETENCIÓ');
         $sheet1->setCellValue('I7', 'TIPUS IMPOST');
@@ -205,28 +205,71 @@ class LlibreIvaController extends Controller
         $sheet2->setCellValue('A3', "Any {$any}");
 
         $sheet2->mergeCells('I6:J6');
-        $sheet2->setCellValue('I6', 'EMISOR');
+        $sheet2->setCellValue('I6', 'EMISSOR');
         $sheet2->getStyle('I6')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-        $sheet2->setCellValue('A7', 'NUM. REG.');
-        $sheet2->setCellValue('B7', 'NUMERO');
-        $sheet2->setCellValue('C7', 'FECHA');
+        $sheet2->setCellValue('A7', 'NÚM. REG.');
+        $sheet2->setCellValue('B7', 'NÚMERO');
+        $sheet2->setCellValue('C7', 'DATA');
         $sheet2->setCellValue('D7', '% IMPUTACIÓ');
-        $sheet2->setCellValue('E7', 'BASE IMPONIBLE IMPUTABLE');
-        $sheet2->setCellValue('F7', 'TIPO IMPUESTO');
-        $sheet2->setCellValue('G7', 'IMPUESTO IMPUTABLE');
-        $sheet2->setCellValue('H7', 'TIPO OPERACIÓ');
-        $sheet2->setCellValue('I7', 'NOMBRE O RAZÓN SOCIAL');
+        $sheet2->setCellValue('E7', 'BASE IMPOSABLE IMPUTABLE');
+        $sheet2->setCellValue('F7', 'TIPUS IMPOST');
+        $sheet2->setCellValue('G7', 'IMPOST IMPUTABLE');
+        $sheet2->setCellValue('H7', 'TIPUS OPERACIÓ');
+        $sheet2->setCellValue('I7', 'NOM O RAÓ SOCIAL');
         $sheet2->setCellValue('J7', 'NIF');
-        $sheet2->setCellValue('K7', 'CRITERIO DE CAJA');
+        $sheet2->setCellValue('K7', 'CRITERI DE CAIXA');
         $sheet2->getStyle('A7:K7')->applyFromArray($headerStyle);
 
-        // Fila totals buida
-        $rowTot2 = 8;
-        $sheet2->setCellValue("A{$rowTot2}", 'TOTALS');
-        $sheet2->setCellValue("F{$rowTot2}", '21% I.V.A.');
-        $sheet2->setCellValue("G{$rowTot2}", '10% I.V.A.');
-        $sheet2->getStyle("A{$rowTot2}:K{$rowTot2}")->applyFromArray($totalStyle);
+        // Despeses amb IVA (factures rebudes)
+        $despesesIva = $despeses->filter(
+            fn($d) => $d->base_imposable !== null && $d->iva_import !== null && (float) $d->iva_import > 0
+        );
+
+        $row2 = 8;
+        $idx2 = 1;
+        foreach ($despesesIva as $despesa) {
+            $moviment  = $despesa->moviment;
+            $proveidor = $despesa->proveidor;
+
+            $dataMoviment = $moviment?->data_moviment
+                ? \Carbon\Carbon::parse($moviment->data_moviment)->format('d/m/Y')
+                : '';
+
+            $base  = (float) $despesa->base_imposable;
+            $iva   = (float) $despesa->iva_import;
+            $pct   = $despesa->iva_percentatge
+                ? number_format((float) $despesa->iva_percentatge, 0) . '% I.V.A.'
+                : ($base > 0 ? number_format(round($iva / $base * 100), 0) . '% I.V.A.' : '21% I.V.A.');
+
+            $sheet2->setCellValue("A{$row2}", $idx2);
+            $sheet2->setCellValue("B{$row2}", $despesa->numero_factura ?? '');
+            $sheet2->setCellValue("C{$row2}", $dataMoviment);
+            $sheet2->setCellValue("D{$row2}", 1);
+            $sheet2->setCellValue("E{$row2}", $base);
+            $sheet2->setCellValue("F{$row2}", $pct);
+            $sheet2->setCellValue("G{$row2}", $iva);
+            $sheet2->setCellValue("H{$row2}", 'Nacional');
+            $sheet2->setCellValue("I{$row2}", $proveidor?->nom_rao_social ?? '');
+            $sheet2->setCellValue("J{$row2}", $proveidor?->nif_cif ?? '');
+            $sheet2->setCellValue("K{$row2}", '');
+
+            $row2++;
+            $idx2++;
+        }
+
+        // Totals factures rebudes
+        $totalBase2 = $despesesIva->sum(fn($d) => (float) $d->base_imposable);
+        $totalIva2  = $despesesIva->sum(fn($d) => (float) $d->iva_import);
+
+        $sheet2->setCellValue("A{$row2}", 'TOTALS');
+        $sheet2->setCellValue("E{$row2}", $totalBase2);
+        $sheet2->setCellValue("G{$row2}", $totalIva2);
+        $sheet2->getStyle("A{$row2}:K{$row2}")->applyFromArray($totalStyle);
+
+        if ($row2 > 8) {
+            $sheet2->getStyle("E8:G{$row2}")->getNumberFormat()->setFormatCode($euroFormat);
+        }
 
         $sheet2->getColumnDimension('A')->setWidth(10);
         $sheet2->getColumnDimension('B')->setWidth(18);
@@ -244,29 +287,29 @@ class LlibreIvaController extends Controller
         $sheet3 = $spreadsheet->createSheet();
         $sheet3->setTitle('Despeses');
 
-        // Fila 3: EMISOR (merge sobre columnes I-P)
+        // Fila 3: EMISSOR (merge sobre columnes I-P)
         $sheet3->mergeCells('I3:P3');
-        $sheet3->setCellValue('I3', 'EMISOR');
+        $sheet3->setCellValue('I3', 'EMISSOR');
         $sheet3->getStyle('I3')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
         // Capçaleres fila 4
-        $sheet3->setCellValue('A4', 'NUM. REG.');
-        $sheet3->setCellValue('B4', 'NUMERO');
+        $sheet3->setCellValue('A4', 'NÚM. REG.');
+        $sheet3->setCellValue('B4', 'NÚMERO');
         $sheet3->setCellValue('C4', 'DATA');
         $sheet3->setCellValue('D4', 'CONCEPTE');
         $sheet3->setCellValue('E4', 'IMPORT');
         $sheet3->setCellValue('F4', '% IMPUTABLE');
-        $sheet3->setCellValue('G4', 'TIPO GASTO');
-        $sheet3->setCellValue('H4', 'DESC. TIPO GASTO');
-        $sheet3->setCellValue('I4', 'NOMBRE O RAZÓN SOCIAL');
+        $sheet3->setCellValue('G4', 'TIPUS DESPESA');
+        $sheet3->setCellValue('H4', 'DESC. TIPUS DESPESA');
+        $sheet3->setCellValue('I4', 'NOM O RAÓ SOCIAL');
         $sheet3->setCellValue('J4', 'NIF');
-        $sheet3->setCellValue('K4', 'DIRECCIÓN');
-        $sheet3->setCellValue('L4', 'CÓDIGO POSTAL');
-        $sheet3->setCellValue('M4', 'POBLACIÓN');
-        $sheet3->setCellValue('N4', 'PROVINCIA');
+        $sheet3->setCellValue('K4', 'ADREÇA');
+        $sheet3->setCellValue('L4', 'CODI POSTAL');
+        $sheet3->setCellValue('M4', 'POBLACIÓ');
+        $sheet3->setCellValue('N4', 'PROVÍNCIA');
         $sheet3->setCellValue('O4', 'PAÍS');
-        $sheet3->setCellValue('P4', 'TELÉFONO');
-        $sheet3->setCellValue('Q4', 'NOTAS');
+        $sheet3->setCellValue('P4', 'TELÈFON');
+        $sheet3->setCellValue('Q4', 'NOTES');
         $sheet3->getStyle('A4:Q4')->applyFromArray($headerStyle);
 
         $row = 5;
@@ -279,7 +322,7 @@ class LlibreIvaController extends Controller
             $dataMoviment = $moviment?->data_moviment
                 ? \Carbon\Carbon::parse($moviment->data_moviment)->format('d/m/Y')
                 : '';
-            $concepte = $moviment?->concepte?->concepte ?? $moviment?->concepte_original ?? '';
+            $concepte = $despesa->concepte ?? $moviment?->concepte_original ?? '';
             $import   = $moviment ? abs((float) $moviment->import) : 0;
 
             $sheet3->setCellValue("A{$row}", $idx);
@@ -335,9 +378,9 @@ class LlibreIvaController extends Controller
         $sheet3->getColumnDimension('P')->setWidth(15);
         $sheet3->getColumnDimension('Q')->setWidth(30);
 
-        // ─── Pestanya 4: Libro de Amortizaciones ───────────────────
+        // ─── Pestanya 4: Llibre d'amortitzacions ───────────────────
         $sheet4 = $spreadsheet->createSheet();
-        $sheet4->setTitle('Libro de Amortizaciones');
+        $sheet4->setTitle("Llibre d'amortitzacions");
 
         $sheet4->setCellValue('A1', "Empresa: {$nomEmpresa}");
         $sheet4->setCellValue('A2', "NIF: {$nifEmpresa}");
