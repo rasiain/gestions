@@ -72,7 +72,26 @@ class CategoriaController extends Controller
      */
     public function store(CategoriaRequest $request)
     {
-        Categoria::create($request->validated());
+        $validated = $request->validated();
+
+        // Auto-assign ordre if not provided
+        if (empty($validated['ordre'])) {
+            $validated['ordre'] = Categoria::where('compte_corrent_id', $validated['compte_corrent_id'])
+                ->where('categoria_pare_id', $validated['categoria_pare_id'] ?? null)
+                ->max('ordre') + 1 ?? 0;
+        }
+
+        $categoria = Categoria::create($validated);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'id' => $categoria->id,
+                'compte_corrent_id' => $categoria->compte_corrent_id,
+                'nom' => $categoria->nom,
+                'categoria_pare_id' => $categoria->categoria_pare_id,
+                'ordre' => $categoria->ordre,
+            ], 201);
+        }
 
         return redirect()->route('categories.index')
             ->with('success', 'Categoria creada correctament.');

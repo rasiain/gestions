@@ -139,13 +139,13 @@ function tancaArrendador() {
 </script>
 
 <template>
-    <Head title="IVA i model 184 Lloguers" />
+    <Head title="IVA Lloguers" />
 
     <AuthenticatedLayout>
         <template #header>
             <div class="flex items-center justify-between">
                 <h2 class="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200">
-                    IVA i model 184 Lloguers
+                    IVA Lloguers
                 </h2>
                 <select
                     :value="props.any"

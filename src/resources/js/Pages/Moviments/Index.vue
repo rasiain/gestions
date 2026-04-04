@@ -2,7 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 interface CompteCorrent {
     id: number;
@@ -57,6 +57,7 @@ interface Filters {
     data_inici: string | null;
     data_fi: string | null;
     tipus: 'ingressos' | 'despeses' | null;
+    ordre: 'asc' | 'desc';
 }
 
 interface Stats {
@@ -82,6 +83,68 @@ const editingMoviment = ref<MovimentCompteCorrent | null>(null);
 const showDeleteConfirm = ref(false);
 const movimentToDelete = ref<MovimentCompteCorrent | null>(null);
 
+// ── Llista local de categories (s'amplia quan se'n crea una d'inline) ──
+const localCategories = ref<Categoria[]>([...props.categories]);
+watch(() => props.categories, (cats) => { localCategories.value = [...cats]; });
+
+// ── Creació inline de nova categoria ────────────────────────────────────
+const showNewCategory = ref(false);
+const newCatNom = ref('');
+const newCatParentId = ref<number | null>(null);
+const newCatCreating = ref(false);
+const newCatError = ref('');
+
+const flatCategoryOptions = computed(() => {
+    const build = (parentId: number | null, prefix: string): { id: number; path: string }[] =>
+        localCategories.value
+            .filter(c => c.categoria_pare_id === parentId)
+            .sort((a, b) => a.nom.localeCompare(b.nom))
+            .flatMap(c => [{ id: c.id, path: prefix + c.nom }, ...build(c.id, prefix + c.nom + ' > ')]);
+    return build(null, '');
+});
+
+const openNewCategory = () => {
+    newCatParentId.value = typeof form.categoria_id === 'number' ? form.categoria_id : null;
+    newCatNom.value = '';
+    newCatError.value = '';
+    showNewCategory.value = true;
+};
+
+const createCategory = async () => {
+    if (!newCatNom.value.trim()) return;
+    newCatCreating.value = true;
+    newCatError.value = '';
+    try {
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+        const response = await fetch(route('categories.store'), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrf,
+            },
+            body: JSON.stringify({
+                compte_corrent_id: props.selectedCompteCorrentId,
+                nom: newCatNom.value.trim(),
+                categoria_pare_id: newCatParentId.value,
+            }),
+        });
+        if (!response.ok) {
+            const data = await response.json();
+            newCatError.value = Object.values(data.errors ?? {}).flat().join(', ') || 'Error creant la categoria.';
+            return;
+        }
+        const newCat: Categoria = await response.json();
+        localCategories.value = [...localCategories.value, newCat];
+        form.categoria_id = newCat.id;
+        showNewCategory.value = false;
+    } catch {
+        newCatError.value = 'Error de xarxa.';
+    } finally {
+        newCatCreating.value = false;
+    }
+};
+
 const form = useForm({
     compte_corrent_id: props.selectedCompteCorrentId,
     data_moviment: '',
@@ -98,6 +161,7 @@ const filterForm = useForm({
     data_inici: props.filters.data_inici || '',
     data_fi: props.filters.data_fi || '',
     tipus: props.filters.tipus || null,
+    ordre: props.filters.ordre || 'desc',
 });
 
 const selectedCompte = computed(() => {
@@ -121,12 +185,36 @@ const applyFilters = () => {
     });
 };
 
+const formatLocalDate = (d: Date): string => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+const setDateRange = (range: 'week' | 'month' | 'year') => {
+    const now = new Date();
+    let inici: Date;
+    const fi: Date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    if (range === 'week') {
+        const day = now.getDay() === 0 ? 6 : now.getDay() - 1; // dilluns = 0
+        inici = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day);
+    } else if (range === 'month') {
+        inici = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else {
+        inici = new Date(now.getFullYear(), 0, 1);
+    }
+
+    filterForm.data_inici = formatLocalDate(inici);
+    filterForm.data_fi = formatLocalDate(fi);
+};
+
 const clearFilters = () => {
     filterForm.search = '';
     filterForm.categoria_id = null;
     filterForm.data_inici = '';
     filterForm.data_fi = '';
     filterForm.tipus = null;
+    filterForm.ordre = 'desc';
     applyFilters();
 };
 
@@ -154,6 +242,10 @@ const openEditModal = (moviment: MovimentCompteCorrent) => {
 const closeModal = () => {
     showModal.value = false;
     form.reset();
+    showNewCategory.value = false;
+    newCatNom.value = '';
+    newCatParentId.value = null;
+    newCatError.value = '';
 };
 
 const submitForm = () => {
@@ -377,6 +469,45 @@ const duplicarUn = (moviment: MovimentCompteCorrent) => {
                                     type="date"
                                     class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                 />
+                            </div>
+
+                            <!-- Dreceres de rang de dates -->
+                            <div class="flex items-end gap-2">
+                                <div class="flex flex-col gap-1">
+                                    <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Període</span>
+                                    <div class="flex gap-1">
+                                        <button
+                                            type="button"
+                                            @click="setDateRange('week')"
+                                            class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600"
+                                        >Setmana</button>
+                                        <button
+                                            type="button"
+                                            @click="setDateRange('month')"
+                                            class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600"
+                                        >Mes</button>
+                                        <button
+                                            type="button"
+                                            @click="setDateRange('year')"
+                                            class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600"
+                                        >Any</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Ordre -->
+                            <div>
+                                <label for="ordre" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Ordre
+                                </label>
+                                <select
+                                    id="ordre"
+                                    v-model="filterForm.ordre"
+                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                >
+                                    <option value="desc">Més recent primer</option>
+                                    <option value="asc">Més antic primer</option>
+                                </select>
                             </div>
                         </div>
 
@@ -654,7 +785,7 @@ const duplicarUn = (moviment: MovimentCompteCorrent) => {
                                         Categoria (opcional)
                                     </label>
                                     <CategoryTreeSelect
-                                        :categories="categories"
+                                        :categories="localCategories"
                                         v-model="form.categoria_id"
                                         :allow-none="true"
                                         placeholder="Selecciona una categoria..."
@@ -662,6 +793,60 @@ const duplicarUn = (moviment: MovimentCompteCorrent) => {
                                     <p v-if="form.errors.categoria_id" class="mt-1 text-sm text-red-600 dark:text-red-400">
                                         {{ form.errors.categoria_id }}
                                     </p>
+
+                                    <!-- Crear nova categoria inline -->
+                                    <div class="mt-2">
+                                        <button
+                                            v-if="!showNewCategory"
+                                            type="button"
+                                            @click="openNewCategory"
+                                            class="mt-1 inline-flex items-center gap-1 rounded border border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50"
+                                        >+ Nova categoria</button>
+
+                                        <div v-else class="mt-2 rounded-md border border-indigo-200 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/20 p-3 space-y-2">
+                                            <p class="text-xs font-semibold text-indigo-700 dark:text-indigo-300">Nova categoria</p>
+
+                                            <div>
+                                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Nom</label>
+                                                <input
+                                                    v-model="newCatNom"
+                                                    type="text"
+                                                    placeholder="Nom de la categoria"
+                                                    @keyup.enter="createCategory"
+                                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Penja de (opcional)</label>
+                                                <select
+                                                    v-model="newCatParentId"
+                                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
+                                                >
+                                                    <option :value="null">— Arrel —</option>
+                                                    <option v-for="opt in flatCategoryOptions" :key="opt.id" :value="opt.id">
+                                                        {{ opt.path }}
+                                                    </option>
+                                                </select>
+                                            </div>
+
+                                            <p v-if="newCatError" class="text-xs text-red-600 dark:text-red-400">{{ newCatError }}</p>
+
+                                            <div class="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    @click="createCategory"
+                                                    :disabled="!newCatNom.trim() || newCatCreating"
+                                                    class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                                                >{{ newCatCreating ? 'Creant...' : 'Crear i seleccionar' }}</button>
+                                                <button
+                                                    type="button"
+                                                    @click="showNewCategory = false"
+                                                    class="inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50"
+                                                >Cancel·lar</button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
