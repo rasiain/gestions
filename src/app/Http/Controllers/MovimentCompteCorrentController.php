@@ -35,12 +35,14 @@ class MovimentCompteCorrentController extends Controller
         $compteCorrentId = $request->input('compte_corrent_id', $comptesCorrents->first()?->id);
 
         // Get filters
+        $ordre = in_array($request->input('ordre'), ['asc', 'desc']) ? $request->input('ordre') : 'desc';
         $filters = [
             'search' => $request->input('search'),
             'categoria_id' => $request->input('categoria_id'),
             'data_inici' => $request->input('data_inici'),
             'data_fi' => $request->input('data_fi'),
             'tipus' => $request->input('tipus'), // 'ingressos', 'despeses', or null for all
+            'ordre' => $ordre,
         ];
 
         // Base query
@@ -76,9 +78,8 @@ class MovimentCompteCorrentController extends Controller
             $query->where('import', '<', 0);
         }
 
-        // Order by date descending (most recent first)
-        $moviments = $query->orderBy('data_moviment', 'desc')
-            ->orderBy('id', 'desc')
+        $moviments = $query->orderBy('data_moviment', $ordre)
+            ->orderBy('id', $ordre)
             ->paginate(50)
             ->withQueryString()
             ->through(function ($moviment) {
