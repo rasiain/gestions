@@ -32,7 +32,7 @@ class MovimentCompteCorrentController extends Controller
             ->get();
 
         // Get selected compte or use first one
-        $compteCorrentId = $request->input('compte_corrent_id', $comptesCorrents->first()?->id);
+        $compteCorrentId = $request->integer('compte_corrent_id') ?: $comptesCorrents->first()?->id;
 
         // Get filters
         $ordre = in_array($request->input('ordre'), ['asc', 'desc']) ? $request->input('ordre') : 'desc';

@@ -109,9 +109,10 @@ class ImpostosIvaController extends Controller
             $arrendadorable = $arrendador?->arrendadorable;
 
             return [
-                'id'            => $lloguer->id,
-                'nom'           => $lloguer->nom,
-                'immoble_adreca' => $lloguer->immoble?->adreca,
+                'id'              => $lloguer->id,
+                'nom'             => $lloguer->nom,
+                'ruta_descarrega' => $lloguer->ruta_descarrega,
+                'immoble_adreca'  => $lloguer->immoble?->adreca,
                 'arrendador'    => $arrendadorable ? (function () use ($arrendadorable) {
                     $isPersona = $arrendadorable instanceof \App\Models\Persona;
                     $base = [

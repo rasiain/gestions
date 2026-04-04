@@ -54,6 +54,26 @@ docker compose exec app npm run build         # compilar assets frontend (Vite)
 
 > **Nota**: Vite NO s'executa via Supervisor. Cal compilar manualment amb `npm run build` cada cop que es modifiquen fitxers Vue/TS/CSS.
 
+## Volums Docker i exportació de fitxers
+
+El `docker-compose.yml` munta un volum addicional per permetre que el contenidor escrigui fitxers directament al sistema de fitxers del Mac:
+
+```yaml
+volumes:
+  - /Users/ricardasiain/Documents:/Users/ricardasiain/Documents
+```
+
+Aquest muntatge és necessari per a la funcionalitat de **ruta de descàrrega automàtica del llibre d'IVA**: quan un lloguer té configurada una ruta de descàrrega, l'aplicació hi desa el fitxer Excel directament, a més de la descàrrega pel navegador.
+
+> **Si l'aplicació es trasllada a una altra màquina o usuari**, cal:
+>
+> 1. Actualitzar el volum a `docker-compose.yml` perquè coincideixi amb el path del nou sistema:
+>    ```yaml
+>    - /Ruta/Nova/Documents:/Ruta/Nova/Documents
+>    ```
+> 2. Reiniciar el contenidor: `docker compose up -d`
+> 3. Actualitzar les rutes de descàrrega configurades a cada lloguer des de la interfície (Lloguers → editar → "Ruta de descàrrega del llibre d'IVA").
+
 ## Convencions de Codi
 
 - **Commits**: Conventional Commits en català

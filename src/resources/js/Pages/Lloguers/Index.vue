@@ -3,7 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
 import FacturesModal from '@/Components/FacturesModal.vue';
 import RevisioIpcModal from '@/Components/RevisioIpcModal.vue';
-import { Head, useForm, router } from '@inertiajs/vue3';
+import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import { ref, computed, watch } from 'vue';
 
 interface Immoble {
@@ -74,6 +74,7 @@ interface Lloguer {
     retencio_irpf: boolean;
     iva_percentatge: string | null;
     irpf_percentatge: string | null;
+    ruta_descarrega: string | null;
     gestoria: Proveidor | null;
     propietaris: PersonaBasic[];
     contracte_actiu: ContracteActiu | null;
@@ -109,6 +110,7 @@ const lloguerForm = useForm({
     retencio_irpf: false,
     iva_percentatge: 21.00 as number | null,
     irpf_percentatge: 19.00 as number | null,
+    ruta_descarrega: '' as string,
 });
 
 const openCreateLloguerModal = () => {
@@ -132,6 +134,7 @@ const openEditLloguerModal = (lloguer: Lloguer) => {
     lloguerForm.retencio_irpf = lloguer.retencio_irpf;
     lloguerForm.iva_percentatge = lloguer.iva_percentatge ? parseFloat(lloguer.iva_percentatge) : 21.00;
     lloguerForm.irpf_percentatge = lloguer.irpf_percentatge ? parseFloat(lloguer.irpf_percentatge) : 19.00;
+    lloguerForm.ruta_descarrega = lloguer.ruta_descarrega || '';
     showLloguerModal.value = true;
 };
 
@@ -153,6 +156,40 @@ const submitLloguer = () => {
         });
     }
 };
+
+const llibreIvaMsg = ref<{ text: string; ok: boolean } | null>(null);
+
+function mostrarLlibreIvaMsg(text: string, ok: boolean) {
+    llibreIvaMsg.value = { text, ok };
+    setTimeout(() => { llibreIvaMsg.value = null; }, 4000);
+}
+
+async function exportarLlibreIva(lloguerEl: Lloguer, any: number) {
+    const csrfToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
+    const postUrl = `/lloguers/${lloguerEl.id}/desar-llibre-iva?any=${any}`;
+    const downloadUrl = `/lloguers/${lloguerEl.id}/exportar-llibre-iva?any=${any}`;
+
+    const doPost = async (force = false) =>
+        fetch(force ? postUrl + '&force=1' : postUrl, {
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': csrfToken },
+        }).then(r => r.json()).catch(() => null);
+
+    let result = await doPost();
+    if (!result) { mostrarLlibreIvaMsg('Error de comunicació.', false); return; }
+
+    if (result.use_download) { window.location.href = downloadUrl; return; }
+
+    if (result.exists) {
+        if (!confirm(`El fitxer "${result.filename}" ja existeix.\n\nVols sobreescriure'l?`)) return;
+        result = await doPost(true);
+    }
+
+    mostrarLlibreIvaMsg(
+        result?.saved ? `Fitxer desat: ${result.filename}` : 'Error en desar el fitxer.',
+        result?.saved ?? false
+    );
+}
 
 const deleteLloguer = (lloguer: Lloguer) => {
     if (confirm(`Estàs segur que vols eliminar el lloguer "${lloguer.nom}"?`)) {
@@ -331,7 +368,7 @@ const movimentsPage = ref(1);
 const movimentsTotal = ref(0);
 const movimentsHasMore = ref(false);
 const movimentsLoading = ref(false);
-const movimentsFilterAny = ref<number | null>(null);
+const movimentsFilterAny = ref<number | null>(new Date().getFullYear());
 const movimentsFilterClassificats = ref(false);
 const movimentsFilterPendents = ref(false);
 const movimentsAnys = ref<number[]>([]);
@@ -729,7 +766,7 @@ watch(selectedLloguerId, (newId) => {
     movimentsTotal.value = 0;
     movimentsHasMore.value = false;
     movimentsPage.value = 1;
-    movimentsFilterAny.value = null;
+    movimentsFilterAny.value = new Date().getFullYear();
     movimentsFilterClassificats.value = false;
     movimentsFilterPendents.value = false;
     if (newId) {
@@ -882,7 +919,11 @@ const formatCurrency = (value: string | null): string => {
         </template>
 
         <div class="py-12">
-            <div class="mx-auto max-w-screen-2xl sm:px-6 lg:px-8 space-y-6">
+            <div class="mx-auto max-w-screen-2xl sm:px-6 lg:px-8">
+                <div class="flex gap-6 items-start">
+
+                <!-- Main content -->
+                <div class="flex-1 min-w-0 space-y-6">
 
                 <!-- Lloguers table -->
                 <div class="overflow-hidden bg-white shadow-sm dark:bg-gray-800 sm:rounded-lg">
@@ -1119,7 +1160,7 @@ const formatCurrency = (value: string | null): string => {
                                             :key="llogater.id"
                                             class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-sm text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
                                         >
-                                            {{ llogater.cognoms }}, {{ llogater.nom }}
+                                            {{ llogater.cognoms ? llogater.cognoms + ', ' + llogater.nom : llogater.nom }}
                                             <button
                                                 type="button"
                                                 @click="removeLlogater(llogater.id)"
@@ -1138,7 +1179,7 @@ const formatCurrency = (value: string | null): string => {
                                     >
                                         <option value="">Afegir llogater…</option>
                                         <option v-for="llogater in availableLlogaters" :key="llogater.id" :value="llogater.id">
-                                            {{ llogater.cognoms }}, {{ llogater.nom }}
+                                            {{ llogater.cognoms ? llogater.cognoms + ', ' + llogater.nom : llogater.nom }}
                                         </option>
                                     </select>
                                     <p v-else-if="llogaters.length === 0" class="text-sm italic text-gray-400">
@@ -1329,17 +1370,17 @@ const formatCurrency = (value: string | null): string => {
                                     </svg>
                                     Exportar
                                 </a>
-                                <a
+                                <button
                                     v-if="!selectedLloguer.es_habitatge"
-                                    :href="`/lloguers/${selectedLloguer.id}/exportar-llibre-iva?any=${movimentsFilterAny}`"
-                                    target="_blank"
+                                    type="button"
                                     class="inline-flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-green-700 transition-colors"
+                                    @click.stop="exportarLlibreIva(selectedLloguer, movimentsFilterAny ?? new Date().getFullYear())"
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                     </svg>
                                     Llibre IVA
-                                </a>
+                                </button>
                             </div>
                         </div>
 
@@ -1475,6 +1516,37 @@ const formatCurrency = (value: string | null): string => {
                     </div>
                 </div>
 
+                </div><!-- end main content (flex-1) -->
+
+                <!-- Sidebar: Accions fiscals -->
+                <div class="w-52 shrink-0">
+                    <div class="rounded-lg bg-white p-5 shadow-sm dark:bg-gray-800 sticky top-4">
+                        <div class="flex items-center gap-2 mb-3">
+                            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-red-100 dark:bg-red-900">
+                                <svg class="h-4 w-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
+                                </svg>
+                            </div>
+                            <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Impostos</h3>
+                        </div>
+                        <div class="space-y-2 border-l-2 border-red-200 dark:border-red-800 pl-3">
+                            <Link
+                                :href="route('impostos.irpf')"
+                                class="block text-sm text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors"
+                            >
+                                → IRPF Lloguers
+                            </Link>
+                            <Link
+                                :href="route('impostos.iva')"
+                                class="block text-sm text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors"
+                            >
+                                → IVA Lloguers
+                            </Link>
+                        </div>
+                    </div>
+                </div><!-- end sidebar -->
+
+                </div><!-- end flex -->
             </div>
         </div>
 
@@ -1634,6 +1706,18 @@ const formatCurrency = (value: string | null): string => {
                                     />
                                 </div>
 
+                                <div class="sm:col-span-2">
+                                    <label for="ruta_descarrega" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Ruta de descàrrega del llibre d'IVA</label>
+                                    <input
+                                        id="ruta_descarrega"
+                                        v-model="lloguerForm.ruta_descarrega"
+                                        type="text"
+                                        placeholder="/ruta/al/directori"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Si s'especifica, el fitxer es guardarà automàticament en aquesta ruta en exportar.</p>
+                                </div>
+
                             </div>
                         </div>
 
@@ -1656,6 +1740,15 @@ const formatCurrency = (value: string | null): string => {
                     </form>
                 </div>
             </div>
+        </div>
+
+        <!-- Toast Llibre IVA -->
+        <div
+            v-if="llibreIvaMsg"
+            class="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-lg px-4 py-3 shadow-lg text-sm font-medium"
+            :class="llibreIvaMsg.ok ? 'bg-green-600 text-white' : 'bg-red-600 text-white'"
+        >
+            {{ llibreIvaMsg.text }}
         </div>
 
         <!-- Edició Moviment Modal -->

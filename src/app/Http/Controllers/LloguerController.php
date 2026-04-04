@@ -37,7 +37,7 @@ class LloguerController extends Controller
                         $q2->whereNull('data_fi')->orWhere('data_fi', '>', now()->toDateString());
                     })->orderBy('data_inici', 'desc');
                 },
-                'contractes.llogaters',
+                'contractes.llogaters.persona',
                 'contractes.arrendador.arrendadorable',
             ])
             ->orderBy('nom')
@@ -65,6 +65,7 @@ class LloguerController extends Controller
                     'retencio_irpf'         => $lloguer->retencio_irpf,
                     'iva_percentatge'       => $lloguer->iva_percentatge,
                     'irpf_percentatge'      => $lloguer->irpf_percentatge,
+                    'ruta_descarrega'       => $lloguer->ruta_descarrega,
                     'gestoria'              => $lloguer->gestoria ? [
                         'id'             => $lloguer->gestoria->id,
                         'nom_rao_social' => $lloguer->gestoria->nom_rao_social,
@@ -83,8 +84,12 @@ class LloguerController extends Controller
                         'llogater_ids' => $contracteActiu->llogaters->pluck('id')->toArray(),
                         'llogaters'   => $contracteActiu->llogaters->map(fn($l) => [
                             'id'      => $l->id,
-                            'nom'     => $l->nom,
-                            'cognoms' => $l->cognoms,
+                            'nom'     => $l->tipus === 'persona'
+                                ? ($l->persona?->nom ?? '')
+                                : ($l->nom_rao_social ?? ''),
+                            'cognoms' => $l->tipus === 'persona'
+                                ? ($l->persona?->cognoms ?? '')
+                                : '',
                         ])->values()->toArray(),
                         'arrendador_id' => $contracteActiu->arrendador_id,
                         'arrendador' => $contracteActiu->arrendador ? [
@@ -103,7 +108,15 @@ class LloguerController extends Controller
 
         $immobles = Immoble::orderBy('adreca')->get(['id', 'adreca']);
         $comptesCorrents = CompteCorrent::orderBy('nom')->get(['id', 'nom']);
-        $llogaters = Llogater::orderBy('cognoms')->orderBy('nom')->get(['id', 'nom', 'cognoms']);
+        $llogaters = Llogater::with('persona')
+            ->get()
+            ->map(fn($l) => [
+                'id'      => $l->id,
+                'nom'     => $l->tipus === 'persona' ? ($l->persona?->nom ?? '') : ($l->nom_rao_social ?? ''),
+                'cognoms' => $l->tipus === 'persona' ? ($l->persona?->cognoms ?? '') : '',
+            ])
+            ->sortBy('cognoms')
+            ->values();
         $proveidors = Proveidor::orderBy('nom_rao_social')->get(['id', 'nom_rao_social']);
 
         $arrendadors = Arrendador::with('arrendadorable')
@@ -176,13 +189,15 @@ class LloguerController extends Controller
         if ($request->boolean('classificats')) {
             $query->where(function ($q) use ($lloguer) {
                 $q->whereHas('despesa', fn($q2) => $q2->where('lloguer_id', $lloguer->id))
-                  ->orWhereHas('ingres', fn($q2) => $q2->where('lloguer_id', $lloguer->id));
+                  ->orWhereHas('ingres', fn($q2) => $q2->where('lloguer_id', $lloguer->id))
+                  ->orWhereHas('factura', fn($q2) => $q2->where('lloguer_id', $lloguer->id));
             });
         }
 
         if ($request->boolean('pendents')) {
             $query->whereDoesntHave('despesa')
                   ->whereDoesntHave('ingres')
+                  ->whereDoesntHave('factura', fn($q) => $q->where('lloguer_id', $lloguer->id))
                   ->where('exclou_lloguer', false);
         }
 

@@ -71,12 +71,7 @@ const bankTypeOptions = [
 const defaultBankType = (compte: CompteCorrent | undefined): string | null =>
     compte?.bank_type ?? compte?.last_import_type ?? null;
 
-// Quan canvia el compte (per navegació Inertia o selecció manual), sincronitzem
-// selectedCompteCorrent amb el prop i auto-seleccionem el tipus d'importació.
-watch(() => props.selectedCompteCorrentId, (newId) => {
-    selectedCompteCorrent.value = newId ?? null;
-}, { immediate: false });
-
+// Auto-selecciona el tipus de banc quan canvia el compte
 watch(selectedCompteCorrent, (newId) => {
     const compte = props.comptesCorrents.find(c => c.id === newId);
     selectedBankType.value = defaultBankType(compte);

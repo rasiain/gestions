@@ -22,6 +22,7 @@ class Lloguer extends Model
         'retencio_irpf',
         'iva_percentatge',
         'irpf_percentatge',
+        'ruta_descarrega',
     ];
 
     protected $casts = [

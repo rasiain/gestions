@@ -13,7 +13,8 @@ class ImpostosIrpfController extends Controller
     {
         $any = $request->integer('any', (int) date('Y'));
 
-        $lloguers = Lloguer::with(['immoble', 'contractes.llogaters'])
+        $lloguers = Lloguer::with(['immoble', 'contractes.llogaters.persona'])
+            ->where('es_habitatge', true)
             ->orderBy('nom')
             ->get();
 
@@ -100,8 +101,12 @@ class ImpostosIrpfController extends Controller
                     'data_inici' => $c->data_inici->toDateString(),
                     'data_fi' => $c->data_fi?->toDateString(),
                     'llogaters' => $c->llogaters->map(fn ($l) => [
-                        'nom' => $l->nom . ' ' . $l->cognoms,
-                        'identificador' => $l->identificador,
+                        'nom' => $l->tipus === 'persona'
+                            ? trim(($l->persona?->nom ?? '') . ' ' . ($l->persona?->cognoms ?? ''))
+                            : ($l->nom_rao_social ?? ''),
+                        'identificador' => $l->tipus === 'persona'
+                            ? ($l->persona?->nif ?? '')
+                            : ($l->nif ?? ''),
                     ])->values(),
                 ])->values(),
             ];

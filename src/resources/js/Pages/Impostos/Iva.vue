@@ -42,6 +42,7 @@ interface ArrendadorResum {
 interface LloguerIva {
     id: number;
     nom: string;
+    ruta_descarrega: string | null;
     immoble_adreca: string | null;
     arrendador: ArrendadorResum | null;
     trimestres: Record<number, TrimesteDades>;
@@ -90,6 +91,14 @@ function canviarAny(event: Event) {
 
 const anyOpcions = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
+// ── Notificació exportació ───────────────────────────────────────
+const exportMsg = ref<{ text: string; ok: boolean } | null>(null);
+
+function mostrarExportMsg(text: string, ok: boolean) {
+    exportMsg.value = { text, ok };
+    setTimeout(() => { exportMsg.value = null; }, 4000);
+}
+
 // ── Modal detall ────────────────────────────────────────────────
 type DetallTipus = 'repercutit' | 'suportat';
 
@@ -136,6 +145,47 @@ function obreArrendador(arrendador: ArrendadorResum) {
 function tancaArrendador() {
     showArrendador.value = false;
 }
+
+async function exportarLlibre(lloguer: LloguerIva) {
+    const csrfToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
+
+    // Sempre fem POST: el servidor decideix si desa al disc o si cal fer descàrrega
+    const postUrl = `/lloguers/${lloguer.id}/desar-llibre-iva?any=${props.any}`;
+    const downloadUrl = `/lloguers/${lloguer.id}/exportar-llibre-iva?any=${props.any}`;
+
+    const doPost = async (force = false) => {
+        const url = force ? postUrl + '&force=1' : postUrl;
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': csrfToken },
+        }).then(r => r.json()).catch(() => null);
+    };
+
+    let result = await doPost();
+
+    if (!result) {
+        mostrarExportMsg('Error de comunicació amb el servidor.', false);
+        return;
+    }
+
+    if (result.use_download) {
+        // Sense ruta configurada: descàrrega directa pel navegador
+        window.location.href = downloadUrl;
+        return;
+    }
+
+    if (result.exists) {
+        const ok = confirm(`El fitxer "${result.filename}" ja existeix a la ruta de descàrrega.\n\nVols sobreescriure'l?`);
+        if (!ok) return;
+        result = await doPost(true);
+    }
+
+    if (result?.saved) {
+        mostrarExportMsg(`Fitxer desat: ${result.filename}`, true);
+    } else {
+        mostrarExportMsg('Error en desar el fitxer.', false);
+    }
+}
 </script>
 
 <template>
@@ -156,6 +206,19 @@ function tancaArrendador() {
                 </select>
             </div>
         </template>
+
+        <!-- Toast exportació -->
+        <Transition enter-active-class="transition ease-out duration-200" enter-from-class="opacity-0 translate-y-1" enter-to-class="opacity-100 translate-y-0" leave-active-class="transition ease-in duration-150" leave-from-class="opacity-100" leave-to-class="opacity-0">
+            <div
+                v-if="exportMsg"
+                class="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-lg px-4 py-3 shadow-lg text-sm font-medium"
+                :class="exportMsg.ok ? 'bg-green-600 text-white' : 'bg-red-600 text-white'"
+            >
+                <svg v-if="exportMsg.ok" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                {{ exportMsg.text }}
+            </div>
+        </Transition>
 
         <div class="py-12">
             <div class="mx-auto max-w-screen-2xl sm:px-6 lg:px-8">
@@ -293,17 +356,17 @@ function tancaArrendador() {
                                     {{ formatEur(lloguer.total_resultat) }}
                                 </td>
                                 <td class="whitespace-nowrap px-3 py-3 text-center border-l border-gray-100 dark:border-gray-700">
-                                    <a
-                                        :href="`/lloguers/${lloguer.id}/exportar-llibre-iva?any=${props.any}`"
-                                        target="_blank"
+                                    <button
+                                        type="button"
                                         title="Exportar llibre IVA"
                                         class="inline-flex items-center gap-1 rounded-md bg-green-100 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50"
+                                        @click.stop="exportarLlibre(lloguer)"
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                         </svg>
                                         Excel
-                                    </a>
+                                    </button>
                                 </td>
                             </tr>
                         </tbody>
