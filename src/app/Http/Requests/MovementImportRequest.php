@@ -39,6 +39,8 @@ class MovementImportRequest extends FormRequest
                 'string',
                 'in:caixa_enginyers,caixabank,kmymoney',
             ],
+            'excluded_hashes' => ['nullable', 'array'],
+            'excluded_hashes.*' => ['string'],
         ];
     }
 

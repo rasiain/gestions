@@ -89,21 +89,8 @@ class MovementImportController extends Controller
                 'import_mode' => $importMode,
             ]);
 
-            // Limit movements in preview to avoid memory/timeout issues with large files
-            // Show last 100 movements (most recent) for preview
-            $totalMovements = count($result['movements']);
-            $previewLimit = 100;
-
-            if ($totalMovements > $previewLimit) {
-                // Keep original file order, just limit the preview
-                $result['movements'] = array_slice($result['movements'], 0, $previewLimit);
-                $result['preview_limited'] = true;
-                $result['total_movements'] = $totalMovements;
-            } else {
-                // Keep original file order
-                $result['preview_limited'] = false;
-                $result['total_movements'] = $totalMovements;
-            }
+            $result['preview_limited'] = false;
+            $result['total_movements'] = count($result['movements']);
 
             return response()->json([
                 'success' => true,
@@ -160,6 +147,16 @@ class MovementImportController extends Controller
 
             // Process movements
             $result = $this->importService->processMovements($parsedMovements, $compteCorrentId, $importMode);
+
+            // Excloure els moviments marcats manualment per l'usuari
+            $excludedHashes = $validated['excluded_hashes'] ?? [];
+            if (!empty($excludedHashes)) {
+                $result['movements'] = array_values(array_filter(
+                    $result['movements'],
+                    fn($m) => !in_array($m['hash'] ?? '', $excludedHashes, true)
+                ));
+                $result['to_import_count'] = count($result['movements']);
+            }
 
             // Import to database
             $stats = $this->importService->import($result['movements'], $compteCorrentId);

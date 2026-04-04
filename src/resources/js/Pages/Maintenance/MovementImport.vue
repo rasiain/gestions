@@ -10,6 +10,7 @@ interface CompteCorrent {
     nom: string | null;
     entitat: string;
     bank_type: string | null;
+    last_import_type: string | null;
     ordre: number;
 }
 
@@ -48,14 +49,7 @@ const props = defineProps<Props>();
 
 const selectedFile = ref<File | null>(null);
 const selectedCompteCorrent = ref<number | null>(props.selectedCompteCorrentId ?? null);
-const initialBankType = (() => {
-    if (props.selectedCompteCorrentId) {
-        const compte = props.comptesCorrents.find(c => c.id === props.selectedCompteCorrentId);
-        if (compte?.bank_type) return compte.bank_type;
-    }
-    return null;
-})();
-const selectedBankType = ref<string | null>(initialBankType);
+const selectedBankType = ref<string | null>(null);
 const isProcessing = ref<boolean>(false);
 const isParsed = ref<boolean>(false);
 const parsedData = ref<ParsedData | null>(null);
@@ -68,38 +62,27 @@ const selectedCompte = computed(() => {
     return props.comptesCorrents.find(c => c.id === selectedCompteCorrent.value);
 });
 
-const bankTypeLabels: Record<string, string> = {
-    'caixa_enginyers': 'Caixa d\'Enginyers',
-    'caixabank': 'CaixaBank',
-    'kmymoney': 'KMyMoney (QIF)'
-};
+const bankTypeOptions = [
+    { value: 'caixa_enginyers', label: "Caixa d'Enginyers" },
+    { value: 'caixabank',       label: 'CaixaBank' },
+    { value: 'kmymoney',        label: 'KMyMoney (QIF)' },
+];
 
-const bankTypeOptions = computed(() => {
-    const options = [];
+const defaultBankType = (compte: CompteCorrent | undefined): string | null =>
+    compte?.bank_type ?? compte?.last_import_type ?? null;
 
-    // Add the bank type of the selected account if it exists
-    if (selectedCompte.value?.bank_type) {
-        options.push({
-            value: selectedCompte.value.bank_type,
-            label: bankTypeLabels[selectedCompte.value.bank_type] || selectedCompte.value.bank_type
-        });
-    }
+// Quan canvia el compte (per navegació Inertia o selecció manual), sincronitzem
+// selectedCompteCorrent amb el prop i auto-seleccionem el tipus d'importació.
+watch(() => props.selectedCompteCorrentId, (newId) => {
+    selectedCompteCorrent.value = newId ?? null;
+}, { immediate: false });
 
-    // Always add KMyMoney option
-    options.push({
-        value: 'kmymoney',
-        label: 'KMyMoney (QIF)'
-    });
-
-    return options;
-});
-
-// Reset bank type selection when account changes
-watch(selectedCompteCorrent, () => {
-    selectedBankType.value = null;
+watch(selectedCompteCorrent, (newId) => {
+    const compte = props.comptesCorrents.find(c => c.id === newId);
+    selectedBankType.value = defaultBankType(compte);
     isParsed.value = false;
     parsedData.value = null;
-});
+}, { immediate: true });
 
 const handleFileChange = (event: Event) => {
     const target = event.target as HTMLInputElement;
@@ -187,6 +170,9 @@ const importMovements = async () => {
         formData.append('file', selectedFile.value);
         formData.append('compte_corrent_id', selectedCompteCorrent.value.toString());
         formData.append('bank_type', selectedBankType.value);
+        // Enviar tots els hashes exclosos: els actuals (sense recalcular) + els de rondes anteriors
+        const allExcluded = new Set([...excludedHashes.value, ...committedExcludedHashes.value]);
+        allExcluded.forEach(hash => formData.append('excluded_hashes[]', hash));
 
         const response = await axios.post('/maintenance/movements/import', formData, {
             headers: {
@@ -214,10 +200,14 @@ const importMovements = async () => {
 
 const resetForm = () => {
     selectedFile.value = null;
-    selectedBankType.value = null;
     isParsed.value = false;
     parsedData.value = null;
     errorMessage.value = '';
+    previewOrdre.value = 'desc';
+    previewDataInici.value = '';
+    previewDataFi.value = '';
+    excludedHashes.value = new Set();
+    committedExcludedHashes.value = new Set();
     const fileInput = document.getElementById('file-upload') as HTMLInputElement;
     if (fileInput) fileInput.value = '';
 };
@@ -232,6 +222,97 @@ const formatCurrency = (amount: number) => {
 const formatDate = (date: string) => {
     const [year, month, day] = date.split('-');
     return `${day}/${month}/${year}`;
+};
+
+const previewOrdre = ref<'asc' | 'desc'>('desc');
+const previewDataInici = ref<string>('');
+const previewDataFi = ref<string>('');
+const excludedHashes = ref<Set<string>>(new Set());
+// Hashes exclosos confirmats (acumulats a través de múltiples rondes de recàlcul)
+const committedExcludedHashes = ref<Set<string>>(new Set());
+
+const toggleExcluded = (hash: string) => {
+    const s = new Set(excludedHashes.value);
+    if (s.has(hash)) {
+        s.delete(hash);
+    } else {
+        s.add(hash);
+    }
+    excludedHashes.value = s;
+};
+
+// Recalcula el saldo per a cada moviment no exclòs, en ordre cronològic,
+// partint del saldo_posterior de l'últim moviment exclòs (o del darrer moviment de la BD).
+const computedSaldos = computed((): Record<string, number | null> => {
+    const all = [...(parsedData.value?.movements ?? [])].sort((a, b) =>
+        a.data_moviment.localeCompare(b.data_moviment)
+    );
+
+    const rawBase = parsedData.value?.last_db_movement?.saldo_posterior;
+    let base: number | null = rawBase != null ? Number(rawBase) : null;
+    const result: Record<string, number | null> = {};
+
+    for (const m of all) {
+        const importVal = Number(m.import);
+        const saldoVal = m.saldo_posterior != null ? Number(m.saldo_posterior) : null;
+
+        if (excludedHashes.value.has(m.hash)) {
+            if (saldoVal !== null) {
+                base = saldoVal;
+            } else if (base !== null) {
+                base = base + importVal;
+            }
+            result[m.hash] = null;
+        } else {
+            if (base !== null) {
+                base = base + importVal;
+                result[m.hash] = base;
+            } else if (saldoVal !== null) {
+                result[m.hash] = saldoVal;
+                base = saldoVal;
+            } else {
+                result[m.hash] = null;
+            }
+        }
+    }
+
+    return result;
+});
+
+const filteredMovements = computed(() => {
+    if (!parsedData.value?.movements) return [];
+    return parsedData.value.movements.filter(m => {
+        if (previewDataInici.value && m.data_moviment < previewDataInici.value) return false;
+        if (previewDataFi.value && m.data_moviment > previewDataFi.value) return false;
+        return true;
+    });
+});
+
+const sortedMovements = computed(() => {
+    return [...filteredMovements.value].sort((a, b) => {
+        const cmp = a.data_moviment.localeCompare(b.data_moviment);
+        return previewOrdre.value === 'asc' ? cmp : -cmp;
+    });
+});
+
+const activeCount = computed(() =>
+    (parsedData.value?.movements ?? []).filter(m => !excludedHashes.value.has(m.hash)).length
+);
+
+const recalcularSaldos = () => {
+    if (!parsedData.value) return;
+    const saldos = computedSaldos.value;
+    // Acumular els hashes exclosos al conjunt persistent
+    excludedHashes.value.forEach(h => committedExcludedHashes.value.add(h));
+    // Actualitzar saldos i eliminar exclosos de la llista de previsualització
+    parsedData.value.movements = parsedData.value.movements
+        .filter(m => !excludedHashes.value.has(m.hash))
+        .map(m => ({
+            ...m,
+            saldo_posterior: saldos[m.hash] !== undefined ? saldos[m.hash] : m.saldo_posterior,
+        }));
+    parsedData.value.total_movements = parsedData.value.movements.length;
+    excludedHashes.value = new Set();
 };
 
 </script>
@@ -473,22 +554,59 @@ const formatDate = (date: string) => {
                             </div>
                         </div>
 
-                        <!-- Preview limit info -->
-                        <div
-                            v-if="parsedData.preview_limited"
-                            class="mb-4 rounded-md bg-blue-50 dark:bg-blue-900/20 p-4 border border-blue-200 dark:border-blue-800"
-                        >
-                            <p class="text-sm text-blue-800 dark:text-blue-200">
-                                ℹ️ Mostrant els últims 100 moviments de {{ parsedData.total_movements }} totals (ordenats dels més recents als més antics).
-                                Tots els moviments s'importaran quan confirmis.
-                            </p>
-                        </div>
-
                         <!-- Movements Table -->
                         <div v-if="parsedData.movements && parsedData.movements.length > 0" class="mb-6 overflow-x-auto">
+                            <div class="mb-3 flex flex-wrap items-end gap-4">
+                                <div>
+                                    <label for="preview-data-inici" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data inici</label>
+                                    <input
+                                        id="preview-data-inici"
+                                        v-model="previewDataInici"
+                                        type="date"
+                                        class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label for="preview-data-fi" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data fi</label>
+                                    <input
+                                        id="preview-data-fi"
+                                        v-model="previewDataFi"
+                                        type="date"
+                                        class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label for="preview-ordre" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ordre</label>
+                                    <select
+                                        id="preview-ordre"
+                                        v-model="previewOrdre"
+                                        class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    >
+                                        <option value="desc">Més recent primer</option>
+                                        <option value="asc">Més antic primer</option>
+                                    </select>
+                                </div>
+                                <div class="flex items-end gap-3">
+                                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                                        Mostrant {{ sortedMovements.length }} de {{ parsedData.total_movements }} moviments
+                                        <span v-if="excludedHashes.size > 0" class="text-amber-600 dark:text-amber-400">
+                                            · {{ excludedHashes.size }} exclosos
+                                        </span>
+                                    </p>
+                                    <button
+                                        v-if="excludedHashes.size > 0"
+                                        @click="recalcularSaldos"
+                                        type="button"
+                                        class="inline-flex items-center rounded-md border border-amber-400 bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 text-sm font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                                    >
+                                        Aplicar exclusions i recalcular saldos
+                                    </button>
+                                </div>
+                            </div>
                             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                 <thead class="bg-gray-50 dark:bg-gray-700">
                                     <tr>
+                                        <th class="px-3 py-3 w-8"></th>
                                         <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Data</th>
                                         <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Concepte</th>
                                         <th class="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Import</th>
@@ -498,18 +616,31 @@ const formatDate = (date: string) => {
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                    <tr v-for="(movement, index) in parsedData.movements" :key="index">
-                                        <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                    <tr
+                                        v-for="(movement, index) in sortedMovements"
+                                        :key="index"
+                                        :class="excludedHashes.has(movement.hash) ? 'opacity-40' : ''"
+                                    >
+                                        <td class="px-3 py-2 text-center">
+                                            <input
+                                                type="checkbox"
+                                                :checked="!excludedHashes.has(movement.hash)"
+                                                @change="toggleExcluded(movement.hash)"
+                                                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700"
+                                                title="Desmarcar per excloure de la importació"
+                                            />
+                                        </td>
+                                        <td class="px-3 py-2 whitespace-nowrap text-sm" :class="excludedHashes.has(movement.hash) ? 'line-through text-gray-400' : 'text-gray-900 dark:text-gray-100'">
                                             {{ formatDate(movement.data_moviment) }}
                                         </td>
-                                        <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
+                                        <td class="px-3 py-2 text-sm" :class="excludedHashes.has(movement.hash) ? 'line-through text-gray-400' : 'text-gray-900 dark:text-gray-100'">
                                             {{ movement.concepte }}
                                         </td>
-                                        <td class="px-3 py-2 whitespace-nowrap text-sm text-right" :class="movement.import >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
+                                        <td class="px-3 py-2 whitespace-nowrap text-sm text-right" :class="excludedHashes.has(movement.hash) ? 'line-through text-gray-400' : movement.import >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
                                             {{ formatCurrency(movement.import) }}
                                         </td>
-                                        <td class="px-3 py-2 whitespace-nowrap text-sm text-right text-gray-900 dark:text-gray-100">
-                                            {{ movement.saldo_posterior !== null ? formatCurrency(movement.saldo_posterior) : '-' }}
+                                        <td class="px-3 py-2 whitespace-nowrap text-sm text-right" :class="excludedHashes.has(movement.hash) ? 'text-gray-400' : 'text-gray-900 dark:text-gray-100'">
+                                            {{ computedSaldos[movement.hash] !== null && computedSaldos[movement.hash] !== undefined ? formatCurrency(computedSaldos[movement.hash]!) : '-' }}
                                         </td>
                                         <td class="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
                                             {{ movement.categoria_path || '-' }}
@@ -530,8 +661,11 @@ const formatDate = (date: string) => {
                                 class="inline-flex justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <span v-if="isProcessing">Important...</span>
-                                <span v-else>Confirmar i importar moviments</span>
+                                <span v-else>Confirmar i importar {{ activeCount }} moviments<span v-if="excludedHashes.size > 0"> ({{ excludedHashes.size }} exclosos)</span></span>
                             </button>
+                            <p v-if="sortedMovements.length === 0" class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                                Cap moviment coincideix amb el filtre de dates. La importació inclourà tots igualment.
+                            </p>
                         </div>
                         <div v-else class="text-sm text-gray-600 dark:text-gray-400">
                             No hi ha moviments per importar
