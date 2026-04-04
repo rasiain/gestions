@@ -732,6 +732,11 @@ class MovementImportService
             // Reuse manually assigned category from previous movement
             $categoriaId = $previousMovement->categoria_id ?? $categoriaId;
 
+            // Reuse the manually cleaned-up concept from previous movement
+            if ($previousMovement->concepte_id) {
+                $concepteModel = MovimentConcepte::find($previousMovement->concepte_id) ?? $concepteModel;
+            }
+
             Log::info('Movement concept matched with previous movement', [
                 'concepte_original' => $concepteOriginal,
                 'concepte_id' => $concepteModel->id,
