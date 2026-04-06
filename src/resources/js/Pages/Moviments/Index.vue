@@ -2,7 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, onUnmounted } from 'vue';
 
 interface CompteCorrent {
     id: number;
@@ -185,6 +185,22 @@ const applyFilters = () => {
     });
 };
 
+const filterSnapshot = computed(() => ({
+    search:       filterForm.search,
+    categoria_id: filterForm.categoria_id,
+    tipus:        filterForm.tipus,
+    data_inici:   filterForm.data_inici,
+    data_fi:      filterForm.data_fi,
+    ordre:        filterForm.ordre,
+}));
+
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+watch(filterSnapshot, () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(applyFilters, 400);
+}, { deep: true });
+onUnmounted(() => { if (debounceTimer) clearTimeout(debounceTimer); });
+
 const formatLocalDate = (d: Date): string => {
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -215,7 +231,60 @@ const clearFilters = () => {
     filterForm.data_fi = '';
     filterForm.tipus = null;
     filterForm.ordre = 'desc';
-    applyFilters();
+};
+
+// ── Verificació de saldos ────────────────────────────────────────
+interface SaldoError {
+    id: number;
+    data_moviment: string;
+    concepte: string | null;
+    import: number;
+    saldo_esperat: number;
+    saldo_desat: number;
+    diferencia: number;
+}
+interface SenseSaldo {
+    id: number;
+    data_moviment: string;
+    concepte: string | null;
+    import: number;
+}
+const showVerificaModal = ref(false);
+const verificaLoading = ref(false);
+const verificaTotal = ref(0);
+const verificaErrors = ref<SaldoError[]>([]);
+const verificaSenseSaldo = ref<SenseSaldo[]>([]);
+
+const verificaSaldos = async () => {
+    if (!props.selectedCompteCorrentId) return;
+    verificaLoading.value = true;
+    showVerificaModal.value = true;
+    verificaErrors.value = [];
+    verificaSenseSaldo.value = [];
+    verificaTotal.value = 0;
+
+    const params = new URLSearchParams();
+    params.set('compte_corrent_id', String(props.selectedCompteCorrentId));
+    if (filterForm.search)       params.set('search', filterForm.search);
+    if (filterForm.categoria_id) params.set('categoria_id', String(filterForm.categoria_id));
+    if (filterForm.data_inici)   params.set('data_inici', filterForm.data_inici);
+    if (filterForm.data_fi)      params.set('data_fi', filterForm.data_fi);
+    if (filterForm.tipus)        params.set('tipus', filterForm.tipus);
+
+    try {
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+        const res = await fetch(`/moviments/verifica-saldos?${params}`, {
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
+        });
+        const data = await res.json();
+        verificaTotal.value      = data.total ?? 0;
+        verificaErrors.value     = data.errors ?? [];
+        verificaSenseSaldo.value = data.sense_saldo ?? [];
+    } catch {
+        verificaErrors.value = [];
+    } finally {
+        verificaLoading.value = false;
+    }
 };
 
 const openCreateModal = () => {
@@ -513,13 +582,6 @@ const duplicarUn = (moviment: MovimentCompteCorrent) => {
 
                         <div class="mt-4 flex gap-3">
                             <button
-                                @click="applyFilters"
-                                type="button"
-                                class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700"
-                            >
-                                Aplicar filtres
-                            </button>
-                            <button
                                 @click="clearFilters"
                                 type="button"
                                 class="inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600"
@@ -538,6 +600,13 @@ const duplicarUn = (moviment: MovimentCompteCorrent) => {
                                 Llistat de Moviments
                             </h3>
                             <div class="flex gap-3">
+                                <button
+                                    @click="verificaSaldos"
+                                    :disabled="!selectedCompte"
+                                    class="inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Verificar saldos
+                                </button>
                                 <Link
                                     :href="route('maintenance.movements.import', selectedCompte ? { compte_corrent_id: selectedCompte.id } : {})"
                                     class="inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600"
@@ -914,6 +983,79 @@ const duplicarUn = (moviment: MovimentCompteCorrent) => {
                             class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2 text-base font-medium text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                         >
                             Cancel·lar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Modal verificació de saldos -->
+        <div v-if="showVerificaModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex min-h-screen items-center justify-center px-4">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75" @click="showVerificaModal = false"></div>
+                <div class="relative w-full max-w-3xl rounded-lg bg-white dark:bg-gray-800 shadow-xl">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                        <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Verificació de saldos</h3>
+                        <button @click="showVerificaModal = false" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">&times;</button>
+                    </div>
+                    <div class="px-6 py-4">
+                        <div v-if="verificaLoading" class="py-8 text-center text-gray-500 dark:text-gray-400">
+                            Comprovant saldos…
+                        </div>
+                        <template v-else>
+                            <p class="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                                Moviments analitzats: <strong>{{ verificaTotal }}</strong>
+                            </p>
+
+                            <!-- Sense saldo -->
+                            <div v-if="verificaSenseSaldo.length" class="mb-4 rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-3">
+                                <p class="text-sm font-medium text-yellow-800 dark:text-yellow-300 mb-2">
+                                    {{ verificaSenseSaldo.length }} moviment(s) sense saldo desat — la cadena de verificació s'ha reiniciat des del moviment següent:
+                                </p>
+                                <ul class="text-xs text-yellow-700 dark:text-yellow-400 space-y-1">
+                                    <li v-for="m in verificaSenseSaldo" :key="m.id">
+                                        {{ m.data_moviment }} — {{ m.concepte ?? '(sense concepte)' }} — {{ m.import.toFixed(2) }} €
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <!-- Errors -->
+                            <div v-if="verificaErrors.length">
+                                <p class="mb-2 text-sm font-medium text-red-700 dark:text-red-400">
+                                    {{ verificaErrors.length }} discrepància(es) trobada(es):
+                                </p>
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full text-xs divide-y divide-gray-200 dark:divide-gray-700">
+                                        <thead class="bg-gray-50 dark:bg-gray-700">
+                                            <tr>
+                                                <th class="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400">Data</th>
+                                                <th class="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400">Concepte</th>
+                                                <th class="px-3 py-2 text-right font-medium text-gray-500 dark:text-gray-400">Import</th>
+                                                <th class="px-3 py-2 text-right font-medium text-gray-500 dark:text-gray-400">Saldo esperat</th>
+                                                <th class="px-3 py-2 text-right font-medium text-gray-500 dark:text-gray-400">Saldo desat</th>
+                                                <th class="px-3 py-2 text-right font-medium text-gray-500 dark:text-gray-400">Diferència</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                            <tr v-for="e in verificaErrors" :key="e.id" class="bg-red-50 dark:bg-red-900/10">
+                                                <td class="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{{ e.data_moviment }}</td>
+                                                <td class="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-xs truncate">{{ e.concepte ?? '—' }}</td>
+                                                <td class="px-3 py-2 text-right whitespace-nowrap" :class="e.import >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">{{ e.import.toFixed(2) }} €</td>
+                                                <td class="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{{ e.saldo_esperat.toFixed(2) }} €</td>
+                                                <td class="px-3 py-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">{{ e.saldo_desat.toFixed(2) }} €</td>
+                                                <td class="px-3 py-2 text-right font-medium whitespace-nowrap" :class="Math.abs(e.diferencia) > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500'">{{ e.diferencia.toFixed(2) }} €</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div v-else-if="!verificaSenseSaldo.length" class="rounded-md bg-green-50 dark:bg-green-900/20 p-4 text-center">
+                                <p class="text-sm font-medium text-green-800 dark:text-green-300">Tots els saldos quadren correctament.</p>
+                            </div>
+                        </template>
+                    </div>
+                    <div class="px-6 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+                        <button @click="showVerificaModal = false" class="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600">
+                            Tancar
                         </button>
                     </div>
                 </div>

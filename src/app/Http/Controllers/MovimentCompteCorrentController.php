@@ -380,6 +380,94 @@ class MovimentCompteCorrentController extends Controller
     }
 
     /**
+     * Verify saldo consistency for filtered movements.
+     * Returns discrepancies between stored saldo_posterior and the one calculated
+     * by applying each import sequentially from the oldest movement.
+     */
+    public function verificaSaldos(Request $request): JsonResponse
+    {
+        $compteCorrentId = $request->integer('compte_corrent_id');
+        if (!$compteCorrentId) {
+            return response()->json(['error' => 'compte_corrent_id és obligatori.'], 422);
+        }
+
+        $query = MovimentCompteCorrent::with('concepte')
+            ->where('compte_corrent_id', $compteCorrentId);
+
+        if ($request->filled('search')) {
+            $query->whereHas('concepte', fn($q) => $q->where('concepte', 'LIKE', '%' . $request->input('search') . '%'));
+        }
+        if ($request->filled('categoria_id')) {
+            $v = $request->input('categoria_id');
+            $v === 'none' ? $query->whereNull('categoria_id') : $query->where('categoria_id', $v);
+        }
+        if ($request->filled('data_inici')) {
+            $query->whereDate('data_moviment', '>=', $request->input('data_inici'));
+        }
+        if ($request->filled('data_fi')) {
+            $query->whereDate('data_moviment', '<=', $request->input('data_fi'));
+        }
+        if ($request->input('tipus') === 'ingressos') {
+            $query->where('import', '>', 0);
+        } elseif ($request->input('tipus') === 'despeses') {
+            $query->where('import', '<', 0);
+        }
+
+        $moviments = $query->orderBy('data_moviment', 'asc')->orderBy('id', 'asc')->get();
+
+        if ($moviments->isEmpty()) {
+            return response()->json(['total' => 0, 'errors' => [], 'sense_saldo' => []]);
+        }
+
+        $errors = [];
+        $senseSaldo = [];
+        $saldoActual = null;
+
+        foreach ($moviments as $i => $mov) {
+            if ($mov->saldo_posterior === null) {
+                $senseSaldo[] = [
+                    'id'            => $mov->id,
+                    'data_moviment' => $mov->data_moviment->format('Y-m-d'),
+                    'concepte'      => $mov->concepte?->concepte,
+                    'import'        => (float) $mov->import,
+                ];
+                // No podem continuar la cadena si no hi ha saldo
+                $saldoActual = null;
+                continue;
+            }
+
+            if ($i === 0 || $saldoActual === null) {
+                // Punt de partida: confiem en el primer saldo disponible
+                $saldoActual = (float) $mov->saldo_posterior;
+                continue;
+            }
+
+            $saldoEsperat = round($saldoActual + (float) $mov->import, 2);
+            $saldoDesat   = round((float) $mov->saldo_posterior, 2);
+
+            if (abs($saldoEsperat - $saldoDesat) > 0.001) {
+                $errors[] = [
+                    'id'             => $mov->id,
+                    'data_moviment'  => $mov->data_moviment->format('Y-m-d'),
+                    'concepte'       => $mov->concepte?->concepte,
+                    'import'         => (float) $mov->import,
+                    'saldo_esperat'  => $saldoEsperat,
+                    'saldo_desat'    => $saldoDesat,
+                    'diferencia'     => round($saldoDesat - $saldoEsperat, 2),
+                ];
+            }
+
+            $saldoActual = (float) $mov->saldo_posterior;
+        }
+
+        return response()->json([
+            'total'       => $moviments->count(),
+            'errors'      => $errors,
+            'sense_saldo' => $senseSaldo,
+        ]);
+    }
+
+    /**
      * Remove the specified movement.
      */
     public function destroy(MovimentCompteCorrent $moviment): RedirectResponse
