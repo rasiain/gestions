@@ -323,6 +323,63 @@ class MovimentCompteCorrentController extends Controller
     }
 
     /**
+     * Bulk edit multiple movements (partial update: only apply provided fields).
+     */
+    public function bulkEdit(Request $request): JsonResponse
+    {
+        $request->validate([
+            'moviment_ids'  => ['required', 'array', 'min:1'],
+            'moviment_ids.*' => ['integer'],
+            'concepte'      => ['nullable', 'string', 'max:255'],
+            'notes'         => ['nullable', 'string', 'max:500'],
+            'categoria_id'  => ['nullable', 'integer', 'exists:g_categories,id'],
+        ]);
+
+        $movimentIds = $request->input('moviment_ids');
+        $hasConcepte   = $request->filled('concepte');
+        $hasNotes      = $request->has('notes');
+        $hasCategoria  = $request->has('categoria_id');
+
+        if (!$hasConcepte && !$hasNotes && !$hasCategoria) {
+            return response()->json(['updated' => 0]);
+        }
+
+        $moviments = MovimentCompteCorrent::whereIn('id', $movimentIds)
+            ->where('exclou_lloguer', false)
+            ->get();
+
+        DB::beginTransaction();
+        try {
+            foreach ($moviments as $moviment) {
+                $fields = [];
+
+                if ($hasConcepte) {
+                    $concepteModel = MovimentConcepte::findOrCreateByConcepte($request->input('concepte'));
+                    $fields['concepte_id'] = $concepteModel->id;
+                }
+
+                if ($hasNotes) {
+                    $fields['notes'] = $request->input('notes');
+                }
+
+                if ($hasCategoria) {
+                    $fields['categoria_id'] = $request->input('categoria_id');
+                }
+
+                if (!empty($fields)) {
+                    $moviment->update($fields);
+                }
+            }
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+
+        return response()->json(['updated' => $moviments->count()]);
+    }
+
+    /**
      * Remove the specified movement.
      */
     public function destroy(MovimentCompteCorrent $moviment): RedirectResponse

@@ -201,6 +201,15 @@ class LloguerController extends Controller
                   ->where('exclou_lloguer', false);
         }
 
+        if ($cerca = trim($request->input('cerca', ''))) {
+            $query->where(function ($q) use ($cerca) {
+                $q->whereHas('concepte', fn($q2) => $q2->where('concepte', 'like', "%{$cerca}%"))
+                  ->orWhere('concepte_original', 'like', "%{$cerca}%")
+                  ->orWhere('notes', 'like', "%{$cerca}%")
+                  ->orWhereHas('categoria', fn($q2) => $q2->where('nom', 'like', "%{$cerca}%"));
+            });
+        }
+
         if ($facturaId = $request->integer('per_vincular_factura')) {
             $query->where(function ($q) use ($facturaId) {
                 $q->whereDoesntHave('factura')
@@ -262,6 +271,9 @@ class LloguerController extends Controller
             ->toArray();
 
         $tipusDespesaFiscal = \App\Models\TipusDespesaFiscal::orderBy('codi')->get(['id', 'codi', 'descripcio'])->toArray();
+        $categoriaMapping = \App\Models\CategoriaLloguerFiscal::whereNotNull('tipus_despesa_fiscal_id')
+            ->pluck('tipus_despesa_fiscal_id', 'categoria')
+            ->toArray();
 
         $response = [
             'data'                  => $moviments,
@@ -271,6 +283,7 @@ class LloguerController extends Controller
             'has_more'              => ($page * $perPage) < $total,
             'categories'            => $categories,
             'tipusDespesaFiscal'    => $tipusDespesaFiscal,
+            'categoriaMapping'      => $categoriaMapping,
         ];
 
         if ($page === 1) {

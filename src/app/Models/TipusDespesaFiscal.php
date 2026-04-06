@@ -11,5 +11,6 @@ class TipusDespesaFiscal extends Model
     protected $fillable = [
         'codi',
         'descripcio',
+        'categoria_despesa',
     ];
 }

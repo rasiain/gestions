@@ -67,6 +67,85 @@ class MovimentClassificacioController extends Controller
         return $this->saveClassificacio($moviment->fresh(), $validated);
     }
 
+    public function bulkUpdate(Request $request): JsonResponse
+    {
+        $request->validate([
+            'lloguer_id'              => ['required', 'integer', 'exists:g_lloguers,id'],
+            'moviment_ids'            => ['required', 'array', 'min:1'],
+            'moviment_ids.*'          => ['integer'],
+            'categoria'               => ['nullable', 'string', 'max:20'],
+            'proveidor_id'            => ['nullable', 'integer', 'exists:g_proveidors,id'],
+            'tipus_despesa_fiscal_id' => ['nullable', 'integer', 'exists:g_tipus_despesa_fiscal,id'],
+            'numero_factura'          => ['nullable', 'string', 'max:50'],
+            'concepte'                => ['nullable', 'string', 'max:255'],
+            'notes'                   => ['nullable', 'string', 'max:500'],
+            'base_imposable'          => ['nullable', 'numeric'],
+            'iva_percentatge'         => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'iva_import'              => ['nullable', 'numeric'],
+        ]);
+
+        $lloguerId   = $request->integer('lloguer_id');
+        $movimentIds = $request->input('moviment_ids');
+
+        // Only fields explicitly present in the request (not null by default) are applied
+        $fields = array_filter([
+            'categoria'               => $request->input('categoria'),
+            'proveidor_id'            => $request->input('proveidor_id'),
+            'tipus_despesa_fiscal_id' => $request->input('tipus_despesa_fiscal_id'),
+            'numero_factura'          => $request->input('numero_factura'),
+            'concepte'                => $request->input('concepte'),
+            'notes'                   => $request->input('notes'),
+            'base_imposable'          => $request->input('base_imposable'),
+            'iva_percentatge'         => $request->input('iva_percentatge'),
+            'iva_import'              => $request->input('iva_import'),
+        ], fn($v) => $v !== null);
+
+        $moviments = MovimentCompteCorrent::with(['despesa', 'ingres'])
+            ->whereIn('id', $movimentIds)
+            ->where('exclou_lloguer', false)
+            ->get();
+
+        $updated          = 0;
+        $created          = 0;
+        $skippedIngressos = 0;
+
+        DB::beginTransaction();
+        try {
+            foreach ($moviments as $moviment) {
+                if ($moviment->ingres) {
+                    $skippedIngressos++;
+                    continue;
+                }
+
+                if ($moviment->despesa) {
+                    if (!empty($fields)) {
+                        $moviment->despesa->update($fields);
+                        $updated++;
+                    }
+                } else {
+                    // Only create if at least categoria is provided
+                    if (!empty($request->input('categoria'))) {
+                        MovimentLloguerDespesa::create(array_merge([
+                            'moviment_id' => $moviment->id,
+                            'lloguer_id'  => $lloguerId,
+                        ], $fields));
+                        $created++;
+                    }
+                }
+            }
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+
+        return response()->json([
+            'updated'           => $updated,
+            'created'           => $created,
+            'skipped_ingressos' => $skippedIngressos,
+        ]);
+    }
+
     public function destroy(MovimentCompteCorrent $moviment): JsonResponse
     {
         DB::beginTransaction();

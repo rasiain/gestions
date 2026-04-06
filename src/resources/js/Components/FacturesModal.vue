@@ -144,6 +144,7 @@ const generarFactures = async () => {
         });
         if (res.ok) {
             showGenerar.value = false;
+            filterAny.value = generarForm.value.any;
             await fetchFactures();
         }
     } finally {
@@ -327,7 +328,7 @@ const anys = computed(() => {
                         </select>
                     </div>
                     <button
-                        @click="showGenerar = !showGenerar"
+                        @click="() => { showGenerar = !showGenerar; if (showGenerar) generarForm.any = filterAny; }"
                         class="inline-flex items-center gap-1 rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-amber-700"
                     >
                         Generar factures

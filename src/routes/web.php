@@ -15,6 +15,7 @@ use App\Http\Controllers\LloguerRevisioIpcController;
 use App\Http\Controllers\MovementImportController;
 use App\Http\Controllers\ImpostosIrpfController;
 use App\Http\Controllers\ImpostosIvaController;
+use App\Http\Controllers\TipusDespesaFiscalController;
 use App\Http\Controllers\MovimentClassificacioController;
 use App\Http\Controllers\MovimentCompteCorrentController;
 use App\Http\Controllers\ProfileController;
@@ -113,10 +114,12 @@ Route::middleware('auth')->group(function () {
 
     // Moviments management
     Route::post('/moviments/duplicar', [MovimentCompteCorrentController::class, 'duplicar'])->name('moviments.duplicar');
+    Route::post('/moviments/edicio-multiple', [MovimentCompteCorrentController::class, 'bulkEdit'])->name('moviments.bulk-edit');
     Route::resource('moviments', MovimentCompteCorrentController::class)->only([
         'index', 'store', 'update', 'destroy'
     ]);
     Route::patch('/moviments/{moviment}/exclou-lloguer', [MovimentCompteCorrentController::class, 'toggleExclou'])->name('moviments.toggle-exclou');
+    Route::post('/moviments/classificacio-multiple', [MovimentClassificacioController::class, 'bulkUpdate'])->name('moviments.classificacio.bulk');
     Route::post('/moviments/{moviment}/classificacio', [MovimentClassificacioController::class, 'store'])->name('moviments.classificacio.store');
     Route::put('/moviments/{moviment}/classificacio', [MovimentClassificacioController::class, 'update'])->name('moviments.classificacio.update');
     Route::delete('/moviments/{moviment}/classificacio', [MovimentClassificacioController::class, 'destroy'])->name('moviments.classificacio.destroy');
@@ -124,6 +127,8 @@ Route::middleware('auth')->group(function () {
     // Impostos
     Route::get('/impostos/irpf', [ImpostosIrpfController::class, 'index'])->name('impostos.irpf');
     Route::get('/impostos/iva', [ImpostosIvaController::class, 'index'])->name('impostos.iva');
+    Route::get('/impostos/tipus-despesa-fiscal', [TipusDespesaFiscalController::class, 'index'])->name('impostos.tipus-despesa-fiscal');
+    Route::put('/impostos/tipus-despesa-fiscal', [TipusDespesaFiscalController::class, 'updateMapping'])->name('impostos.tipus-despesa-fiscal.update');
 
     // Maintenance - Movement Import
     Route::get('/maintenance/movements/import', [MovementImportController::class, 'index'])->name('maintenance.movements.import');

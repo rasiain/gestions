@@ -4,7 +4,7 @@ import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
 import FacturesModal from '@/Components/FacturesModal.vue';
 import RevisioIpcModal from '@/Components/RevisioIpcModal.vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, Transition } from 'vue';
 
 interface Immoble {
     id: number;
@@ -371,6 +371,7 @@ const movimentsLoading = ref(false);
 const movimentsFilterAny = ref<number | null>(new Date().getFullYear());
 const movimentsFilterClassificats = ref(false);
 const movimentsFilterPendents = ref(false);
+const movimentsFilterCerca = ref('');
 const movimentsAnys = ref<number[]>([]);
 const movimentCategories = ref<Categoria[]>([]);
 
@@ -380,6 +381,7 @@ interface TipusDespesaFiscal {
     descripcio: string;
 }
 const tipusDespesaFiscalOpcions = ref<TipusDespesaFiscal[]>([]);
+const categoriaMapping = ref<Record<string, number>>({});
 
 const csrfToken = (): string =>
     (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
@@ -391,6 +393,7 @@ const fetchMoviments = async (lloguer: Lloguer, page: number, append = false) =>
         if (movimentsFilterAny.value) params.set('any', String(movimentsFilterAny.value));
         if (movimentsFilterClassificats.value) params.set('classificats', '1');
         if (movimentsFilterPendents.value) params.set('pendents', '1');
+        if (movimentsFilterCerca.value.trim()) params.set('cerca', movimentsFilterCerca.value.trim());
 
         const res = await fetch(`/lloguers/${lloguer.id}/moviments?${params}`, {
             headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
@@ -403,6 +406,7 @@ const fetchMoviments = async (lloguer: Lloguer, page: number, append = false) =>
         if (json.categories) movimentCategories.value = json.categories;
         if (json.anys) movimentsAnys.value = json.anys;
         if (json.tipusDespesaFiscal) tipusDespesaFiscalOpcions.value = json.tipusDespesaFiscal;
+        if (json.categoriaMapping) categoriaMapping.value = json.categoriaMapping;
     } finally {
         movimentsLoading.value = false;
     }
@@ -521,6 +525,130 @@ const classificacioTipus = ref<'despesa' | 'ingres'>('despesa');
 const classificacioSaving = ref(false);
 const classificacioErrors = ref<Record<string, string>>({});
 
+// ── Classificació múltiple ─────────────────────────────────────
+const selectedMovimentIds = ref<Set<number>>(new Set());
+const showBulkModal = ref(false);
+const bulkSaving = ref(false);
+const bulkErrors = ref<Record<string, string>>({});
+const bulkDespesa = ref({
+    categoria:               '' as string,
+    proveidor_id:            null as number | null,
+    tipus_despesa_fiscal_id: null as number | null,
+    numero_factura:          '' as string,
+    concepte:                '' as string,
+    notes:                   '' as string,
+    base_imposable:          null as number | null,
+    iva_percentatge:         null as number | null,
+    iva_import:              null as number | null,
+});
+
+const toggleSeleccio = (moviment: { id: number }) => {
+    if (selectedMovimentIds.value.has(moviment.id)) {
+        selectedMovimentIds.value.delete(moviment.id);
+    } else {
+        selectedMovimentIds.value.add(moviment.id);
+    }
+    // Força reactivitat
+    selectedMovimentIds.value = new Set(selectedMovimentIds.value);
+};
+
+const openBulkModal = () => {
+    bulkDespesa.value = { categoria: '', proveidor_id: null, tipus_despesa_fiscal_id: null, numero_factura: '', concepte: '', notes: '', base_imposable: null, iva_percentatge: null, iva_import: null };
+    bulkErrors.value = {};
+    showBulkModal.value = true;
+};
+
+const closeBulkModal = () => { showBulkModal.value = false; };
+
+// ── Edició múltiple ────────────────────────────────────────────
+const showBulkEditModal = ref(false);
+const bulkEditSaving = ref(false);
+const bulkEditErrors = ref<Record<string, string>>({});
+const bulkEditForm = ref({
+    concepte:    '' as string,
+    notes:       '' as string,
+    categoria_id: null as number | null,
+});
+
+const openBulkEditModal = () => {
+    bulkEditForm.value = { concepte: '', notes: '', categoria_id: null };
+    bulkEditErrors.value = {};
+    showBulkEditModal.value = true;
+};
+
+const closeBulkEditModal = () => { showBulkEditModal.value = false; };
+
+const submitBulkEdit = async () => {
+    bulkEditSaving.value = true;
+    bulkEditErrors.value = {};
+    try {
+        const body: Record<string, unknown> = {
+            moviment_ids: Array.from(selectedMovimentIds.value),
+        };
+        if (bulkEditForm.value.concepte)             body.concepte     = bulkEditForm.value.concepte;
+        if (bulkEditForm.value.notes !== '')         body.notes        = bulkEditForm.value.notes;
+        if (bulkEditForm.value.categoria_id !== null) body.categoria_id = bulkEditForm.value.categoria_id;
+
+        const res = await fetch('/moviments/edicio-multiple', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            body:    JSON.stringify(body),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+            bulkEditErrors.value = json.errors ?? { general: json.error ?? 'Error desconegut' };
+            return;
+        }
+        closeBulkEditModal();
+        selectedMovimentIds.value = new Set();
+        if (selectedLloguer.value) await fetchMoviments(selectedLloguer.value, 1);
+    } finally {
+        bulkEditSaving.value = false;
+    }
+};
+
+const submitBulk = async () => {
+    if (!selectedLloguer.value) return;
+    bulkSaving.value = true;
+    bulkErrors.value = {};
+    try {
+        const body: Record<string, unknown> = {
+            lloguer_id:   selectedLloguer.value.id,
+            moviment_ids: Array.from(selectedMovimentIds.value),
+        };
+        // Només enviem els camps que l'usuari ha tocat
+        if (bulkDespesa.value.categoria)               body.categoria               = bulkDespesa.value.categoria;
+        if (bulkDespesa.value.proveidor_id !== null)    body.proveidor_id            = bulkDespesa.value.proveidor_id;
+        if (bulkDespesa.value.tipus_despesa_fiscal_id !== null) body.tipus_despesa_fiscal_id = bulkDespesa.value.tipus_despesa_fiscal_id;
+        if (bulkDespesa.value.numero_factura)           body.numero_factura          = bulkDespesa.value.numero_factura;
+        if (bulkDespesa.value.concepte)                 body.concepte               = bulkDespesa.value.concepte;
+        if (bulkDespesa.value.notes)                    body.notes                  = bulkDespesa.value.notes;
+        if (bulkDespesa.value.base_imposable !== null)  body.base_imposable         = bulkDespesa.value.base_imposable;
+        if (bulkDespesa.value.iva_percentatge !== null) body.iva_percentatge        = bulkDespesa.value.iva_percentatge;
+        if (bulkDespesa.value.iva_import !== null)      body.iva_import             = bulkDespesa.value.iva_import;
+
+        const res = await fetch('/moviments/classificacio-multiple', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            body:    JSON.stringify(body),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+            bulkErrors.value = json.errors ?? { general: json.error ?? 'Error desconegut' };
+            return;
+        }
+        closeBulkModal();
+        selectedMovimentIds.value = new Set();
+        // Recarrega els moviments per reflectir els canvis
+        if (selectedLloguer.value) await fetchMoviments(selectedLloguer.value, 1);
+        if (json.skipped_ingressos > 0) {
+            alert(`${json.updated + json.created} moviment(s) actualitzat(s). ${json.skipped_ingressos} moviment(s) classificat(s) com a ingressos no s'han modificat.`);
+        }
+    } finally {
+        bulkSaving.value = false;
+    }
+};
+
 const classificacioDespesa = ref({
     numero_factura: '' as string,
     concepte: '' as string,
@@ -549,6 +677,25 @@ const categoriesDespesa = [
     { value: 'comissions',  label: 'Comissions bancàries' },
     { value: 'altres',      label: 'Altres' },
 ];
+
+// Auto-suggereix el tipus de despesa fiscal quan canvia la categoria
+const onCategoriaChange = () => {
+    const nova = classificacioDespesa.value.categoria;
+    if (!nova) return;
+    const tipusId = categoriaMapping.value[nova] ?? null;
+    if (tipusId !== null && tipusId !== undefined) {
+        classificacioDespesa.value.tipus_despesa_fiscal_id = tipusId;
+    }
+};
+
+const onBulkCategoriaChange = () => {
+    const nova = bulkDespesa.value.categoria;
+    if (!nova) return;
+    const tipusId = categoriaMapping.value[nova] ?? null;
+    if (tipusId !== null && tipusId !== undefined) {
+        bulkDespesa.value.tipus_despesa_fiscal_id = tipusId;
+    }
+};
 
 const categoriesIngresLinia = [
     ...categoriesDespesa,
@@ -754,7 +901,7 @@ watch(movimentsFilterClassificats, (val) => {
 watch(movimentsFilterPendents, (val) => {
     if (val) movimentsFilterClassificats.value = false;
 });
-watch([movimentsFilterAny, movimentsFilterClassificats, movimentsFilterPendents], () => {
+watch([movimentsFilterAny, movimentsFilterClassificats, movimentsFilterPendents, movimentsFilterCerca], () => {
     if (selectedLloguerId.value) {
         const lloguer = props.lloguers.find(l => l.id === selectedLloguerId.value);
         if (lloguer) fetchMoviments(lloguer, 1);
@@ -769,6 +916,8 @@ watch(selectedLloguerId, (newId) => {
     movimentsFilterAny.value = new Date().getFullYear();
     movimentsFilterClassificats.value = false;
     movimentsFilterPendents.value = false;
+    movimentsFilterCerca.value = '';
+    selectedMovimentIds.value = new Set();
     if (newId) {
         const lloguer = props.lloguers.find(l => l.id === newId);
         if (lloguer) fetchMoviments(lloguer, 1);
@@ -1333,6 +1482,17 @@ const formatCurrency = (value: string | null): string => {
                                 />
                                 Pendents de classificar
                             </label>
+                            <div class="relative">
+                                <input
+                                    v-model="movimentsFilterCerca"
+                                    type="search"
+                                    placeholder="Cerca concepte, categoria, notes…"
+                                    class="rounded-md border-gray-300 pl-8 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 w-60"
+                                />
+                                <svg class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z"/>
+                                </svg>
+                            </div>
                             <div v-if="selectedLloguer" class="ml-auto flex items-center gap-2">
                                 <button
                                     v-if="!selectedLloguer.es_habitatge"
@@ -1393,6 +1553,9 @@ const formatCurrency = (value: string | null): string => {
                                 <thead class="bg-gray-50 dark:bg-gray-700">
                                     <tr>
                                         <th class="w-8 px-3 py-3"></th>
+                                        <th class="w-8 px-2 py-3" title="Exclou del lloguer">
+                                            <svg class="h-4 w-4 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 4.411m0 0L21 21" /></svg>
+                                        </th>
                                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Data</th>
                                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Concepte</th>
                                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Categoria</th>
@@ -1419,16 +1582,28 @@ const formatCurrency = (value: string | null): string => {
                                                             : 'bg-amber-50 dark:bg-amber-900/10',
                                         ]"
                                     >
+                                        <!-- Selecció múltiple -->
                                         <td class="px-3 py-3 text-center">
                                             <input
+                                                v-if="!moviment.exclou_lloguer && !classificacioAltresLloguer(moviment)"
                                                 type="checkbox"
-                                                :checked="moviment.exclou_lloguer"
-                                                :disabled="classificacioAltresLloguer(moviment)"
-                                                @change="toggleExclou(moviment)"
-                                                title="Exclou del lloguer"
-                                                class="rounded border-gray-300 text-red-500 focus:ring-red-400"
-                                                :class="classificacioAltresLloguer(moviment) ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'"
+                                                :checked="selectedMovimentIds.has(moviment.id)"
+                                                @change="toggleSeleccio(moviment)"
+                                                class="rounded border-gray-300 text-amber-500 focus:ring-amber-400 cursor-pointer"
                                             />
+                                        </td>
+                                        <!-- Exclou del lloguer -->
+                                        <td class="px-2 py-3 text-center">
+                                            <button
+                                                v-if="!classificacioAltresLloguer(moviment)"
+                                                type="button"
+                                                @click.stop="toggleExclou(moviment)"
+                                                :title="moviment.exclou_lloguer ? 'Inclou al lloguer' : 'Exclou del lloguer'"
+                                                class="rounded p-0.5 transition-colors"
+                                                :class="moviment.exclou_lloguer ? 'text-red-500 hover:text-red-700' : 'text-gray-300 hover:text-red-400'"
+                                            >
+                                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 4.411m0 0L21 21" /></svg>
+                                            </button>
                                         </td>
                                         <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                                             {{ moviment.data_moviment }}
@@ -1489,6 +1664,7 @@ const formatCurrency = (value: string | null): string => {
                                         </td>
                                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-medium">
                                             <button
+                                                v-if="!moviment.exclou_lloguer"
                                                 @click.stop="openMovimentEditModal(moviment)"
                                                 class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
                                             >
@@ -1541,6 +1717,12 @@ const formatCurrency = (value: string | null): string => {
                                 class="block text-sm text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors"
                             >
                                 → IVA Lloguers
+                            </Link>
+                            <Link
+                                :href="route('impostos.tipus-despesa-fiscal')"
+                                class="block text-sm text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors"
+                            >
+                                → Configuració fiscal
                             </Link>
                         </div>
                     </div>
@@ -1907,6 +2089,7 @@ const formatCurrency = (value: string | null): string => {
                                     <select
                                         v-model="classificacioDespesa.categoria"
                                         required
+                                        @change="onCategoriaChange"
                                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                     >
                                         <option value="">Selecciona una categoria</option>
@@ -2363,6 +2546,257 @@ const formatCurrency = (value: string | null): string => {
             @close="showRevisioIpcModal = false"
             @updated="router.reload()"
         />
+
+        <!-- Barra flotant de classificació múltiple -->
+        <Transition
+            enter-active-class="transition ease-out duration-200"
+            enter-from-class="opacity-0 translate-y-4"
+            enter-to-class="opacity-100 translate-y-0"
+            leave-active-class="transition ease-in duration-150"
+            leave-from-class="opacity-100 translate-y-0"
+            leave-to-class="opacity-0 translate-y-4"
+        >
+            <div
+                v-if="selectedMovimentIds.size > 0"
+                class="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 flex items-center gap-4 rounded-xl bg-gray-900 px-5 py-3 shadow-xl dark:bg-gray-700"
+            >
+                <span class="text-sm text-gray-300">
+                    {{ selectedMovimentIds.size }} moviment{{ selectedMovimentIds.size > 1 ? 's' : '' }} seleccionat{{ selectedMovimentIds.size > 1 ? 's' : '' }}
+                </span>
+                <button
+                    type="button"
+                    @click="openBulkModal"
+                    class="rounded-md bg-amber-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-600 transition-colors"
+                >
+                    Classificar
+                </button>
+                <button
+                    type="button"
+                    @click="openBulkEditModal"
+                    class="rounded-md bg-indigo-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-600 transition-colors"
+                >
+                    Editar
+                </button>
+                <button
+                    type="button"
+                    @click="selectedMovimentIds = new Set()"
+                    class="text-gray-400 hover:text-white transition-colors text-sm"
+                >
+                    ✕
+                </button>
+            </div>
+        </Transition>
+
+        <!-- Modal classificació múltiple -->
+        <div
+            v-if="showBulkModal"
+            class="fixed inset-0 z-50 overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+        >
+            <div class="flex min-h-screen items-end justify-center px-4 pb-20 pt-4 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeBulkModal"></div>
+                <span class="hidden sm:inline-block sm:h-screen sm:align-middle" aria-hidden="true">&#8203;</span>
+
+                <div class="inline-block transform overflow-hidden rounded-lg bg-white text-left align-bottom shadow-xl transition-all dark:bg-gray-800 sm:my-8 sm:w-full sm:max-w-2xl sm:align-middle">
+                    <form @submit.prevent="submitBulk">
+                        <div class="bg-white px-4 pb-4 pt-5 dark:bg-gray-800 sm:p-6 sm:pb-4">
+                            <h3 class="mb-1 text-lg font-medium leading-6 text-gray-900 dark:text-gray-100">
+                                Classificació múltiple
+                            </h3>
+                            <p class="mb-5 text-sm text-gray-500 dark:text-gray-400">
+                                {{ selectedMovimentIds.size }} moviments seleccionats. Només s'aplicaran els camps que empleneu; la resta es conservarà.
+                            </p>
+
+                            <p v-if="bulkErrors.general" class="mb-4 text-sm text-red-600 dark:text-red-400">{{ bulkErrors.general }}</p>
+
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Categoria</label>
+                                    <select
+                                        v-model="bulkDespesa.categoria"
+                                        @change="onBulkCategoriaChange"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    >
+                                        <option value="">— sense canvis —</option>
+                                        <option v-for="cat in categoriesDespesa" :key="cat.value" :value="cat.value">{{ cat.label }}</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Proveïdor</label>
+                                    <select
+                                        v-model="bulkDespesa.proveidor_id"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    >
+                                        <option :value="null">— sense canvis —</option>
+                                        <option v-for="p in proveidors" :key="p.id" :value="p.id">{{ p.nom_rao_social }}</option>
+                                    </select>
+                                </div>
+
+                                <div v-if="selectedLloguer && selectedLloguer.es_habitatge === false">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Tipus de despesa fiscal</label>
+                                    <select
+                                        v-model="bulkDespesa.tipus_despesa_fiscal_id"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    >
+                                        <option :value="null">— sense canvis —</option>
+                                        <option v-for="t in tipusDespesaFiscalOpcions" :key="t.id" :value="t.id">{{ t.codi }} - {{ t.descripcio }}</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Número factura</label>
+                                    <input
+                                        v-model="bulkDespesa.numero_factura"
+                                        type="text"
+                                        maxlength="50"
+                                        placeholder="— sense canvis —"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Concepte</label>
+                                    <input
+                                        v-model="bulkDespesa.concepte"
+                                        type="text"
+                                        maxlength="255"
+                                        placeholder="— sense canvis —"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
+                                    <textarea
+                                        v-model="bulkDespesa.notes"
+                                        rows="2"
+                                        maxlength="500"
+                                        placeholder="— sense canvis —"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    ></textarea>
+                                </div>
+
+                                <div v-if="selectedLloguer && selectedLloguer.es_habitatge === false" class="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">% IVA</label>
+                                        <input v-model="bulkDespesa.iva_percentatge" type="number" step="0.01" min="0" max="100" placeholder="—"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Base imposable (€)</label>
+                                        <input v-model="bulkDespesa.base_imposable" type="number" step="0.01" placeholder="—"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">IVA suportat (€)</label>
+                                        <input v-model="bulkDespesa.iva_import" type="number" step="0.01" placeholder="—"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-gray-50 px-4 py-3 dark:bg-gray-700 sm:flex sm:flex-row-reverse sm:px-6">
+                            <button
+                                type="submit"
+                                :disabled="bulkSaving"
+                                class="inline-flex w-full justify-center rounded-md bg-amber-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm"
+                            >
+                                {{ bulkSaving ? 'Guardant…' : 'Aplicar' }}
+                            </button>
+                            <button
+                                type="button"
+                                @click="closeBulkModal"
+                                class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 sm:ml-3 sm:mt-0 sm:w-auto sm:text-sm"
+                            >
+                                Cancel·lar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal edició múltiple -->
+        <div
+            v-if="showBulkEditModal"
+            class="fixed inset-0 z-50 overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+        >
+            <div class="flex min-h-screen items-end justify-center px-4 pb-20 pt-4 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeBulkEditModal"></div>
+                <span class="hidden sm:inline-block sm:h-screen sm:align-middle" aria-hidden="true">&#8203;</span>
+
+                <div class="inline-block transform overflow-hidden rounded-lg bg-white text-left align-bottom shadow-xl transition-all dark:bg-gray-800 sm:my-8 sm:w-full sm:max-w-lg sm:align-middle">
+                    <form @submit.prevent="submitBulkEdit">
+                        <div class="bg-white px-4 pb-4 pt-5 dark:bg-gray-800 sm:p-6 sm:pb-4">
+                            <h3 class="mb-1 text-lg font-medium leading-6 text-gray-900 dark:text-gray-100">
+                                Edició múltiple
+                            </h3>
+                            <p class="mb-5 text-sm text-gray-500 dark:text-gray-400">
+                                {{ selectedMovimentIds.size }} moviments seleccionats. Només s'aplicaran els camps que empleneu; la resta es conservarà.
+                            </p>
+
+                            <p v-if="bulkEditErrors.general" class="mb-4 text-sm text-red-600 dark:text-red-400">{{ bulkEditErrors.general }}</p>
+
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Concepte</label>
+                                    <input
+                                        v-model="bulkEditForm.concepte"
+                                        type="text"
+                                        maxlength="255"
+                                        placeholder="— sense canvis —"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
+                                    <textarea
+                                        v-model="bulkEditForm.notes"
+                                        rows="2"
+                                        maxlength="500"
+                                        placeholder="— sense canvis —"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    ></textarea>
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoria</label>
+                                    <CategoryTreeSelect
+                                        :categories="movimentCategories"
+                                        v-model="bulkEditForm.categoria_id"
+                                        :allow-none="true"
+                                        placeholder="— sense canvis —"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-gray-50 px-4 py-3 dark:bg-gray-700 sm:flex sm:flex-row-reverse sm:px-6">
+                            <button
+                                type="submit"
+                                :disabled="bulkEditSaving"
+                                class="inline-flex w-full justify-center rounded-md bg-indigo-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm"
+                            >
+                                {{ bulkEditSaving ? 'Guardant…' : 'Aplicar' }}
+                            </button>
+                            <button
+                                type="button"
+                                @click="closeBulkEditModal"
+                                class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 sm:ml-3 sm:mt-0 sm:w-auto sm:text-sm"
+                            >
+                                Cancel·lar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
 
     </AuthenticatedLayout>
 </template>
