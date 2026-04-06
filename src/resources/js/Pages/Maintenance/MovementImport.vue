@@ -63,6 +63,7 @@ const selectedCompte = computed(() => {
 });
 
 const bankTypeOptions = [
+    { value: 'bbva',            label: 'BBVA' },
     { value: 'caixa_enginyers', label: "Caixa d'Enginyers" },
     { value: 'caixabank',       label: 'CaixaBank' },
     { value: 'kmymoney',        label: 'KMyMoney (QIF)' },

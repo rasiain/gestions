@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\MovementImportRequest;
 use App\Http\Services\ImportFiles\FileParserService;
+use App\Http\Services\ImportFiles\BbvaParserService;
 use App\Http\Services\ImportFiles\CaixaEnginyersParserService;
 use App\Http\Services\ImportFiles\CaixaBankParserService;
 use App\Http\Services\ImportFiles\KMyMoneyMovementParserService;
@@ -21,6 +22,7 @@ class MovementImportController extends Controller
 {
     public function __construct(
         private FileParserService $fileParser,
+        private BbvaParserService $bbvaParser,
         private CaixaEnginyersParserService $caixaEnginyersParser,
         private CaixaBankParserService $caixaBankParser,
         private KMyMoneyMovementParserService $kmymoneyParser,
@@ -51,7 +53,7 @@ class MovementImportController extends Controller
         $validated = $request->validate([
             'file' => 'required|file|mimes:xls,xlsx,csv,txt,qif,html|mimetypes:application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain,text/html,application/octet-stream|max:102400',
             'compte_corrent_id' => 'required|integer|exists:g_comptes_corrents,id',
-            'bank_type' => 'required|string|in:caixa_enginyers,caixabank,kmymoney',
+            'bank_type' => 'required|string|in:caixa_enginyers,caixabank,kmymoney,bbva',
         ]);
 
         try {
@@ -74,6 +76,8 @@ class MovementImportController extends Controller
 
                 if ($bankType === 'caixa_enginyers') {
                     $parsedMovements = $this->caixaEnginyersParser->parse($rows, $compteCorrentId);
+                } elseif ($bankType === 'bbva') {
+                    $parsedMovements = $this->bbvaParser->parse($rows, $compteCorrentId);
                 } else { // caixabank
                     $parsedMovements = $this->caixaBankParser->parse($rows, $compteCorrentId);
                 }
@@ -140,6 +144,8 @@ class MovementImportController extends Controller
 
                 if ($bankType === 'caixa_enginyers') {
                     $parsedMovements = $this->caixaEnginyersParser->parse($rows, $compteCorrentId);
+                } elseif ($bankType === 'bbva') {
+                    $parsedMovements = $this->bbvaParser->parse($rows, $compteCorrentId);
                 } else {
                     $parsedMovements = $this->caixaBankParser->parse($rows, $compteCorrentId);
                 }
