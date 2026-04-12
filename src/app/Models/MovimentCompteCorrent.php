@@ -88,6 +88,26 @@ class MovimentCompteCorrent extends Model
     }
 
     /**
+     * Scope de cerca multi-camp: concepte net, concepte original, notes i nom de categoria.
+     * Cerca en tots quatre camps amb LIKE per facilitar la reutilització entre controllers.
+     */
+    public function scopeCerca($query, ?string $cerca): mixed
+    {
+        if (empty(trim((string) $cerca))) {
+            return $query;
+        }
+
+        $terme = '%' . trim($cerca) . '%';
+
+        return $query->where(function ($q) use ($terme) {
+            $q->whereHas('concepte', fn($q2) => $q2->where('concepte', 'like', $terme))
+              ->orWhere('concepte_original', 'like', $terme)
+              ->orWhere('notes', 'like', $terme)
+              ->orWhereHas('categoria', fn($q2) => $q2->where('nom', 'like', $terme));
+        });
+    }
+
+    /**
      * Scope to filter by compte corrent.
      */
     public function scopePerCompteCorrent($query, $compteCorrentId)

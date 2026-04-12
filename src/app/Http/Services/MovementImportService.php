@@ -40,13 +40,21 @@ class MovementImportService
         $result = $this->filterMovementsToImport($parsedMovements, $lastMatch, $compteCorrentId, $importMode);
 
         // Step 4: Validate balances if file has balance info
-        $balanceResult = $this->processBalances($result, $lastMatch, $compteCorrentId);
+        // Pass the file's saldo at the junction point for better discrepancy detection
+        $junctionFileSaldo = null;
+        if ($lastMatch['found'] && $lastMatch['index'] >= 0) {
+            $junctionFileSaldo = $parsedMovements[$lastMatch['index']]['saldo_posterior'] ?? null;
+        }
+        $balanceResult = $this->processBalances($result, $compteCorrentId, $junctionFileSaldo);
         if ($balanceResult !== null) {
             return $balanceResult; // Return early if balance validation failed
         }
 
         // Step 5: Match categories (for QIF with category paths)
         $this->matchCategoriesForMovements($result['movements'], $compteCorrentId);
+
+        // Step 6: Match concepts from previous movements (for preview display)
+        $this->matchConceptsForMovements($result['movements'], $compteCorrentId);
 
         return $result;
     }
@@ -371,13 +379,14 @@ class MovementImportService
 
     /**
      * Validate that calculated balances match file balances.
-     * Returns array of errors, empty if all valid.
+     * Returns array of warnings, empty if all valid.
      *
      * @param array $movements
      * @param int $compteCorrentId
+     * @param float|null $junctionFileSaldo Saldo del fitxer al punt de junció (darrer moviment ja importat)
      * @return array
      */
-    private function validateBalances(array $movements, int $compteCorrentId): array
+    private function validateBalances(array $movements, int $compteCorrentId, ?float $junctionFileSaldo = null): array
     {
         $errors = [];
 
@@ -388,11 +397,22 @@ class MovementImportService
             ->orderBy('id', 'desc')
             ->first();
 
-        $previousBalance = $lastMovement?->saldo_posterior ?? 0;
+        $dbLastSaldo = $lastMovement ? (float) $lastMovement->saldo_posterior : 0.0;
+
+        // Check junction discrepancy: file's saldo at the last matched movement vs DB's stored saldo
+        if ($junctionFileSaldo !== null && abs($junctionFileSaldo - $dbLastSaldo) > 0.01) {
+            $errors[] = sprintf(
+                'Discrepància al punt de connexió: el saldo desat a la BD per al darrer moviment coincident és %.2f€, però el fitxer indica %.2f€. Pot haver-hi moviments no importats o diferències de càlcul.',
+                $dbLastSaldo,
+                $junctionFileSaldo
+            );
+        }
+
+        $previousBalance = $dbLastSaldo;
 
         foreach ($movements as $index => $movement) {
-            $expectedBalance = $previousBalance + $movement['import'];
-            $fileBalance = $movement['saldo_posterior'];
+            $expectedBalance = round($previousBalance + (float) $movement['import'], 2);
+            $fileBalance = (float) $movement['saldo_posterior'];
 
             // Tolerance of 1 cent for rounding
             if (abs($expectedBalance - $fileBalance) > 0.01) {
@@ -828,9 +848,10 @@ class MovementImportService
      * @param array $result
      * @param array $lastMatch
      * @param int $compteCorrentId
+     * @param float|null $junctionFileSaldo Saldo del fitxer al punt de junció
      * @return array|null Returns error array if validation fails, null if success
      */
-    private function processBalances(array &$result, array $lastMatch, int $compteCorrentId): ?array
+    private function processBalances(array &$result, int $compteCorrentId, ?float $junctionFileSaldo = null): ?array
     {
         if (empty($result['movements'])) {
             return null;
@@ -840,7 +861,7 @@ class MovementImportService
 
         if ($hasBalance) {
             // Validació de saldos: retorna warnings (no bloquejant)
-            $balanceErrors = $this->validateBalances($result['movements'], $compteCorrentId);
+            $balanceErrors = $this->validateBalances($result['movements'], $compteCorrentId, $junctionFileSaldo);
             if (!empty($balanceErrors)) {
                 $result['balance_warnings'] = $balanceErrors;
             }
@@ -977,5 +998,52 @@ class MovementImportService
         }
 
         return !empty($paths) ? implode(' > ', $paths) : null;
+    }
+
+    /**
+     * Match concepts from previous movements with the same concepte_original.
+     * Adds 'concepte_net' (the previously-assigned clean concept) to each movement for preview display.
+     * Does NOT modify 'concepte' (the raw bank text used as concepte_original at import time).
+     *
+     * @param array $movements
+     * @param int $compteCorrentId
+     * @return void
+     */
+    private function matchConceptsForMovements(array &$movements, int $compteCorrentId): void
+    {
+        if (empty($movements)) {
+            return;
+        }
+
+        // Collect all unique raw concepts (which become concepte_original in DB)
+        $originals = array_unique(array_column($movements, 'concepte'));
+
+        // Query DB for movements with these concepte_original values
+        $dbMovements = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)
+            ->whereIn('concepte_original', $originals)
+            ->whereNotNull('concepte_id')
+            ->with('concepte')
+            ->orderBy('data_moviment', 'desc')
+            ->orderBy('id', 'desc')
+            ->get();
+
+        // Build map: concepte_original => concepte text
+        $concepteMap = [];
+        foreach ($dbMovements as $dbMov) {
+            $orig = $dbMov->concepte_original;
+            if ($orig && !isset($concepteMap[$orig]) && $dbMov->concepte) {
+                $concepteMap[$orig] = $dbMov->concepte->concepte;
+            }
+        }
+
+        foreach ($movements as &$movement) {
+            $original = $movement['concepte'];
+            if (isset($concepteMap[$original]) && $concepteMap[$original] !== $original) {
+                $movement['concepte_net'] = $concepteMap[$original];
+            } else {
+                $movement['concepte_net'] = null;
+            }
+        }
+        unset($movement);
     }
 }

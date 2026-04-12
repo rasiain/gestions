@@ -51,9 +51,7 @@ class MovimentCompteCorrentController extends Controller
 
         // Apply filters
         if ($filters['search']) {
-            $query->whereHas('concepte', function ($q) use ($filters) {
-                $q->where('concepte', 'LIKE', '%' . $filters['search'] . '%');
-            });
+            $query->cerca($filters['search']);
         }
 
         if ($filters['categoria_id']) {
@@ -123,11 +121,22 @@ class MovimentCompteCorrentController extends Controller
                 ->value('saldo_posterior'),
         ];
 
+        // Get distinct concepts used in this compte corrent for autocomplete
+        $conceptes = $compteCorrentId
+            ? MovimentConcepte::select('g_moviments_conceptes.concepte')
+                ->join('g_moviments_comptes_corrents', 'g_moviments_conceptes.id', '=', 'g_moviments_comptes_corrents.concepte_id')
+                ->where('g_moviments_comptes_corrents.compte_corrent_id', $compteCorrentId)
+                ->distinct()
+                ->orderBy('g_moviments_conceptes.concepte')
+                ->pluck('g_moviments_conceptes.concepte')
+            : [];
+
         return Inertia::render('Moviments/Index', [
             'comptesCorrents' => $comptesCorrents,
             'selectedCompteCorrentId' => $compteCorrentId,
             'moviments' => $moviments,
             'categories' => $categories,
+            'conceptes' => $conceptes,
             'filters' => $filters,
             'stats' => $stats,
         ]);
@@ -195,14 +204,11 @@ class MovimentCompteCorrentController extends Controller
             $concepteText = $validated['concepte'];
             $concepteModel = MovimentConcepte::findOrCreateByConcepte($concepteText);
 
-            // Replace concepte text with concepte_id
+            // Replace concepte text with concepte_id.
+            // concepte_original és el text brut del banc i NO es modifica mai un cop desat:
+            // és la clau per reconèixer futurs moviments bancaris equivalents.
             unset($validated['concepte']);
             $validated['concepte_id'] = $concepteModel->id;
-
-            // Update concepte_original if it changed
-            if ($concepteText !== $moviment->concepte_original) {
-                $validated['concepte_original'] = $concepteText;
-            }
 
             // Recalculate hash if critical fields changed
             if (
@@ -395,7 +401,7 @@ class MovimentCompteCorrentController extends Controller
             ->where('compte_corrent_id', $compteCorrentId);
 
         if ($request->filled('search')) {
-            $query->whereHas('concepte', fn($q) => $q->where('concepte', 'LIKE', '%' . $request->input('search') . '%'));
+            $query->cerca($request->input('search'));
         }
         if ($request->filled('categoria_id')) {
             $v = $request->input('categoria_id');

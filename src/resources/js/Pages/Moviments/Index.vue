@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
+import BulkEditModal from '@/Components/BulkEditModal.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch, onUnmounted } from 'vue';
 
@@ -71,6 +72,7 @@ interface Props {
     selectedCompteCorrentId: number | null;
     moviments: PaginatedMoviments;
     categories: Categoria[];
+    conceptes: string[];
     filters: Filters;
     stats: Stats;
 }
@@ -370,8 +372,42 @@ const getImportClass = (import_val: number): string => {
     return 'text-gray-600 dark:text-gray-400';
 };
 
-// ── Selecció i duplicació ────────────────────────────────────
+// ── Selecció, duplicació i edició múltiple ───────────────────
 const selectedIds = ref<Set<number>>(new Set());
+
+const showBulkEditModal = ref(false);
+const bulkEditSaving = ref(false);
+const bulkEditError = ref('');
+
+const handleBulkEdit = async (payload: { concepte: string; notes: string; categoria_id: number | null }) => {
+    bulkEditSaving.value = true;
+    bulkEditError.value = '';
+    try {
+        const body: Record<string, unknown> = {
+            moviment_ids: Array.from(selectedIds.value),
+        };
+        if (payload.concepte)              body.concepte     = payload.concepte;
+        if (payload.notes !== '')          body.notes        = payload.notes;
+        if (payload.categoria_id !== null) body.categoria_id = payload.categoria_id;
+
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+        const res = await fetch(route('moviments.bulk-edit'), {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
+            body:    JSON.stringify(body),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+            bulkEditError.value = json.errors?.general ?? json.error ?? 'Error desconegut';
+            return;
+        }
+        showBulkEditModal.value = false;
+        selectedIds.value = new Set();
+        router.reload({ only: ['moviments', 'stats'] });
+    } finally {
+        bulkEditSaving.value = false;
+    }
+};
 
 const toggleSelect = (id: number) => {
     if (selectedIds.value.has(id)) {
@@ -481,7 +517,7 @@ const duplicarUn = (moviment: MovimentCompteCorrent) => {
                                     id="search"
                                     v-model="filterForm.search"
                                     type="text"
-                                    placeholder="Cerca per concepte..."
+                                    placeholder="Cerca concepte, notes, categoria…"
                                     class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                 />
                             </div>
@@ -629,16 +665,25 @@ const duplicarUn = (moviment: MovimentCompteCorrent) => {
                                 {{ selectedIds.size }} seleccionat{{ selectedIds.size !== 1 ? 's' : '' }}
                             </span>
                             <button
-                                @click="duplicarSeleccionats"
+                                @click="showBulkEditModal = true; bulkEditError = ''"
                                 class="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                Editar seleccionats
+                            </button>
+                            <button
+                                @click="duplicarSeleccionats"
+                                class="inline-flex items-center gap-1.5 rounded-md bg-white border border-indigo-300 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50 dark:bg-gray-700 dark:border-indigo-600 dark:text-indigo-300"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                 </svg>
-                                Duplicar seleccionats
+                                Duplicar
                             </button>
                             <button
-                                @click="selectedIds.clear()"
+                                @click="selectedIds = new Set()"
                                 class="text-xs text-indigo-500 hover:text-indigo-700 dark:text-indigo-400"
                             >
                                 Deseleccionar tot
@@ -803,9 +848,14 @@ const duplicarUn = (moviment: MovimentCompteCorrent) => {
                                         id="concepte"
                                         v-model="form.concepte"
                                         type="text"
+                                        list="concepte-options"
                                         required
+                                        autocomplete="off"
                                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                     />
+                                    <datalist id="concepte-options">
+                                        <option v-for="c in conceptes" :key="c" :value="c" />
+                                    </datalist>
                                     <p v-if="form.errors.concepte" class="mt-1 text-sm text-red-600 dark:text-red-400">
                                         {{ form.errors.concepte }}
                                     </p>
@@ -1061,5 +1111,16 @@ const duplicarUn = (moviment: MovimentCompteCorrent) => {
                 </div>
             </div>
         </div>
+
+        <!-- Modal edició múltiple -->
+        <BulkEditModal
+            v-model:open="showBulkEditModal"
+            :count="selectedIds.size"
+            :categories="localCategories"
+            :conceptes="conceptes"
+            :saving="bulkEditSaving"
+            :error="bulkEditError"
+            @submit="handleBulkEdit"
+        />
     </AuthenticatedLayout>
 </template>

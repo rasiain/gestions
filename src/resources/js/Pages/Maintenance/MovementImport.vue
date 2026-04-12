@@ -16,7 +16,8 @@ interface CompteCorrent {
 
 interface Movement {
     data_moviment: string;
-    concepte: string;
+    concepte: string;       // concepte brut del banc (serà concepte_original a la BD)
+    concepte_net: string | null; // concepte mapejat de l'historial (el que s'emmagatzemarà)
     import: number;
     saldo_posterior: number | null;
     notes: string | null;
@@ -237,15 +238,27 @@ const toggleExcluded = (hash: string) => {
     excludedHashes.value = s;
 };
 
-// Recalcula el saldo per a cada moviment no exclòs, en ordre cronològic,
-// partint del saldo_posterior de l'últim moviment exclòs (o del darrer moviment de la BD).
+// Recalcula el saldo per a cada moviment no exclòs, en ordre cronològic.
+// Si el fitxer té saldos propis (BBVA, CaixaBank...), deriva la base del primer moviment
+// no exclòs del fitxer (saldo_posterior - import) en lloc del saldo de la BD, evitant
+// divergències quan la BD i el fitxer no coincideixen al punt de junció.
 const computedSaldos = computed((): Record<string, number | null> => {
     const all = [...(parsedData.value?.movements ?? [])].sort((a, b) =>
         a.data_moviment.localeCompare(b.data_moviment)
     );
 
-    const rawBase = parsedData.value?.last_db_movement?.saldo_posterior;
-    let base: number | null = rawBase != null ? Number(rawBase) : null;
+    // Determinar la base: preferir el saldo del fitxer si disponible
+    let base: number | null = null;
+    const firstWithSaldo = all.find(m => m.saldo_posterior !== null && !excludedHashes.value.has(m.hash));
+    if (firstWithSaldo) {
+        // Deriva el saldo previ al primer moviment a partir del saldo del fitxer
+        base = Number(firstWithSaldo.saldo_posterior) - Number(firstWithSaldo.import);
+    } else {
+        // Fallback: usa el saldo de la BD (cas QIF sense saldo al fitxer)
+        const rawBase = parsedData.value?.last_db_movement?.saldo_posterior;
+        base = rawBase != null ? Number(rawBase) : null;
+    }
+
     const result: Record<string, number | null> = {};
 
     for (const m of all) {
@@ -630,13 +643,19 @@ const recalcularSaldos = () => {
                                             {{ formatDate(movement.data_moviment) }}
                                         </td>
                                         <td class="px-3 py-2 text-sm" :class="excludedHashes.has(movement.hash) ? 'line-through text-gray-400' : 'text-gray-900 dark:text-gray-100'">
-                                            {{ movement.concepte }}
+                                            <span>{{ movement.concepte_net || movement.concepte }}</span>
+                                            <span v-if="movement.concepte_net" class="ml-1 text-xs text-indigo-500 dark:text-indigo-400" :title="'Original: ' + movement.concepte">↩</span>
                                         </td>
                                         <td class="px-3 py-2 whitespace-nowrap text-sm text-right" :class="excludedHashes.has(movement.hash) ? 'line-through text-gray-400' : movement.import >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
                                             {{ formatCurrency(movement.import) }}
                                         </td>
                                         <td class="px-3 py-2 whitespace-nowrap text-sm text-right" :class="excludedHashes.has(movement.hash) ? 'text-gray-400' : 'text-gray-900 dark:text-gray-100'">
-                                            {{ computedSaldos[movement.hash] !== null && computedSaldos[movement.hash] !== undefined ? formatCurrency(computedSaldos[movement.hash]!) : '-' }}
+                                            <template v-if="excludedHashes.size > 0">
+                                                {{ computedSaldos[movement.hash] != null ? formatCurrency(computedSaldos[movement.hash]!) : '-' }}
+                                            </template>
+                                            <template v-else>
+                                                {{ movement.saldo_posterior != null ? formatCurrency(Number(movement.saldo_posterior)) : '-' }}
+                                            </template>
                                         </td>
                                         <td class="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
                                             {{ movement.categoria_path || '-' }}

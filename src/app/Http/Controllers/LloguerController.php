@@ -202,12 +202,7 @@ class LloguerController extends Controller
         }
 
         if ($cerca = trim($request->input('cerca', ''))) {
-            $query->where(function ($q) use ($cerca) {
-                $q->whereHas('concepte', fn($q2) => $q2->where('concepte', 'like', "%{$cerca}%"))
-                  ->orWhere('concepte_original', 'like', "%{$cerca}%")
-                  ->orWhere('notes', 'like', "%{$cerca}%")
-                  ->orWhereHas('categoria', fn($q2) => $q2->where('nom', 'like', "%{$cerca}%"));
-            });
+            $query->cerca($cerca);
         }
 
         if ($facturaId = $request->integer('per_vincular_factura')) {
