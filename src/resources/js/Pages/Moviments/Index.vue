@@ -33,6 +33,8 @@ interface MovimentCompteCorrent {
     saldo_posterior: number | null;
     categoria_id: number | null;
     hash_moviment: string;
+    conciliat: boolean;
+    exclou_lloguer: boolean;
     created_at: string;
     updated_at: string;
     categoria?: Categoria;
@@ -58,6 +60,7 @@ interface Filters {
     data_inici: string | null;
     data_fi: string | null;
     tipus: 'ingressos' | 'despeses' | null;
+    conciliat: 'conciliats' | 'pendents' | null;
     ordre: 'asc' | 'desc';
 }
 
@@ -163,6 +166,7 @@ const filterForm = useForm({
     data_inici: props.filters.data_inici || '',
     data_fi: props.filters.data_fi || '',
     tipus: props.filters.tipus || null,
+    conciliat: props.filters.conciliat || null,
     ordre: props.filters.ordre || 'desc',
 });
 
@@ -191,6 +195,7 @@ const filterSnapshot = computed(() => ({
     search:       filterForm.search,
     categoria_id: filterForm.categoria_id,
     tipus:        filterForm.tipus,
+    conciliat:    filterForm.conciliat,
     data_inici:   filterForm.data_inici,
     data_fi:      filterForm.data_fi,
     ordre:        filterForm.ordre,
@@ -232,6 +237,7 @@ const clearFilters = () => {
     filterForm.data_inici = '';
     filterForm.data_fi = '';
     filterForm.tipus = null;
+    filterForm.conciliat = null;
     filterForm.ordre = 'desc';
 };
 
@@ -440,6 +446,41 @@ const duplicarSeleccionats = () => {
 const duplicarUn = (moviment: MovimentCompteCorrent) => {
     router.post(route('moviments.duplicar'), { ids: [moviment.id] });
 };
+
+const toggleConciliat = async (moviment: MovimentCompteCorrent) => {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+    const res = await fetch(route('moviments.toggle-conciliat', moviment.id), {
+        method: 'PATCH',
+        headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
+    });
+    if (res.ok) {
+        const data = await res.json();
+        moviment.conciliat = data.conciliat;
+    }
+};
+
+const bulkConciliar = async (conciliat: boolean) => {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+    await fetch(route('moviments.bulk-conciliar'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
+        body: JSON.stringify({ moviment_ids: Array.from(selectedIds.value), conciliat }),
+    });
+    selectedIds.value = new Set();
+    router.reload({ only: ['moviments'] });
+};
+
+const conciliarPagina = async (conciliat: boolean) => {
+    const ids = props.moviments.data.map(m => m.id);
+    if (ids.length === 0) return;
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+    await fetch(route('moviments.bulk-conciliar'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
+        body: JSON.stringify({ moviment_ids: ids, conciliat }),
+    });
+    router.reload({ only: ['moviments'] });
+};
 </script>
 
 <template>
@@ -550,6 +591,22 @@ const duplicarUn = (moviment: MovimentCompteCorrent) => {
                                 </select>
                             </div>
 
+                            <!-- Conciliació -->
+                            <div>
+                                <label for="conciliat" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Estat
+                                </label>
+                                <select
+                                    id="conciliat"
+                                    v-model="filterForm.conciliat"
+                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                >
+                                    <option :value="null">Tots</option>
+                                    <option value="conciliats">Revisats</option>
+                                    <option value="pendents">Pendents</option>
+                                </select>
+                            </div>
+
                             <!-- Data Inici -->
                             <div>
                                 <label for="data_inici" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -637,6 +694,17 @@ const duplicarUn = (moviment: MovimentCompteCorrent) => {
                             </h3>
                             <div class="flex gap-3">
                                 <button
+                                    @click="conciliarPagina(true)"
+                                    :disabled="moviments.data.length === 0"
+                                    title="Marcar tots els moviments d'aquesta pàgina com a revisats"
+                                    class="inline-flex items-center gap-1.5 rounded-md border border-green-300 dark:border-green-700 bg-white dark:bg-gray-700 px-3 py-2 text-sm font-medium text-green-700 dark:text-green-300 shadow-sm hover:bg-green-50 dark:hover:bg-green-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Revisar pàgina
+                                </button>
+                                <button
                                     @click="verificaSaldos"
                                     :disabled="!selectedCompte"
                                     class="inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -683,6 +751,26 @@ const duplicarUn = (moviment: MovimentCompteCorrent) => {
                                 Duplicar
                             </button>
                             <button
+                                @click="bulkConciliar(true)"
+                                class="inline-flex items-center gap-1.5 rounded-md bg-white border border-green-300 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-50 dark:bg-gray-700 dark:border-green-600 dark:text-green-300"
+                                title="Marcar com a revisats"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                                Marcar revisats
+                            </button>
+                            <button
+                                @click="bulkConciliar(false)"
+                                class="inline-flex items-center gap-1.5 rounded-md bg-white border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-400"
+                                title="Desmarcar revisió"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                Desmarcar
+                            </button>
+                            <button
                                 @click="selectedIds = new Set()"
                                 class="text-xs text-indigo-500 hover:text-indigo-700 dark:text-indigo-400"
                             >
@@ -721,6 +809,9 @@ const duplicarUn = (moviment: MovimentCompteCorrent) => {
                                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">
                                             Saldo
                                         </th>
+                                        <th scope="col" class="px-3 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300" title="Revisat">
+                                            ✓
+                                        </th>
                                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">
                                             Accions
                                         </th>
@@ -754,6 +845,16 @@ const duplicarUn = (moviment: MovimentCompteCorrent) => {
                                         </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-sm text-right text-gray-900 dark:text-gray-100">
                                             {{ moviment.saldo_posterior !== null ? formatCurrency(moviment.saldo_posterior) : '-' }}
+                                        </td>
+                                        <td class="px-3 py-4 text-center">
+                                            <button
+                                                @click="toggleConciliat(moviment)"
+                                                :title="moviment.conciliat ? 'Revisat — clic per desmarcar' : 'Pendent — clic per marcar com a revisat'"
+                                                :class="moviment.conciliat
+                                                    ? 'text-green-600 hover:text-green-400 dark:text-green-400 dark:hover:text-green-300'
+                                                    : 'text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400'"
+                                                class="text-lg leading-none transition-colors"
+                                            >{{ moviment.conciliat ? '✓' : '○' }}</button>
                                         </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                                             <button

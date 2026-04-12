@@ -42,6 +42,7 @@ class MovimentCompteCorrentController extends Controller
             'data_inici' => $request->input('data_inici'),
             'data_fi' => $request->input('data_fi'),
             'tipus' => $request->input('tipus'), // 'ingressos', 'despeses', or null for all
+            'conciliat' => $request->input('conciliat'), // 'conciliats', 'pendents', or null for all
             'ordre' => $ordre,
         ];
 
@@ -76,6 +77,12 @@ class MovimentCompteCorrentController extends Controller
             $query->where('import', '<', 0);
         }
 
+        if ($filters['conciliat'] === 'conciliats') {
+            $query->where('conciliat', true);
+        } elseif ($filters['conciliat'] === 'pendents') {
+            $query->where('conciliat', false);
+        }
+
         $moviments = $query->orderBy('data_moviment', $ordre)
             ->orderBy('id', $ordre)
             ->paginate(50)
@@ -93,6 +100,8 @@ class MovimentCompteCorrentController extends Controller
                     'saldo_posterior' => $moviment->saldo_posterior,
                     'categoria_id' => $moviment->categoria_id,
                     'hash_moviment' => $moviment->hash,
+                    'conciliat' => $moviment->conciliat,
+                    'exclou_lloguer' => $moviment->exclou_lloguer,
                     'created_at' => $moviment->created_at,
                     'updated_at' => $moviment->updated_at,
                     'categoria' => $moviment->categoria,
@@ -326,6 +335,33 @@ class MovimentCompteCorrentController extends Controller
         $moviment->update(['exclou_lloguer' => !$moviment->exclou_lloguer]);
 
         return response()->json(['exclou_lloguer' => $moviment->exclou_lloguer]);
+    }
+
+    /**
+     * Toggle conciliat flag on a movement.
+     */
+    public function toggleConciliat(MovimentCompteCorrent $moviment): JsonResponse
+    {
+        $moviment->update(['conciliat' => !$moviment->conciliat]);
+
+        return response()->json(['conciliat' => $moviment->conciliat]);
+    }
+
+    /**
+     * Mark multiple movements as conciliat (or unconciliat).
+     */
+    public function bulkConciliar(Request $request): JsonResponse
+    {
+        $request->validate([
+            'moviment_ids'   => ['required', 'array', 'min:1'],
+            'moviment_ids.*' => ['integer'],
+            'conciliat'      => ['required', 'boolean'],
+        ]);
+
+        $updated = MovimentCompteCorrent::whereIn('id', $request->input('moviment_ids'))
+            ->update(['conciliat' => $request->boolean('conciliat')]);
+
+        return response()->json(['updated' => $updated]);
     }
 
     /**

@@ -132,6 +132,8 @@ class MovimentClassificacioController extends Controller
                         $created++;
                     }
                 }
+                // Auto-conciliat: classificar als lloguers implica que el moviment ha estat revisat
+                $moviment->update(['conciliat' => true]);
             }
             DB::commit();
         } catch (\Exception $e) {
@@ -200,6 +202,8 @@ class MovimentClassificacioController extends Controller
                     ]);
                 }
             }
+            // Auto-conciliat: classificar un moviment als lloguers implica que ja ha estat revisat
+            $moviment->update(['conciliat' => true]);
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();

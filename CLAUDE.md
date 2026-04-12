@@ -71,6 +71,7 @@ src/
 - Categories jeràrquiques (auto-referència `categoria_pare_id`)
 - Pivots amb dates per a propietaris d'immobles
 - **`concepte_original` és immutable**: text brut del banc, mai s'actualitza en editar. Només canvia `concepte_id`. És la clau per al mapeig automàtic d'imports futurs.
+- **`conciliat` (boolean)**: marca un moviment com a revisat/puntejat. S'activa automàticament quan el moviment es classifica als lloguers (despesa o ingrés) o quan es vincula a una factura. Es pot marcar/desmarcar manualment des de la columna ✓ de la taula o en bloc des de la toolbar de selecció. Filtrable (Tots / Revisats / Pendents).
 
 ### Importació de moviments bancaris (`MovementImportService`)
 Sis passos seqüencials: (1) generar hashes, (2) trobar punt de junció per hash, (3) filtrar moviments nous, (4) validar/calcular saldos, (5) mapeig de categories, (6) mapeig de conceptes (`concepte_original` → `concepte_id` de moviment anterior). Cada banc té el seu `*ParserService`; camps mínims: `data_moviment`, `concepte`, `import`, `saldo_posterior`, `notes`, `categoria_path`.

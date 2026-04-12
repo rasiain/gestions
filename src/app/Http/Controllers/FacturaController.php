@@ -221,6 +221,9 @@ class FacturaController extends Controller
                 'moviment_id' => $validated['moviment_id'],
                 'estat'       => 'cobrada',
             ]);
+            // Auto-conciliat: vincular una factura a un moviment implica que ja ha estat revisat
+            \App\Models\MovimentCompteCorrent::where('id', $validated['moviment_id'])
+                ->update(['conciliat' => true]);
         } else {
             $factura->update([
                 'moviment_id' => null,

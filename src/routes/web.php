@@ -120,6 +120,8 @@ Route::middleware('auth')->group(function () {
         'index', 'store', 'update', 'destroy'
     ]);
     Route::patch('/moviments/{moviment}/exclou-lloguer', [MovimentCompteCorrentController::class, 'toggleExclou'])->name('moviments.toggle-exclou');
+    Route::patch('/moviments/{moviment}/conciliat', [MovimentCompteCorrentController::class, 'toggleConciliat'])->name('moviments.toggle-conciliat');
+    Route::post('/moviments/concilia-multiple', [MovimentCompteCorrentController::class, 'bulkConciliar'])->name('moviments.bulk-conciliar');
     Route::post('/moviments/classificacio-multiple', [MovimentClassificacioController::class, 'bulkUpdate'])->name('moviments.classificacio.bulk');
     Route::post('/moviments/{moviment}/classificacio', [MovimentClassificacioController::class, 'store'])->name('moviments.classificacio.store');
     Route::put('/moviments/{moviment}/classificacio', [MovimentClassificacioController::class, 'update'])->name('moviments.classificacio.update');
