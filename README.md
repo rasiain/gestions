@@ -34,6 +34,7 @@ Gestió d'immobles en règim de lloguer: propietats, contractes, llogaters i seg
 - **[Gestió de Categories](docs/gestio-categories.md)** - Categories jeràrquiques per compte corrent
 - **[Importació de Categories des de KMyMoney](docs/importacio-categories.md)** - Importar categories des de fitxers QIF
 - **[Importació de Moviments](docs/importacio-moviments.md)** - Importar moviments bancaris des de fitxers Excel/CSV
+- **[Importació Automàtica via Agent](docs/agent-importacio-automatica.md)** - Importar i classificar moviments des de la línia de comandes amb Claude Code
 
 ### Lloguers
 - **[Gestió de Lloguers](docs/gestio-lloguers.md)** - Lloguers, contractes, llogaters i moviments associats

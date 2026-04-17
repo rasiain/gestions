@@ -586,10 +586,29 @@ memory_limit=512M
 max_execution_time=600
 ```
 
+## Importació via Línia de Comandes (Agent)
+
+A més de la interfície web, es poden importar i classificar moviments directament des del terminal amb una sola comanda de Claude Code:
+
+```bash
+/importa /path/al/fitxer.xlsx
+```
+
+Aquesta comanda executa tot el flux automàticament:
+1. Identifica el compte corrent i el tipus de banc a partir del contingut del fitxer
+2. Mostra un resum i demana confirmació abans d'importar
+3. Importa els moviments
+4. Classifica per categories els moviments sense classificar del mateix compte
+
+També es poden usar els agents per separat si cal:
+- `/importador /path/al/fitxer.xlsx` — només importació
+- `/classificador` — només classificació de moviments pendents
+
+Per a més detalls, consulta la [documentació de l'agent d'importació automàtica](agent-importacio-automatica.md).
+
 ## Millores Futures
 
-- Suport per més formats bancaris
+- Suport per més formats bancaris (XML: OFX, camt.053)
 - Exportació de moviments
 - Estadístiques i gràfics
-- Regles automàtiques de categorització
 - Detecció de transaccions duplicades entre comptes

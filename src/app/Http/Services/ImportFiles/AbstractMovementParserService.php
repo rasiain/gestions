@@ -34,6 +34,12 @@ abstract class AbstractMovementParserService
     {
         $date = trim($date);
 
+        // Excel serial number (e.g. 46127 from OLE2 binary XLS files)
+        if (is_numeric($date) && (int) $date > 30000 && (int) $date < 100000) {
+            $unix = ((int) $date - 25569) * 86400;
+            return date('Y-m-d', $unix);
+        }
+
         // Try different date formats
         $formats = [
             'd/m/Y',

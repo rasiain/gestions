@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'agent' => [
+        'token' => env('AGENT_API_TOKEN'),
+    ],
+
 ];

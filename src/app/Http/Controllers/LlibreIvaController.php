@@ -97,7 +97,7 @@ class LlibreIvaController extends Controller
         // Despeses de l'any
         $despeses = MovimentLloguerDespesa::where('lloguer_id', $lloguer->id)
             ->whereHas('moviment', fn($q) => $q->whereYear('data_moviment', $any))
-            ->with(['moviment', 'proveidor', 'tipusDespesaFiscal'])
+            ->with(['moviment.concepte', 'proveidor', 'tipusDespesaFiscal'])
             ->join('g_moviments_comptes_corrents', 'g_moviments_comptes_corrents.id', '=', 'g_moviment_lloguer_despesa.moviment_id')
             ->orderBy('g_moviments_comptes_corrents.data_moviment')
             ->select('g_moviment_lloguer_despesa.*')
@@ -340,7 +340,7 @@ class LlibreIvaController extends Controller
             $dataMoviment = $moviment?->data_moviment
                 ? \Carbon\Carbon::parse($moviment->data_moviment)->format('d/m/Y')
                 : '';
-            $concepte = $despesa->concepte ?? $moviment?->concepte_original ?? '';
+            $concepte = $despesa->concepte ?? $moviment?->concepte?->concepte ?? $moviment?->concepte_original ?? '';
             $import   = $moviment ? abs((float) $moviment->import) : 0;
 
             $sheet3->setCellValue("A{$row}", $idx);

@@ -589,7 +589,7 @@ const handleBulkEdit = async (payload: { concepte: string; notes: string; catego
         });
         const json = await res.json();
         if (!res.ok) {
-            bulkEditError.value = json.errors?.general ?? json.error ?? 'Error desconegut';
+            bulkEditError.value = json.errors?.general ?? json.error ?? json.message ?? 'Error desconegut';
             return;
         }
         showBulkEditModal.value = false;
@@ -627,7 +627,7 @@ const submitBulk = async () => {
         });
         const json = await res.json();
         if (!res.ok) {
-            bulkErrors.value = json.errors ?? { general: json.error ?? 'Error desconegut' };
+            bulkErrors.value = json.errors ?? { general: json.error ?? json.message ?? 'Error desconegut' };
             return;
         }
         closeBulkModal();
@@ -848,7 +848,7 @@ const submitClassificacio = async () => {
 
         if (!res.ok) {
             if (json.errors) classificacioErrors.value = json.errors;
-            else classificacioErrors.value = { general: json.error ?? 'Error desconegut' };
+            else classificacioErrors.value = { general: json.error ?? json.message ?? 'Error desconegut' };
             return;
         }
 

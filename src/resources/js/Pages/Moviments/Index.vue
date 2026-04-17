@@ -404,7 +404,7 @@ const handleBulkEdit = async (payload: { concepte: string; notes: string; catego
         });
         const json = await res.json();
         if (!res.ok) {
-            bulkEditError.value = json.errors?.general ?? json.error ?? 'Error desconegut';
+            bulkEditError.value = json.errors?.general ?? json.error ?? json.message ?? 'Error desconegut';
             return;
         }
         showBulkEditModal.value = false;
