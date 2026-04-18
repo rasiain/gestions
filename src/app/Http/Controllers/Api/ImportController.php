@@ -136,6 +136,9 @@ class ImportController extends Controller
                 $message .= sprintf(' (%d duplicats saltats)', $stats['skipped']);
             }
 
+            // Eliminar el fitxer original després d'una importació exitosa
+            @unlink($filePath);
+
             return response()->json([
                 'success' => true,
                 'message' => $message,
