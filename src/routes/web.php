@@ -116,6 +116,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/moviments/duplicar', [MovimentCompteCorrentController::class, 'duplicar'])->name('moviments.duplicar');
     Route::post('/moviments/edicio-multiple', [MovimentCompteCorrentController::class, 'bulkEdit'])->name('moviments.bulk-edit');
     Route::get('/moviments/verifica-saldos', [MovimentCompteCorrentController::class, 'verificaSaldos'])->name('moviments.verifica-saldos');
+    Route::post('/moviments/suggeriments-categoria', [MovimentCompteCorrentController::class, 'suggerimentsCategoria'])->name('moviments.suggeriments-categoria');
     Route::resource('moviments', MovimentCompteCorrentController::class)->only([
         'index', 'store', 'update', 'destroy'
     ]);

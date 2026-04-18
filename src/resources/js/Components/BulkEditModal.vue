@@ -16,17 +16,27 @@ export interface BulkEditFormData {
     categoria_id: number | null;
 }
 
+interface CategoriaSuggeriment {
+    categoria_id: number;
+    nom: string;
+    full_path: string;
+    total: number;
+    imports: number[];
+}
+
 interface Props {
     open: boolean;
     count: number;
     categories: Categoria[];
     conceptes?: string[];
+    suggeriments?: CategoriaSuggeriment[];
     saving?: boolean;
     error?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
     conceptes: () => [],
+    suggeriments: () => [],
     saving: false,
     error: '',
 });
@@ -100,6 +110,28 @@ const onSubmit = () => emit('submit', { ...form.value });
 
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoria</label>
+
+                                <!-- Suggeriments basats en historial -->
+                                <div v-if="suggeriments.length > 0" class="mb-2 rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-2">
+                                    <p class="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1.5">Categories usades per aquests conceptes:</p>
+                                    <div class="space-y-1">
+                                        <button
+                                            v-for="sug in suggeriments"
+                                            :key="sug.categoria_id"
+                                            type="button"
+                                            @click="form.categoria_id = sug.categoria_id"
+                                            class="flex w-full items-center justify-between rounded px-2 py-1 text-xs transition-colors text-left"
+                                            :class="form.categoria_id === sug.categoria_id
+                                                ? 'bg-blue-600 text-white'
+                                                : 'bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-700'"
+                                            :title="sug.full_path"
+                                        >
+                                            <span class="font-medium">{{ sug.nom }} <span class="opacity-60">({{ sug.total }})</span></span>
+                                            <span class="ml-2 opacity-75 tabular-nums">{{ sug.imports.map(v => v.toLocaleString('ca-ES', { minimumFractionDigits: 2 }) + ' €').join(', ') }}</span>
+                                        </button>
+                                    </div>
+                                </div>
+
                                 <CategoryTreeSelect
                                     :categories="categories"
                                     v-model="form.categoria_id"

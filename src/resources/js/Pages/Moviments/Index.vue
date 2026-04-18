@@ -33,6 +33,7 @@ interface MovimentCompteCorrent {
     import: number;
     saldo_posterior: number | null;
     categoria_id: number | null;
+    concepte_id: number | null;
     hash_moviment: string;
     conciliat: boolean;
     exclou_lloguer: boolean;
@@ -88,6 +89,34 @@ const isEditing = ref(false);
 const editingMoviment = ref<MovimentCompteCorrent | null>(null);
 const showDeleteConfirm = ref(false);
 const movimentToDelete = ref<MovimentCompteCorrent | null>(null);
+
+// ── Suggeriments de categoria basats en l'historial de conceptes ──
+interface CategoriaSuggeriment {
+    categoria_id: number;
+    nom: string;
+    full_path: string;
+    total: number;
+    imports: number[];
+}
+const categoriaSuggeriments = ref<CategoriaSuggeriment[]>([]);
+const loadingSuggeriments = ref(false);
+
+const fetchSuggeriments = async (concepteIds: number[]) => {
+    if (!concepteIds.length) { categoriaSuggeriments.value = []; return; }
+    loadingSuggeriments.value = true;
+    try {
+        const res = await fetch(route('moviments.suggeriments-categoria'), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content,
+            },
+            body: JSON.stringify({ concepte_ids: concepteIds }),
+        });
+        categoriaSuggeriments.value = res.ok ? await res.json() : [];
+    } catch { categoriaSuggeriments.value = []; }
+    finally { loadingSuggeriments.value = false; }
+};
 
 // ── Llista local de categories (s'amplia quan se'n crea una d'inline) ──
 const localCategories = ref<Categoria[]>([...props.categories]);
@@ -320,11 +349,14 @@ const openEditModal = (moviment: MovimentCompteCorrent) => {
     form.import = moviment.import;
     form.categoria_id = moviment.categoria_id;
     showModal.value = true;
+    if (moviment.concepte_id) fetchSuggeriments([moviment.concepte_id]);
+    else categoriaSuggeriments.value = [];
 };
 
 const closeModal = () => {
     showModal.value = false;
     form.reset();
+    categoriaSuggeriments.value = [];
     showNewCategory.value = false;
     newCatNom.value = '';
     newCatParentId.value = null;
@@ -390,6 +422,24 @@ const selectedIds = ref<Set<number>>(new Set());
 const showBulkEditModal = ref(false);
 const bulkEditSaving = ref(false);
 const bulkEditError = ref('');
+const bulkSuggeriments = ref<CategoriaSuggeriment[]>([]);
+
+const openBulkEditModal = () => {
+    showBulkEditModal.value = true;
+    bulkEditError.value = '';
+    const concepteIds = [...new Set(
+        props.moviments.data
+            .filter(m => selectedIds.value.has(m.id) && m.concepte_id)
+            .map(m => m.concepte_id as number)
+    )];
+    if (concepteIds.length) {
+        fetchSuggeriments(concepteIds).then(() => {
+            bulkSuggeriments.value = [...categoriaSuggeriments.value];
+        });
+    } else {
+        bulkSuggeriments.value = [];
+    }
+};
 
 const handleBulkEdit = async (payload: { concepte: string; notes: string; categoria_id: number | null }) => {
     bulkEditSaving.value = true;
@@ -739,7 +789,7 @@ const conciliarPagina = async (conciliat: boolean) => {
                                 {{ selectedIds.size }} seleccionat{{ selectedIds.size !== 1 ? 's' : '' }}
                             </span>
                             <button
-                                @click="showBulkEditModal = true; bulkEditError = ''"
+                                @click="openBulkEditModal()"
                                 class="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -1011,6 +1061,29 @@ const conciliarPagina = async (conciliat: boolean) => {
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                         Categoria (opcional)
                                     </label>
+
+                                    <!-- Suggeriments basats en historial -->
+                                    <div v-if="categoriaSuggeriments.length > 0" class="mb-2 rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-2">
+                                        <p class="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1.5">Categories usades per aquest concepte:</p>
+                                        <div class="space-y-1">
+                                            <button
+                                                v-for="sug in categoriaSuggeriments"
+                                                :key="sug.categoria_id"
+                                                type="button"
+                                                @click="form.categoria_id = sug.categoria_id"
+                                                class="flex w-full items-center justify-between rounded px-2 py-1 text-xs transition-colors text-left"
+                                                :class="form.categoria_id === sug.categoria_id
+                                                    ? 'bg-blue-600 text-white'
+                                                    : 'bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-700'"
+                                                :title="sug.full_path"
+                                            >
+                                                <span class="font-medium">{{ sug.nom }} <span class="opacity-60">({{ sug.total }})</span></span>
+                                                <span class="ml-2 opacity-75 tabular-nums">{{ sug.imports.map(v => v.toLocaleString('ca-ES', { minimumFractionDigits: 2 }) + ' €').join(', ') }}</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <p v-else-if="loadingSuggeriments" class="mb-2 text-xs text-gray-400">Carregant suggeriments...</p>
+
                                     <CategoryTreeSelect
                                         :categories="localCategories"
                                         v-model="form.categoria_id"
@@ -1226,6 +1299,7 @@ const conciliarPagina = async (conciliat: boolean) => {
             :count="selectedIds.size"
             :categories="localCategories"
             :conceptes="conceptes"
+            :suggeriments="bulkSuggeriments"
             :saving="bulkEditSaving"
             :error="bulkEditError"
             @submit="handleBulkEdit"

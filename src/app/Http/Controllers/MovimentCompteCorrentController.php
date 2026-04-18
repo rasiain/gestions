@@ -125,6 +125,7 @@ class MovimentCompteCorrentController extends Controller
                     'import' => $moviment->import,
                     'saldo_posterior' => $moviment->saldo_posterior,
                     'categoria_id' => $moviment->categoria_id,
+                    'concepte_id' => $moviment->concepte_id,
                     'hash_moviment' => $moviment->hash,
                     'conciliat' => $moviment->conciliat,
                     'exclou_lloguer' => $moviment->exclou_lloguer,
@@ -526,6 +527,64 @@ class MovimentCompteCorrentController extends Controller
             'errors'      => $errors,
             'sense_saldo' => $senseSaldo,
         ]);
+    }
+
+    /**
+     * Given one or more concepte_ids, return the categories historically used
+     * for movements with those concepts, ordered by frequency.
+     */
+    public function suggerimentsCategoria(Request $request): JsonResponse
+    {
+        $request->validate([
+            'concepte_ids' => ['required', 'array', 'min:1'],
+            'concepte_ids.*' => ['integer'],
+        ]);
+
+        $rows = MovimentCompteCorrent::whereIn('concepte_id', $request->input('concepte_ids'))
+            ->whereNotNull('categoria_id')
+            ->select('categoria_id', DB::raw('COUNT(*) as total'))
+            ->groupBy('categoria_id')
+            ->orderByDesc('total')
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return response()->json([]);
+        }
+
+        // Build full paths for the returned categories
+        $categoriaIds = $rows->pluck('categoria_id')->unique();
+        $compteCorrentId = MovimentCompteCorrent::where('concepte_id', $request->input('concepte_ids')[0])->value('compte_corrent_id');
+        $allCategories = Categoria::where('compte_corrent_id', $compteCorrentId)->get()->keyBy('id');
+
+        $buildPath = function (int $catId) use ($allCategories): string {
+            $path = [];
+            $current = $allCategories[$catId] ?? null;
+            while ($current) {
+                $path[] = $current->nom;
+                $current = $current->categoria_pare_id ? ($allCategories[$current->categoria_pare_id] ?? null) : null;
+            }
+            return implode(' > ', array_reverse($path));
+        };
+
+        // Get distinct amounts per category (last 5 unique amounts, most recent first)
+        $concepteIds = $request->input('concepte_ids');
+        $importsByCategory = MovimentCompteCorrent::whereIn('concepte_id', $concepteIds)
+            ->whereNotNull('categoria_id')
+            ->whereIn('categoria_id', $rows->pluck('categoria_id'))
+            ->orderByDesc('data_moviment')
+            ->get(['categoria_id', 'import'])
+            ->groupBy('categoria_id')
+            ->map(fn ($items) => $items->pluck('import')->map(fn ($v) => (float) $v)->unique()->take(5)->values());
+
+        $suggeriments = $rows->map(fn ($row) => [
+            'categoria_id' => $row->categoria_id,
+            'nom' => $allCategories[$row->categoria_id]?->nom ?? '',
+            'full_path' => $buildPath($row->categoria_id),
+            'total' => $row->total,
+            'imports' => $importsByCategory[$row->categoria_id] ?? [],
+        ]);
+
+        return response()->json($suggeriments);
     }
 
     /**
