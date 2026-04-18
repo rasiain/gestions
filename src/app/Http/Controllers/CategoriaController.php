@@ -100,22 +100,25 @@ class CategoriaController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(CategoriaRequest $request, Categoria $categoria)
+    public function update(CategoriaRequest $request, Categoria $category)
     {
-        $categoria->update($request->validated());
+        $category->update($request->validated());
 
-        return redirect()->route('categories.index')
-            ->with('success', 'Categoria actualitzada correctament.');
+        return redirect()->route('categories.index', [
+            'compte_corrent_id' => $category->compte_corrent_id,
+        ])->with('success', 'Categoria actualitzada correctament.');
     }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Categoria $categoria)
+    public function destroy(Categoria $category)
     {
-        $categoria->delete();
+        $compteCorrentId = $category->compte_corrent_id;
+        $category->delete();
 
-        return redirect()->route('categories.index')
-            ->with('success', 'Categoria eliminada correctament.');
+        return redirect()->route('categories.index', [
+            'compte_corrent_id' => $compteCorrentId,
+        ])->with('success', 'Categoria eliminada correctament.');
     }
 }

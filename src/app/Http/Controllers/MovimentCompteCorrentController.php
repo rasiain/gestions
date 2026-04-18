@@ -83,12 +83,38 @@ class MovimentCompteCorrentController extends Controller
             $query->where('conciliat', false);
         }
 
+        // Get categories for the selected compte for the filter dropdown
+        $categories = $compteCorrentId
+            ? Categoria::where('compte_corrent_id', $compteCorrentId)
+                ->orderBy('nom')
+                ->get()
+            : [];
+
+        // Build full_path map for all categories of this compte
+        $categoryFullPaths = [];
+        if ($compteCorrentId) {
+            $allCategories = $categories->keyBy('id');
+            foreach ($allCategories as $cat) {
+                $path = [$cat->nom];
+                $parentId = $cat->categoria_pare_id;
+                while ($parentId && isset($allCategories[$parentId])) {
+                    $path[] = $allCategories[$parentId]->nom;
+                    $parentId = $allCategories[$parentId]->categoria_pare_id;
+                }
+                $categoryFullPaths[$cat->id] = implode(' > ', array_reverse($path));
+            }
+        }
+
         $moviments = $query->orderBy('data_moviment', $ordre)
             ->orderBy('id', $ordre)
             ->paginate(50)
             ->withQueryString()
-            ->through(function ($moviment) {
-                // Transform concepte relation to string for frontend
+            ->through(function ($moviment) use ($categoryFullPaths) {
+                $categoria = $moviment->categoria?->toArray();
+                if ($categoria && isset($categoryFullPaths[$categoria['id']])) {
+                    $categoria['full_path'] = $categoryFullPaths[$categoria['id']];
+                }
+
                 return [
                     'id' => $moviment->id,
                     'compte_corrent_id' => $moviment->compte_corrent_id,
@@ -104,17 +130,10 @@ class MovimentCompteCorrentController extends Controller
                     'exclou_lloguer' => $moviment->exclou_lloguer,
                     'created_at' => $moviment->created_at,
                     'updated_at' => $moviment->updated_at,
-                    'categoria' => $moviment->categoria,
+                    'categoria' => $categoria,
                     'compte_corrent' => $moviment->compteCorrent,
                 ];
             });
-
-        // Get categories for the selected compte for the filter dropdown
-        $categories = $compteCorrentId
-            ? Categoria::where('compte_corrent_id', $compteCorrentId)
-                ->orderBy('nom')
-                ->get()
-            : [];
 
         // Calculate statistics
         $stats = [

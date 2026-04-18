@@ -20,6 +20,7 @@ interface Categoria {
     nom: string;
     categoria_pare_id: number | null;
     ordre: number;
+    full_path?: string;
 }
 
 interface MovimentCompteCorrent {
@@ -257,6 +258,11 @@ interface SenseSaldo {
     concepte: string | null;
     import: number;
 }
+const expandedCategoryId = ref<number | null>(null);
+const toggleCategoryPath = (movimentId: number) => {
+    expandedCategoryId.value = expandedCategoryId.value === movimentId ? null : movimentId;
+};
+
 const showVerificaModal = ref(false);
 const verificaLoading = ref(false);
 const verificaTotal = ref(0);
@@ -837,8 +843,9 @@ const conciliarPagina = async (conciliat: boolean) => {
                                         <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                                             {{ moviment.concepte }}
                                         </td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                                            {{ moviment.categoria?.nom || '-' }}
+                                        <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 cursor-pointer select-none" @click="moviment.categoria?.full_path && toggleCategoryPath(moviment.id)">
+                                            <span v-if="expandedCategoryId === moviment.id && moviment.categoria?.full_path" class="text-xs text-gray-400 dark:text-gray-500">{{ moviment.categoria.full_path }}</span>
+                                            <span v-else>{{ moviment.categoria?.nom || '-' }}</span>
                                         </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-sm text-right font-semibold" :class="getImportClass(moviment.import)">
                                             {{ formatCurrency(moviment.import) }}
