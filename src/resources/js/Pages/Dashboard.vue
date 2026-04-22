@@ -58,6 +58,12 @@ import { Head, Link } from '@inertiajs/vue3';
                         <!-- Sub-links -->
                         <div class="mt-4 ml-16 space-y-2 border-l-2 border-blue-200 dark:border-blue-800 pl-4">
                             <Link
+                                :href="route('importar.index')"
+                                class="block text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                            >
+                                → Importar moviments
+                            </Link>
+                            <Link
                                 :href="route('comptes-corrents.index')"
                                 class="block text-sm text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
                             >

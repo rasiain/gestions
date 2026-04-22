@@ -138,6 +138,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/maintenance/movements/import', [MovementImportController::class, 'index'])->name('maintenance.movements.import');
     Route::post('/maintenance/movements/import/parse', [MovementImportController::class, 'parse'])->name('maintenance.movements.import.parse');
     Route::post('/maintenance/movements/import', [MovementImportController::class, 'import'])->name('maintenance.movements.import.store');
+
+    // Importació automàtica (scan → preview → import)
+    Route::get('/importar', fn () => Inertia::render('Moviments/Import'))->name('importar.index');
+    Route::get('/importar/scan', [MovementImportController::class, 'scan'])->name('importar.scan');
+    Route::post('/importar/preview', [MovementImportController::class, 'autoPreview'])->name('importar.preview');
+    Route::post('/importar/store', [MovementImportController::class, 'autoImport'])->name('importar.store');
 });
 
 require __DIR__.'/auth.php';

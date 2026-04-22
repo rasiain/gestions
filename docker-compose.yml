@@ -16,6 +16,7 @@ services:
       - /Users/ricardasiain/Downloads:/Users/ricardasiain/Downloads
     environment:
       - XDEBUG_MODE=${XDEBUG_MODE:-off}
+      - IMPORT_SCAN_PATH=/Users/ricardasiain/Downloads
     networks:
       - laravel-network
     depends_on:
