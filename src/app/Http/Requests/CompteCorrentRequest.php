@@ -49,7 +49,7 @@ class CompteCorrentRequest extends FormRequest
             ],
             'titular_ids.*' => [
                 'integer',
-                'exists:g_titulars,id',
+                'exists:g_persones,id',
             ],
         ];
     }
