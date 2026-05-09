@@ -321,6 +321,17 @@ const deleteContracte = () => {
     }
 };
 
+const deleteArrendador = () => {
+    if (!contracteForm.arrendador_id) return;
+    const arrendador = props.arrendadors.find((a: Arrendador) => a.id === contracteForm.arrendador_id);
+    const nom = arrendador?.arrendadorable?.nom ?? 'aquest arrendador';
+    if (confirm(`Estàs segur que vols eliminar "${nom}"?`)) {
+        const id = contracteForm.arrendador_id;
+        contracteForm.arrendador_id = null;
+        router.delete(route('arrendadors.destroy', id), { preserveScroll: true });
+    }
+};
+
 // ── Moviments ──────────────────────────────────────────────────
 interface Categoria {
     id: number;
@@ -1375,6 +1386,17 @@ const formatCurrency = (value: string | null): string => {
                                             class="shrink-0 rounded-md border border-amber-500 px-3 py-1.5 text-sm font-medium text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
                                         >
                                             + Nou
+                                        </button>
+                                        <button
+                                            v-if="contracteForm.arrendador_id"
+                                            type="button"
+                                            @click="deleteArrendador"
+                                            class="shrink-0 rounded-md border border-red-300 px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
+                                            title="Eliminar arrendador"
+                                        >
+                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
                                         </button>
                                     </div>
                                     <p v-if="selectedLloguer?.propietaris.length" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
