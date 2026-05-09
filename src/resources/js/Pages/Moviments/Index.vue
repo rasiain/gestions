@@ -12,6 +12,8 @@ interface CompteCorrent {
     entitat: string;
     bank_type: string | null;
     ordre: number;
+    lloguer_nom: string | null;
+    lloguer_acronim: string | null;
 }
 
 interface Categoria {
@@ -204,6 +206,9 @@ const selectedCompte = computed(() => {
     if (!props.selectedCompteCorrentId) return null;
     return props.comptesCorrents.find(c => c.id === props.selectedCompteCorrentId);
 });
+
+const comptesPersonals = computed(() => props.comptesCorrents.filter(c => !c.lloguer_nom));
+const comptesLloguers = computed(() => props.comptesCorrents.filter(c => !!c.lloguer_nom));
 
 const onCompteCorrentChange = () => {
     router.get('/moviments', {
@@ -574,13 +579,24 @@ const conciliarPagina = async (conciliat: boolean) => {
                                 @change="onCompteCorrentChange"
                                 class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                             >
-                                <option
-                                    v-for="compte in comptesCorrents"
-                                    :key="compte.id"
-                                    :value="compte.id"
-                                >
-                                    {{ compte.nom || compte.compte_corrent }} - {{ compte.entitat }}
-                                </option>
+                                <optgroup v-if="comptesPersonals.length" label="Personals">
+                                    <option
+                                        v-for="compte in comptesPersonals"
+                                        :key="compte.id"
+                                        :value="compte.id"
+                                    >
+                                        {{ compte.nom || compte.compte_corrent }} - {{ compte.entitat }}
+                                    </option>
+                                </optgroup>
+                                <optgroup v-if="comptesLloguers.length" label="Lloguers">
+                                    <option
+                                        v-for="compte in comptesLloguers"
+                                        :key="compte.id"
+                                        :value="compte.id"
+                                    >
+                                        {{ compte.lloguer_acronim || compte.lloguer_nom }} — {{ compte.nom || compte.compte_corrent }}
+                                    </option>
+                                </optgroup>
                             </select>
                         </div>
 

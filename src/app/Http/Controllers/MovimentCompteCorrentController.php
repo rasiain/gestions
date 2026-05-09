@@ -6,6 +6,7 @@ use App\Http\Requests\MovimentCompteCorrentRequest;
 use App\Models\Categoria;
 use App\Models\CompteCorrent;
 use App\Models\MovimentCompteCorrent;
+use App\Models\Lloguer;
 use App\Models\MovimentConcepte;
 use App\Services\SaldoRecalculationService;
 use Illuminate\Http\JsonResponse;
@@ -26,10 +27,20 @@ class MovimentCompteCorrentController extends Controller
      */
     public function index(Request $request): Response
     {
-        // Get all comptes corrents for selector
+        // Get all comptes corrents for selector, annotated with lloguer name if linked
+        $lloguersPerCompte = Lloguer::select('compte_corrent_id', 'nom', 'acronim')
+            ->get()
+            ->keyBy('compte_corrent_id');
+
         $comptesCorrents = CompteCorrent::orderBy('ordre')
             ->orderBy('entitat')
-            ->get();
+            ->get()
+            ->map(function ($compte) use ($lloguersPerCompte) {
+                $lloguer = $lloguersPerCompte->get($compte->id);
+                $compte->lloguer_nom = $lloguer?->nom;
+                $compte->lloguer_acronim = $lloguer?->acronim;
+                return $compte;
+            });
 
         // Get selected compte or use first one
         $compteCorrentId = $request->integer('compte_corrent_id') ?: $comptesCorrents->first()?->id;
