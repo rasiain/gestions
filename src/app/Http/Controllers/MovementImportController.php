@@ -267,7 +267,8 @@ class MovementImportController extends Controller
     public function autoPreview(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'file_path' => 'required|string',
+            'file_path'        => 'required|string',
+            'compte_corrent_id' => 'nullable|integer|exists:g_comptes_corrents,id',
         ]);
 
         $filePath = $validated['file_path'];
@@ -288,16 +289,22 @@ class MovementImportController extends Controller
                 ], 422);
             }
 
-            $compte = $this->detectCompte($filePath, $bankType);
+            if ($validated['compte_corrent_id'] ?? null) {
+                $compte = CompteCorrent::find($validated['compte_corrent_id']);
+            } else {
+                $compte = $this->detectCompte($filePath, $bankType);
+            }
+
             if (!$compte) {
                 $comptes = CompteCorrent::orderBy('ordre')->get()->map(fn ($c) => [
                     'id' => $c->id, 'nom' => $c->nom, 'iban' => $c->compte_corrent, 'entitat' => $c->entitat,
                 ]);
                 return response()->json([
                     'success' => false,
+                    'needs_compte_selection' => true,
                     'message' => 'No s\'ha pogut identificar el compte corrent automàticament',
-                    'data' => ['bank_type' => $bankType, 'comptes_disponibles' => $comptes],
-                ], 422);
+                    'data' => ['bank_type' => $bankType, 'file_path' => $filePath, 'comptes_disponibles' => $comptes],
+                ]);
             }
 
             $compteCorrentId = $compte->id;
@@ -418,14 +425,23 @@ class MovementImportController extends Controller
 
     private function detectCompte(string $filePath, string $bankType): ?CompteCorrent
     {
+        // 1. Cerca IBAN com a text pla (funciona per CSV/XLSX descomprimit)
         $content = file_get_contents($filePath, false, null, 0, 8192);
-
         if ($content && preg_match('/ES\d{2}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}/', $content, $matches)) {
             $iban = preg_replace('/\s/', '', $matches[0]);
             $compte = CompteCorrent::where('compte_corrent', $iban)->first();
             if ($compte) return $compte;
         }
 
+        // 2. Cerca per seqüència numèrica al nom del fitxer (ex: Moviments_compte_0586930.xls)
+        $filename = pathinfo($filePath, PATHINFO_FILENAME);
+        if (preg_match('/\d{5,}/', $filename, $matches)) {
+            $partial = $matches[0];
+            $compte = CompteCorrent::where('compte_corrent', 'LIKE', "%{$partial}%")->first();
+            if ($compte) return $compte;
+        }
+
+        // 3. Si només hi ha un compte del tipus detectat, l'usem
         $comptes = CompteCorrent::all()->filter(fn ($c) => $c->bank_type === $bankType);
         if ($comptes->count() === 1) return $comptes->first();
 

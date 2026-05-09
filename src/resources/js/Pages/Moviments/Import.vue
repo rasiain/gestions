@@ -32,7 +32,14 @@ interface PreviewData {
     warnings: string[];
 }
 
-type Step = 'scan' | 'preview' | 'importing' | 'done';
+interface CompteDisponible {
+    id: number;
+    nom: string | null;
+    iban: string;
+    entitat: string;
+}
+
+type Step = 'scan' | 'select_compte' | 'preview' | 'importing' | 'done';
 
 const step = ref<Step>('scan');
 const files = ref<ScannedFile[]>([]);
@@ -41,6 +48,11 @@ const error = ref('');
 const preview = ref<PreviewData | null>(null);
 const importResult = ref<{ created: number; skipped: number } | null>(null);
 const importedCompteId = ref<number | null>(null);
+
+// Selecció manual de compte
+const comptesDisponibles = ref<CompteDisponible[]>([]);
+const selectedCompteId = ref<number | null>(null);
+const pendingFilePath = ref<string>('');
 
 // Llegim el token de la cookie XSRF-TOKEN (sempre actual) en comptes del meta tag
 // (el meta tag només es refresca en full page load, la cookie es refresca a cada resposta Laravel)
@@ -65,19 +77,27 @@ const scanFiles = async () => {
     }
 };
 
-const selectFile = async (file: ScannedFile) => {
+const doPreview = async (filePath: string, compteCorrentId?: number) => {
     scanning.value = true;
     error.value = '';
     try {
+        const body: Record<string, unknown> = { file_path: filePath };
+        if (compteCorrentId) body.compte_corrent_id = compteCorrentId;
+
         const res = await fetch(route('importar.preview'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-XSRF-TOKEN': csrfToken() },
-            body: JSON.stringify({ file_path: file.path }),
+            body: JSON.stringify(body),
         });
         const json = await res.json();
         if (json.success) {
             preview.value = json.data;
             step.value = 'preview';
+        } else if (json.needs_compte_selection) {
+            comptesDisponibles.value = json.data.comptes_disponibles;
+            selectedCompteId.value = null;
+            pendingFilePath.value = json.data.file_path;
+            step.value = 'select_compte';
         } else {
             error.value = json.message || json.error || 'Error analitzant el fitxer';
         }
@@ -86,6 +106,13 @@ const selectFile = async (file: ScannedFile) => {
     } finally {
         scanning.value = false;
     }
+};
+
+const selectFile = (file: ScannedFile) => doPreview(file.path);
+
+const confirmCompte = () => {
+    if (!selectedCompteId.value) return;
+    doPreview(pendingFilePath.value, selectedCompteId.value);
 };
 
 const confirmImport = async () => {
@@ -123,6 +150,9 @@ const reset = () => {
     preview.value = null;
     importResult.value = null;
     error.value = '';
+    comptesDisponibles.value = [];
+    selectedCompteId.value = null;
+    pendingFilePath.value = '';
     scanFiles();
 };
 
@@ -202,6 +232,39 @@ onMounted(scanFiles);
                                         </svg>
                                     </button>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- STEP: Selecció manual de compte -->
+                        <div v-if="step === 'select_compte'">
+                            <p class="mb-4 text-sm text-amber-700 dark:text-amber-300 rounded-md bg-amber-50 dark:bg-amber-900/20 p-3">
+                                No s'ha pogut identificar el compte corrent automàticament. Selecciona'l manualment:
+                            </p>
+                            <div class="mb-4">
+                                <select
+                                    v-model="selectedCompteId"
+                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                >
+                                    <option :value="null" disabled>Selecciona un compte...</option>
+                                    <option v-for="c in comptesDisponibles" :key="c.id" :value="c.id">
+                                        {{ c.nom || c.iban }} — {{ c.entitat }}
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="flex gap-3">
+                                <button
+                                    @click="confirmCompte"
+                                    :disabled="!selectedCompteId || scanning"
+                                    class="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Continuar
+                                </button>
+                                <button
+                                    @click="reset"
+                                    class="inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600"
+                                >
+                                    Tornar
+                                </button>
                             </div>
                         </div>
 
