@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, router, Link } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 
 interface Titular {
     id: number;
@@ -17,6 +17,8 @@ interface CompteCorrent {
     ordre: number;
     titulars: Titular[];
     saldo_actual: number | null;
+    lloguer_nom: string | null;
+    lloguer_acronim: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -95,6 +97,9 @@ const formatSaldo = (saldo: number | null): string => {
         currency: 'EUR',
     }).format(saldo);
 };
+
+const comptesPersonals = computed(() => props.comptesCorrents.filter(c => !c.lloguer_nom));
+const comptesLloguers = computed(() => props.comptesCorrents.filter(c => !!c.lloguer_nom));
 </script>
 
 <template>
@@ -142,104 +147,77 @@ const formatSaldo = (saldo: number | null): string => {
                             </button>
                         </div>
 
-                        <!-- Table -->
-                        <div v-if="comptesCorrents.length > 0" class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                                <thead class="bg-gray-50 dark:bg-gray-700">
-                                    <tr>
-                                        <th
-                                            class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300"
-                                        >
-                                            Compte Corrent
-                                        </th>
-                                        <th
-                                            class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300"
-                                        >
-                                            Nom
-                                        </th>
-                                        <th
-                                            class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300"
-                                        >
-                                            Entitat
-                                        </th>
-                                        <th
-                                            class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300"
-                                        >
-                                            Titulars
-                                        </th>
-                                        <th
-                                            class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300"
-                                        >
-                                            Saldo Actual
-                                        </th>
-                                        <th
-                                            class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300"
-                                        >
-                                            Ordre
-                                        </th>
-                                        <th
-                                            class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300"
-                                        >
-                                            Accions
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-                                    <tr
-                                        v-for="compte in comptesCorrents"
-                                        :key="compte.id"
-                                        class="hover:bg-gray-50 dark:hover:bg-gray-700"
-                                    >
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
-                                            {{ compte.compte_corrent }}
-                                        </td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
-                                            {{ compte.nom || '-' }}
-                                        </td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
-                                            {{ compte.entitat }}
-                                        </td>
-                                        <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                                            {{ getTitularsNames(compte.titulars) }}
-                                        </td>
-                                        <td
-                                            class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium"
-                                            :class="compte.saldo_actual !== null && compte.saldo_actual < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'"
-                                        >
-                                            {{ formatSaldo(compte.saldo_actual) }}
-                                        </td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                                            {{ compte.ordre }}
-                                        </td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                                            <Link
-                                                :href="route('moviments.index', { compte_corrent_id: compte.id })"
-                                                class="mr-3 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
-                                            >
-                                                Moviments
-                                            </Link>
-                                            <Link
-                                                :href="route('maintenance.movements.import', { compte_corrent_id: compte.id })"
-                                                class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300"
-                                            >
-                                                Importar
-                                            </Link>
-                                            <button
-                                                @click="openEditModal(compte)"
-                                                class="mr-3 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-                                            >
-                                                Editar
-                                            </button>
-                                            <button
-                                                @click="deleteCompteCorrent(compte)"
-                                                class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                                            >
-                                                Eliminar
-                                            </button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        <!-- Tables -->
+                        <div v-if="comptesCorrents.length > 0" class="space-y-8">
+
+                            <!-- Grup: Personals -->
+                            <div v-if="comptesPersonals.length">
+                                <h4 class="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Personals</h4>
+                                <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                        <thead class="bg-gray-50 dark:bg-gray-700">
+                                            <tr>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Compte Corrent</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Nom</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Entitat</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Titulars</th>
+                                                <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Saldo Actual</th>
+                                                <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Accions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                                            <tr v-for="compte in comptesPersonals" :key="compte.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                                <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">{{ compte.compte_corrent }}</td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ compte.nom || '-' }}</td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ compte.entitat }}</td>
+                                                <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ getTitularsNames(compte.titulars) }}</td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium" :class="compte.saldo_actual !== null && compte.saldo_actual < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'">{{ formatSaldo(compte.saldo_actual) }}</td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
+                                                    <Link :href="route('moviments.index', { compte_corrent_id: compte.id })" class="mr-3 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">Moviments</Link>
+                                                    <Link :href="route('maintenance.movements.import', { compte_corrent_id: compte.id })" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Importar</Link>
+                                                    <button @click="openEditModal(compte)" class="mr-3 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">Editar</button>
+                                                    <button @click="deleteCompteCorrent(compte)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Grup: Lloguers -->
+                            <div v-if="comptesLloguers.length">
+                                <h4 class="mb-3 text-sm font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">Lloguers</h4>
+                                <div class="overflow-x-auto rounded-lg border border-amber-200 dark:border-amber-800">
+                                    <table class="min-w-full divide-y divide-amber-100 dark:divide-amber-900">
+                                        <thead class="bg-amber-50 dark:bg-amber-900/30">
+                                            <tr>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Lloguer</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Compte Corrent</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Entitat</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Titulars</th>
+                                                <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Saldo Actual</th>
+                                                <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Accions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-amber-100 bg-white dark:divide-amber-900 dark:bg-gray-800">
+                                            <tr v-for="compte in comptesLloguers" :key="compte.id" class="hover:bg-amber-50 dark:hover:bg-amber-900/10">
+                                                <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-amber-700 dark:text-amber-300">{{ compte.lloguer_acronim || compte.lloguer_nom }}</td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ compte.nom || compte.compte_corrent }}</td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ compte.entitat }}</td>
+                                                <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ getTitularsNames(compte.titulars) }}</td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium" :class="compte.saldo_actual !== null && compte.saldo_actual < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'">{{ formatSaldo(compte.saldo_actual) }}</td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
+                                                    <Link :href="route('moviments.index', { compte_corrent_id: compte.id })" class="mr-3 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">Moviments</Link>
+                                                    <Link :href="route('maintenance.movements.import', { compte_corrent_id: compte.id })" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Importar</Link>
+                                                    <button @click="openEditModal(compte)" class="mr-3 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">Editar</button>
+                                                    <button @click="deleteCompteCorrent(compte)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
                         </div>
 
                         <!-- Empty State -->

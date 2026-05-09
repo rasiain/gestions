@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\CompteCorrentRequest;
 use App\Models\CompteCorrent;
+use App\Models\Lloguer;
 use App\Models\Persona;
 use Inertia\Inertia;
 
@@ -14,12 +15,19 @@ class CompteCorrentController extends Controller
      */
     public function index()
     {
+        $lloguersPerCompte = Lloguer::select('compte_corrent_id', 'nom', 'acronim')
+            ->get()
+            ->keyBy('compte_corrent_id');
+
         $comptesCorrents = CompteCorrent::with('titulars')
             ->orderBy('ordre')
             ->orderBy('entitat')
             ->get()
-            ->map(function ($compte) {
+            ->map(function ($compte) use ($lloguersPerCompte) {
                 $compte->saldo_actual = $compte->saldo_actual;
+                $lloguer = $lloguersPerCompte->get($compte->id);
+                $compte->lloguer_nom = $lloguer?->nom;
+                $compte->lloguer_acronim = $lloguer?->acronim;
                 return $compte;
             });
 
