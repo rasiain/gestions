@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { ref, onMounted } from 'vue';
 
 interface ScannedFile {
@@ -40,8 +40,14 @@ const scanning = ref(false);
 const error = ref('');
 const preview = ref<PreviewData | null>(null);
 const importResult = ref<{ created: number; skipped: number } | null>(null);
+const importedCompteId = ref<number | null>(null);
 
-const csrfToken = () => (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content;
+// Llegim el token de la cookie XSRF-TOKEN (sempre actual) en comptes del meta tag
+// (el meta tag només es refresca en full page load, la cookie es refresca a cada resposta Laravel)
+const csrfToken = () => {
+    const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : '';
+};
 
 const scanFiles = async () => {
     scanning.value = true;
@@ -65,7 +71,7 @@ const selectFile = async (file: ScannedFile) => {
     try {
         const res = await fetch(route('importar.preview'), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-XSRF-TOKEN': csrfToken() },
             body: JSON.stringify({ file_path: file.path }),
         });
         const json = await res.json();
@@ -89,7 +95,7 @@ const confirmImport = async () => {
     try {
         const res = await fetch(route('importar.store'), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-XSRF-TOKEN': csrfToken() },
             body: JSON.stringify({
                 file_path: preview.value.file_path,
                 compte_corrent_id: preview.value.compte_corrent_id,
@@ -99,6 +105,7 @@ const confirmImport = async () => {
         const json = await res.json();
         if (json.success) {
             importResult.value = json.data.stats;
+            importedCompteId.value = preview.value.compte_corrent_id;
             step.value = 'done';
         } else {
             error.value = json.message || 'Error important';
@@ -286,12 +293,21 @@ onMounted(scanFiles);
                                 {{ importResult.created }} moviment{{ importResult.created !== 1 ? 's' : '' }} creat{{ importResult.created !== 1 ? 's' : '' }}
                                 <span v-if="importResult.skipped > 0">, {{ importResult.skipped }} duplicat{{ importResult.skipped !== 1 ? 's' : '' }}</span>
                             </p>
-                            <button
-                                @click="reset"
-                                class="mt-4 inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                            >
-                                Importar un altre fitxer
-                            </button>
+                            <div class="mt-4 flex justify-center gap-3">
+                                <Link
+                                    v-if="importedCompteId"
+                                    :href="route('moviments.index', { compte_corrent_id: importedCompteId })"
+                                    class="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                                >
+                                    Veure moviments
+                                </Link>
+                                <button
+                                    @click="reset"
+                                    class="inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600"
+                                >
+                                    Importar un altre fitxer
+                                </button>
+                            </div>
                         </div>
 
                     </div>
