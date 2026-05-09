@@ -166,10 +166,9 @@ function mostrarLlibreIvaMsg(text: string, ok: boolean) {
 }
 
 async function desarFitxer(postUrl: string, force = false): Promise<any> {
-    const csrfToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
     return fetch(force ? postUrl + '&force=1' : postUrl, {
         method: 'POST',
-        headers: { 'X-CSRF-TOKEN': csrfToken },
+        headers: { 'X-XSRF-TOKEN': xsrfToken() },
     }).then(r => r.json()).catch(() => null);
 }
 
@@ -400,8 +399,10 @@ interface TipusDespesaFiscal {
 const tipusDespesaFiscalOpcions = ref<TipusDespesaFiscal[]>([]);
 const categoriaMapping = ref<Record<string, number>>({});
 
-const csrfToken = (): string =>
-    (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
+const xsrfToken = (): string => {
+    const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : '';
+};
 
 const fetchMoviments = async (lloguer: Lloguer, page: number, append = false) => {
     movimentsLoading.value = true;
@@ -413,7 +414,7 @@ const fetchMoviments = async (lloguer: Lloguer, page: number, append = false) =>
         if (movimentsFilterCerca.value.trim()) params.set('cerca', movimentsFilterCerca.value.trim());
 
         const res = await fetch(`/lloguers/${lloguer.id}/moviments?${params}`, {
-            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
         const json = await res.json();
         moviments.value = append ? [...moviments.value, ...json.data] : json.data;
@@ -449,7 +450,7 @@ const toggleExclou = async (moviment: Moviment) => {
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': csrfToken(),
+                'X-XSRF-TOKEN': xsrfToken(),
             },
         });
         const json = await res.json();
@@ -506,7 +507,7 @@ const submitMovimentEdit = async () => {
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': csrfToken(),
+                'X-XSRF-TOKEN': xsrfToken(),
             },
             body: JSON.stringify(movimentEditForm.value),
         });
@@ -600,7 +601,7 @@ const handleBulkEdit = async (payload: { concepte: string; notes: string; catego
 
         const res = await fetch('/moviments/edicio-multiple', {
             method:  'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body:    JSON.stringify(body),
         });
         const json = await res.json();
@@ -638,7 +639,7 @@ const submitBulk = async () => {
 
         const res = await fetch('/moviments/classificacio-multiple', {
             method:  'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body:    JSON.stringify(body),
         });
         const json = await res.json();
@@ -855,7 +856,7 @@ const submitClassificacio = async () => {
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': csrfToken(),
+                'X-XSRF-TOKEN': xsrfToken(),
             },
             body: JSON.stringify(body),
         });
@@ -884,7 +885,7 @@ const deleteClassificacio = async (moviment: Moviment) => {
     try {
         const res = await fetch(`/moviments/${moviment.id}/classificacio`, {
             method: 'DELETE',
-            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
         const json = await res.json();
         if (res.ok) {
@@ -980,7 +981,7 @@ const openResum = async () => {
         const params = new URLSearchParams();
         if (movimentsFilterAny.value) params.set('any', String(movimentsFilterAny.value));
         const res = await fetch(`/lloguers/${selectedLloguer.value.id}/resum?${params}`, {
-            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
         resumData.value = await res.json();
     } catch {
@@ -1040,7 +1041,7 @@ const submitNouArrendador = async () => {
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': csrfToken(),
+                'X-XSRF-TOKEN': xsrfToken(),
             },
             body: JSON.stringify(nouArrendadorForm.value),
         });
