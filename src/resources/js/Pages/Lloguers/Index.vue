@@ -1074,6 +1074,65 @@ const submitNouArrendador = async () => {
     }
 };
 
+// ── Nou llogater (mini-formulari inline) ───────────────────────
+const showNouLlogaterForm = ref(false);
+const nouLlogaterSaving = ref(false);
+const nouLlogaterErrors = ref<Record<string, string>>({});
+const nouLlogaterForm = ref({
+    tipus: 'persona' as 'persona' | 'empresa',
+    persona_id: null as number | null,
+    nom_rao_social: '',
+    nif: '',
+});
+
+const openNouLlogaterForm = () => {
+    nouLlogaterForm.value = { tipus: 'persona', persona_id: null, nom_rao_social: '', nif: '' };
+    nouLlogaterErrors.value = {};
+    showNouLlogaterForm.value = true;
+};
+
+const cancelNouLlogater = () => {
+    showNouLlogaterForm.value = false;
+    nouLlogaterErrors.value = {};
+};
+
+const submitNouLlogater = async () => {
+    nouLlogaterSaving.value = true;
+    nouLlogaterErrors.value = {};
+    try {
+        const body = nouLlogaterForm.value.tipus === 'persona'
+            ? { tipus: 'persona', persona_id: nouLlogaterForm.value.persona_id }
+            : { tipus: 'empresa', nom_rao_social: nouLlogaterForm.value.nom_rao_social, nif: nouLlogaterForm.value.nif };
+
+        const res = await fetch('/llogaters', {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
+            body: JSON.stringify(body),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+            nouLlogaterErrors.value = json.errors ?? { general: json.message ?? 'Error desconegut' };
+            return;
+        }
+        // Afegir el nou llogater directament al formulari del contracte
+        contracteForm.llogater_ids.push(json.id);
+        router.reload({ only: ['llogaters'] });
+        showNouLlogaterForm.value = false;
+    } catch {
+        nouLlogaterErrors.value = { general: 'Error de connexió' };
+    } finally {
+        nouLlogaterSaving.value = false;
+    }
+};
+
+const deleteLlogaterEntitat = (llogater: LlogaterBasic) => {
+    const nom = llogater.cognoms ? `${llogater.cognoms}, ${llogater.nom}` : llogater.nom;
+    if (confirm(`Estàs segur que vols eliminar el llogater "${nom}"?`)) {
+        removeLlogater(llogater.id);
+        router.delete(route('llogaters.destroy', llogater.id), { preserveScroll: true });
+    }
+};
+
 // ── Helpers ────────────────────────────────────────────────────
 const formatCurrency = (value: string | null): string => {
     if (value === null) return '-';
@@ -1337,28 +1396,81 @@ const formatCurrency = (value: string | null): string => {
                                             <button
                                                 type="button"
                                                 @click="removeLlogater(llogater.id)"
+                                                title="Treure del contracte"
                                                 class="ml-1 rounded-full text-amber-600 hover:text-amber-900 dark:text-amber-300 dark:hover:text-amber-100 focus:outline-none"
+                                            >✕</button>
+                                            <button
+                                                type="button"
+                                                @click="deleteLlogaterEntitat(llogater)"
+                                                title="Eliminar llogater"
+                                                class="rounded-full text-red-400 hover:text-red-700 dark:text-red-400 dark:hover:text-red-200 focus:outline-none"
                                             >
-                                                ✕
+                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                             </button>
                                         </span>
                                     </div>
 
-                                    <!-- Dropdown to add -->
-                                    <select
-                                        v-if="availableLlogaters.length > 0"
-                                        @change="addLlogater"
-                                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
-                                    >
-                                        <option value="">Afegir llogater…</option>
-                                        <option v-for="llogater in availableLlogaters" :key="llogater.id" :value="llogater.id">
-                                            {{ llogater.cognoms ? llogater.cognoms + ', ' + llogater.nom : llogater.nom }}
-                                        </option>
-                                    </select>
-                                    <p v-else-if="llogaters.length === 0" class="text-sm italic text-gray-400">
-                                        No hi ha llogaters. <a :href="route('llogaters.index')" class="text-amber-600 hover:underline">Afegeix-ne</a>.
-                                    </p>
-                                    <p v-else class="text-sm italic text-gray-400">Tots els llogaters ja estan afegits.</p>
+                                    <!-- Dropdown to add + botó Nou -->
+                                    <div class="flex gap-2">
+                                        <select
+                                            v-if="availableLlogaters.length > 0"
+                                            @change="addLlogater"
+                                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        >
+                                            <option value="">Afegir llogater…</option>
+                                            <option v-for="llogater in availableLlogaters" :key="llogater.id" :value="llogater.id">
+                                                {{ llogater.cognoms ? llogater.cognoms + ', ' + llogater.nom : llogater.nom }}
+                                            </option>
+                                        </select>
+                                        <p v-else-if="!showNouLlogaterForm" class="flex-1 text-sm italic text-gray-400 self-center">
+                                            {{ llogaters.length === 0 ? 'No hi ha llogaters.' : 'Tots els llogaters ja estan afegits.' }}
+                                        </p>
+                                        <button
+                                            type="button"
+                                            @click="openNouLlogaterForm"
+                                            class="shrink-0 rounded-md border border-amber-500 px-3 py-1.5 text-sm font-medium text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                                        >+ Nou</button>
+                                    </div>
+
+                                    <!-- Mini-formulari nou llogater -->
+                                    <div v-if="showNouLlogaterForm" class="mt-3 rounded-md border border-amber-300 bg-amber-50 p-4 dark:border-amber-600 dark:bg-amber-900/20">
+                                        <h4 class="mb-3 text-sm font-medium text-amber-800 dark:text-amber-200">Nou llogater</h4>
+                                        <div class="space-y-3">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Tipus</label>
+                                                <select v-model="nouLlogaterForm.tipus" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm">
+                                                    <option value="persona">Persona</option>
+                                                    <option value="empresa">Empresa</option>
+                                                </select>
+                                            </div>
+                                            <div v-if="nouLlogaterForm.tipus === 'persona'">
+                                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Persona</label>
+                                                <select v-model="nouLlogaterForm.persona_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm">
+                                                    <option :value="null">Selecciona…</option>
+                                                    <option v-for="p in persones" :key="p.id" :value="p.id">{{ p.nom }}</option>
+                                                </select>
+                                                <p v-if="nouLlogaterErrors.persona_id" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ nouLlogaterErrors.persona_id }}</p>
+                                            </div>
+                                            <div v-else class="space-y-2">
+                                                <div>
+                                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Raó social</label>
+                                                    <input v-model="nouLlogaterForm.nom_rao_social" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
+                                                    <p v-if="nouLlogaterErrors.nom_rao_social" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ nouLlogaterErrors.nom_rao_social }}</p>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">NIF</label>
+                                                    <input v-model="nouLlogaterForm.nif" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
+                                                </div>
+                                            </div>
+                                            <p v-if="nouLlogaterErrors.general" class="text-sm text-red-600 dark:text-red-400">{{ nouLlogaterErrors.general }}</p>
+                                            <div class="flex justify-end gap-2">
+                                                <button type="button" @click="cancelNouLlogater" class="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">Cancel·lar</button>
+                                                <button type="button" @click="submitNouLlogater" :disabled="nouLlogaterSaving" class="rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50">
+                                                    {{ nouLlogaterSaving ? 'Desant…' : 'Crear' }}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
 
                                     <p v-if="contracteForm.errors.llogater_ids" class="mt-1 text-sm text-red-600 dark:text-red-400">
                                         {{ contracteForm.errors.llogater_ids }}

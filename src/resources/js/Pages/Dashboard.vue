@@ -150,12 +150,6 @@ import { Head, Link } from '@inertiajs/vue3';
                             >
                                 → Immobles
                             </Link>
-                            <Link
-                                :href="route('llogaters.index')"
-                                class="block text-sm text-gray-600 hover:text-amber-600 dark:text-gray-400 dark:hover:text-amber-400 transition-colors"
-                            >
-                                → Llogaters
-                            </Link>
                         </div>
                     </div>
 

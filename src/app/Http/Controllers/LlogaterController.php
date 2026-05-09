@@ -46,7 +46,15 @@ class LlogaterController extends Controller
 
     public function store(LlogaterRequest $request)
     {
-        Llogater::create($request->validated());
+        $llogater = Llogater::with('persona')->create($request->validated());
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'id'      => $llogater->id,
+                'nom'     => $llogater->persona?->nom ?? $llogater->nom_rao_social,
+                'cognoms' => $llogater->persona?->cognoms ?? '',
+            ], 201);
+        }
 
         return redirect()->route('llogaters.index')
             ->with('success', 'Llogater creat correctament.');
@@ -76,6 +84,10 @@ class LlogaterController extends Controller
     public function destroy(Llogater $llogater)
     {
         $llogater->delete();
+
+        if (request()->wantsJson()) {
+            return response()->json(['ok' => true]);
+        }
 
         return redirect()->route('llogaters.index')
             ->with('success', 'Llogater eliminat correctament.');
