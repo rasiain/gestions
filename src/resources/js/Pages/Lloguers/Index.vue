@@ -76,6 +76,7 @@ interface Lloguer {
     iva_percentatge: string | null;
     irpf_percentatge: string | null;
     ruta_descarrega: string | null;
+    ruta_export: string | null;
     gestoria: Proveidor | null;
     propietaris: PersonaBasic[];
     contracte_actiu: ContracteActiu | null;
@@ -112,6 +113,7 @@ const lloguerForm = useForm({
     iva_percentatge: 21.00 as number | null,
     irpf_percentatge: 19.00 as number | null,
     ruta_descarrega: '' as string,
+    ruta_export: '' as string,
 });
 
 const openCreateLloguerModal = () => {
@@ -136,6 +138,7 @@ const openEditLloguerModal = (lloguer: Lloguer) => {
     lloguerForm.iva_percentatge = lloguer.iva_percentatge ? parseFloat(lloguer.iva_percentatge) : 21.00;
     lloguerForm.irpf_percentatge = lloguer.irpf_percentatge ? parseFloat(lloguer.irpf_percentatge) : 19.00;
     lloguerForm.ruta_descarrega = lloguer.ruta_descarrega || '';
+    lloguerForm.ruta_export = lloguer.ruta_export || '';
     showLloguerModal.value = true;
 };
 
@@ -1899,7 +1902,7 @@ const formatCurrency = (value: string | null): string => {
                                 </div>
 
                                 <div class="sm:col-span-2">
-                                    <label for="ruta_descarrega" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Ruta de descàrrega del llibre d'IVA</label>
+                                    <label for="ruta_descarrega" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Ruta del llibre d'IVA <span class="font-normal text-gray-400">(només lloguers no habitatge)</span></label>
                                     <input
                                         id="ruta_descarrega"
                                         v-model="lloguerForm.ruta_descarrega"
@@ -1907,7 +1910,19 @@ const formatCurrency = (value: string | null): string => {
                                         placeholder="/ruta/al/directori"
                                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                     />
-                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Si s'especifica, el fitxer es guardarà automàticament en aquesta ruta en exportar.</p>
+                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Directori on es desa el llibre d'IVA. Per a no habitatge, també s'usa com a destinació de l'exportació si no s'especifica la ruta d'exportació.</p>
+                                </div>
+
+                                <div class="sm:col-span-2">
+                                    <label for="ruta_export" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Ruta d'exportació del resum</label>
+                                    <input
+                                        id="ruta_export"
+                                        v-model="lloguerForm.ruta_export"
+                                        type="text"
+                                        placeholder="/ruta/al/directori"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Directori on es desa el fitxer XLSX del resum. Si és buit: per a no habitatge usa la ruta de l'IVA; altrament, usa Downloads.</p>
                                 </div>
 
                             </div>

@@ -399,9 +399,12 @@ class LloguerController extends Controller
         $anyLabel = $any ?? 'tots';
         $filename = sprintf('lloguer-%s-%s.xlsx', $lloguer->acronim ?? $lloguer->id, $anyLabel);
 
-        $rutaDir = $lloguer->ruta_descarrega
-            ? rtrim($lloguer->ruta_descarrega, '/\\')
-            : env('IMPORT_SCAN_PATH', getenv('HOME') . '/Downloads');
+        $rutaDir = match(true) {
+            (bool) $lloguer->ruta_export    => rtrim($lloguer->ruta_export, '/\\'),
+            !$lloguer->es_habitatge && (bool) $lloguer->ruta_descarrega
+                                            => rtrim($lloguer->ruta_descarrega, '/\\'),
+            default                         => env('IMPORT_SCAN_PATH', getenv('HOME') . '/Downloads'),
+        };
 
         $rutaFitxer = $rutaDir . DIRECTORY_SEPARATOR . $filename;
 

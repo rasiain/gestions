@@ -26,6 +26,7 @@ class LloguerRequest extends FormRequest
             'iva_percentatge'       => ['nullable', 'numeric', 'min:0', 'max:100'],
             'irpf_percentatge'      => ['nullable', 'numeric', 'min:0', 'max:100'],
             'ruta_descarrega'       => ['nullable', 'string', 'max:500'],
+            'ruta_export'           => ['nullable', 'string', 'max:500'],
         ];
     }
 

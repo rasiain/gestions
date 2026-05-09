@@ -23,6 +23,7 @@ class Lloguer extends Model
         'iva_percentatge',
         'irpf_percentatge',
         'ruta_descarrega',
+        'ruta_export',
     ];
 
     protected $casts = [
