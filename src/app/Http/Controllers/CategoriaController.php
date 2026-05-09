@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Http\Requests\CategoriaRequest;
 use App\Models\Categoria;
 use App\Models\CompteCorrent;
+use App\Models\MovimentCompteCorrent;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -65,6 +67,41 @@ class CategoriaController extends Controller
         }
 
         return $tree;
+    }
+
+    public function totals(Request $request, Categoria $category): JsonResponse
+    {
+        $dataInici = $request->input('data_inici');
+        $dataFi    = $request->input('data_fi');
+
+        $ids = $this->collectDescendantIds($category->id);
+
+        $row = MovimentCompteCorrent::whereIn('categoria_id', $ids)
+            ->when($dataInici, fn($q) => $q->whereDate('data_moviment', '>=', $dataInici))
+            ->when($dataFi,    fn($q) => $q->whereDate('data_moviment', '<=', $dataFi))
+            ->selectRaw('
+                COALESCE(SUM(CASE WHEN import > 0 THEN import ELSE 0 END), 0) as ingressos,
+                COALESCE(SUM(CASE WHEN import < 0 THEN import ELSE 0 END), 0) as despeses,
+                COALESCE(SUM(import), 0) as net,
+                COUNT(*) as total
+            ')
+            ->first();
+
+        return response()->json([
+            'ingressos' => (float) $row->ingressos,
+            'despeses'  => (float) $row->despeses,
+            'net'       => (float) $row->net,
+            'total'     => (int)   $row->total,
+        ]);
+    }
+
+    private function collectDescendantIds(int $categoriaId): array
+    {
+        $ids = [$categoriaId];
+        foreach (Categoria::where('categoria_pare_id', $categoriaId)->pluck('id') as $fillId) {
+            $ids = array_merge($ids, $this->collectDescendantIds($fillId));
+        }
+        return $ids;
     }
 
     /**

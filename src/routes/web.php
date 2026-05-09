@@ -109,6 +109,7 @@ Route::middleware('auth')->group(function () {
         ]);
 
     // Categories management
+    Route::get('/categories/{category}/totals', [CategoriaController::class, 'totals'])->name('categories.totals');
     Route::resource('categories', CategoriaController::class)->only([
         'index', 'store', 'update', 'destroy'
     ]);

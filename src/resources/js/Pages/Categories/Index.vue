@@ -3,7 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import CategoryTreeNode from '@/Components/CategoryTreeNode.vue';
 import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 
 interface CompteCorrent {
     id: number;
@@ -54,20 +54,99 @@ const onCompteCorrentChange = () => {
     });
 };
 
-// Flatten categories for parent selection dropdown
+// Flatten categories with full path (for search + parent dropdown)
 const allCategories = computed(() => {
-    const flatten = (cats: Categoria[], level = 0): Array<Categoria & { level: number }> => {
-        let result: Array<Categoria & { level: number }> = [];
+    const flatten = (cats: Categoria[], path: string[] = []): Array<Categoria & { level: number; full_path: string }> => {
+        let result: Array<Categoria & { level: number; full_path: string }> = [];
         cats.forEach(cat => {
-            result.push({ ...cat, level });
+            const currentPath = [...path, cat.nom];
+            result.push({ ...cat, level: path.length, full_path: currentPath.join(' > ') });
             if (cat.fills && cat.fills.length > 0) {
-                result = result.concat(flatten(cat.fills, level + 1));
+                result = result.concat(flatten(cat.fills, currentPath));
             }
         });
         return result;
     };
     return flatten(props.categories);
 });
+
+// ── Cercador ─────────────────────────────────────────────────────────
+const cerca = ref('');
+
+const resultsCerca = computed(() => {
+    const q = cerca.value.trim().toLowerCase();
+    if (!q) return [];
+    return allCategories.value.filter(c =>
+        c.nom.toLowerCase().includes(q) || c.full_path.toLowerCase().includes(q)
+    );
+});
+
+// ── Totals ────────────────────────────────────────────────────────────
+interface TotalsResult {
+    ingressos: number;
+    despeses: number;
+    net: number;
+    total: number;
+}
+
+const showTotalsModal = ref(false);
+const totalsCategoria = ref<(Categoria & { full_path: string }) | null>(null);
+const totalsMode = ref<'any_curs' | 'any_anterior' | 'personalitzat'>('any_curs');
+const totalsDataInici = ref('');
+const totalsDataFi = ref('');
+const totalsLoading = ref(false);
+const totalsResult = ref<TotalsResult | null>(null);
+const totalsError = ref('');
+
+const obreTotals = (categoria: Categoria) => {
+    const flat = allCategories.value.find(c => c.id === categoria.id);
+    totalsCategoria.value = flat ?? { ...categoria, level: 0, full_path: categoria.nom };
+    totalsMode.value = 'any_curs';
+    totalsDataInici.value = '';
+    totalsDataFi.value = '';
+    totalsResult.value = null;
+    totalsError.value = '';
+    showTotalsModal.value = true;
+};
+
+const calcularTotals = async () => {
+    if (!totalsCategoria.value) return;
+    totalsLoading.value = true;
+    totalsResult.value = null;
+    totalsError.value = '';
+
+    const any = new Date().getFullYear();
+    let dataInici = totalsDataInici.value;
+    let dataFi = totalsDataFi.value;
+
+    if (totalsMode.value === 'any_curs') {
+        dataInici = `${any}-01-01`;
+        dataFi    = `${any}-12-31`;
+    } else if (totalsMode.value === 'any_anterior') {
+        dataInici = `${any - 1}-01-01`;
+        dataFi    = `${any - 1}-12-31`;
+    }
+
+    try {
+        const csrf = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
+        const res = await fetch(route('categories.totals', totalsCategoria.value.id) + `?data_inici=${dataInici}&data_fi=${dataFi}`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-XSRF-TOKEN': csrf ? decodeURIComponent(csrf[1]) : '',
+            },
+        });
+        totalsResult.value = await res.json();
+    } catch {
+        totalsError.value = 'Error en obtenir els totals.';
+    } finally {
+        totalsLoading.value = false;
+    }
+};
+
+watch(totalsMode, () => { totalsResult.value = null; });
+
+const formatCurrency = (v: number) =>
+    new Intl.NumberFormat('ca-ES', { style: 'currency', currency: 'EUR' }).format(v);
 
 const openCreateModal = (parentId: number | null = null) => {
     isEditing.value = false;
@@ -165,8 +244,51 @@ const isCategoryExpanded = (categoriaId: number) => {
                             </select>
                         </div>
 
+                        <!-- Cercador -->
+                        <div class="mb-4">
+                            <input
+                                v-model="cerca"
+                                type="search"
+                                placeholder="Cercar categoria..."
+                                class="block w-full max-w-md rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                            />
+                        </div>
+
+                        <!-- Resultats de cerca -->
+                        <div v-if="cerca.trim()" class="mb-6">
+                            <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">
+                                {{ resultsCerca.length }} resultat{{ resultsCerca.length !== 1 ? 's' : '' }}
+                            </p>
+                            <div v-if="resultsCerca.length" class="divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700">
+                                <div
+                                    v-for="cat in resultsCerca"
+                                    :key="cat.id"
+                                    class="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                                >
+                                    <span class="text-sm text-gray-700 dark:text-gray-300">{{ cat.full_path }}</span>
+                                    <div class="flex items-center gap-2 ml-4 shrink-0">
+                                        <button
+                                            @click="obreTotals(cat)"
+                                            class="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                                            title="Calcular totals"
+                                        >
+                                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                            </svg>
+                                        </button>
+                                        <button @click="openCreateModal(cat.id)" class="rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700">Afegir subcategoria</button>
+                                        <button @click="openEditModal(cat)" class="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700">Editar</button>
+                                        <button @click="deleteCategoria(cat.id)" class="rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700">Eliminar</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-else class="rounded-lg border border-gray-200 dark:border-gray-700 px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                                Cap categoria coincideix amb la cerca.
+                            </div>
+                        </div>
+
                         <!-- Header with Add Button -->
-                        <div class="mb-6 flex items-center justify-between">
+                        <div v-if="!cerca.trim()" class="mb-6 flex items-center justify-between">
                             <div>
                                 <h3 class="text-lg font-medium">
                                     Arbre de Categories
@@ -198,7 +320,7 @@ const isCategoryExpanded = (categoriaId: number) => {
                         </div>
 
                         <!-- Hierarchical Category Tree -->
-                        <div v-if="categories.length > 0" class="space-y-2">
+                        <div v-if="!cerca.trim() && categories.length > 0" class="space-y-2">
                             <CategoryTreeNode
                                 v-for="categoria in categories"
                                 :key="categoria.id"
@@ -210,11 +332,12 @@ const isCategoryExpanded = (categoriaId: number) => {
                                 @create-child="openCreateModal"
                                 @edit="openEditModal"
                                 @delete="deleteCategoria"
+                                @calcular-totals="obreTotals"
                             />
                         </div>
 
                         <!-- Empty State -->
-                        <div v-else class="py-12 text-center">
+                        <div v-else-if="!cerca.trim()" class="py-12 text-center">
                             <svg
                                 class="mx-auto h-12 w-12 text-gray-400"
                                 fill="none"
@@ -353,5 +476,81 @@ const isCategoryExpanded = (categoriaId: number) => {
                 </div>
             </div>
         </div>
+        <!-- Modal totals -->
+        <div v-if="showTotalsModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex min-h-screen items-center justify-center px-4">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75" @click="showTotalsModal = false"></div>
+                <div class="relative w-full max-w-md rounded-lg bg-white dark:bg-gray-800 shadow-xl">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                        <div>
+                            <h3 class="text-base font-medium text-gray-900 dark:text-gray-100">Totals de categoria</h3>
+                            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ totalsCategoria?.full_path }}</p>
+                        </div>
+                        <button @click="showTotalsModal = false" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">&times;</button>
+                    </div>
+                    <div class="px-6 py-4 space-y-4">
+                        <!-- Selector de període -->
+                        <div class="space-y-2">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" v-model="totalsMode" value="any_curs" class="text-indigo-600" />
+                                <span class="text-sm text-gray-700 dark:text-gray-300">Any en curs ({{ new Date().getFullYear() }})</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" v-model="totalsMode" value="any_anterior" class="text-indigo-600" />
+                                <span class="text-sm text-gray-700 dark:text-gray-300">Any anterior ({{ new Date().getFullYear() - 1 }})</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" v-model="totalsMode" value="personalitzat" class="text-indigo-600" />
+                                <span class="text-sm text-gray-700 dark:text-gray-300">Rang personalitzat</span>
+                            </label>
+                        </div>
+
+                        <!-- Dates personalitzades -->
+                        <div v-if="totalsMode === 'personalitzat'" class="flex gap-3">
+                            <div class="flex-1">
+                                <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Des de</label>
+                                <input type="date" v-model="totalsDataInici" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Fins a</label>
+                                <input type="date" v-model="totalsDataFi" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
+                            </div>
+                        </div>
+
+                        <!-- Resultat -->
+                        <div v-if="totalsLoading" class="text-center text-sm text-gray-500 dark:text-gray-400 py-4">Calculant...</div>
+                        <div v-else-if="totalsError" class="rounded-md bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-700 dark:text-red-300">{{ totalsError }}</div>
+                        <div v-else-if="totalsResult" class="rounded-md bg-gray-50 dark:bg-gray-700/50 p-4 space-y-2">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-gray-500 dark:text-gray-400">Ingressos</span>
+                                <span class="font-medium text-green-600 dark:text-green-400">{{ formatCurrency(totalsResult.ingressos) }}</span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-gray-500 dark:text-gray-400">Despeses</span>
+                                <span class="font-medium text-red-600 dark:text-red-400">{{ formatCurrency(totalsResult.despeses) }}</span>
+                            </div>
+                            <div class="flex justify-between text-sm border-t border-gray-200 dark:border-gray-600 pt-2 mt-2">
+                                <span class="font-medium text-gray-700 dark:text-gray-300">Net</span>
+                                <span class="font-semibold" :class="totalsResult.net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">{{ formatCurrency(totalsResult.net) }}</span>
+                            </div>
+                            <p class="text-xs text-gray-400 dark:text-gray-500 pt-1">{{ totalsResult.total }} moviment{{ totalsResult.total !== 1 ? 's' : '' }}</p>
+                        </div>
+                    </div>
+                    <div class="px-6 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-between">
+                        <button @click="showTotalsModal = false" class="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600">
+                            Tancar
+                        </button>
+                        <button
+                            @click="calcularTotals"
+                            :disabled="totalsLoading || (totalsMode === 'personalitzat' && (!totalsDataInici || !totalsDataFi))"
+                            class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Calcular
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </AuthenticatedLayout>
 </template>
