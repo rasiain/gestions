@@ -393,9 +393,45 @@ class LloguerController extends Controller
         return response()->json($dades);
     }
 
+    public function desarExport(Lloguer $lloguer, Request $request): JsonResponse
+    {
+        $any      = $request->integer('any') ?: null;
+        $anyLabel = $any ?? 'tots';
+        $filename = sprintf('lloguer-%s-%s.xlsx', $lloguer->acronim ?? $lloguer->id, $anyLabel);
+
+        $rutaDir = $lloguer->ruta_descarrega
+            ? rtrim($lloguer->ruta_descarrega, '/\\')
+            : env('IMPORT_SCAN_PATH', getenv('HOME') . '/Downloads');
+
+        $rutaFitxer = $rutaDir . DIRECTORY_SEPARATOR . $filename;
+
+        if (file_exists($rutaFitxer) && !$request->boolean('force')) {
+            return response()->json(['exists' => true, 'filename' => $filename]);
+        }
+
+        if (!is_dir($rutaDir)) {
+            @mkdir($rutaDir, 0755, true);
+        }
+
+        (new Xlsx($this->buildExportSpreadsheet($lloguer, $any)))->save($rutaFitxer);
+
+        return response()->json(['saved' => true, 'filename' => $filename]);
+    }
+
     public function exportar(Lloguer $lloguer, Request $request): StreamedResponse
     {
         $any = $request->integer('any') ?: null;
+        $filename = sprintf('lloguer-%s-%s.xlsx', $lloguer->acronim ?? $lloguer->id, $any ?? 'tots');
+
+        return response()->streamDownload(function () use ($lloguer, $any) {
+            (new Xlsx($this->buildExportSpreadsheet($lloguer, $any)))->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    private function buildExportSpreadsheet(Lloguer $lloguer, ?int $any): Spreadsheet
+    {
         $dades = $this->prepararDadesResum($lloguer, $any);
 
         $ingressos = $dades['ingressos'];
@@ -403,12 +439,8 @@ class LloguerController extends Controller
         $totalBase = $dades['total_base'];
         $totalDespeses = $dades['total_despeses'];
 
-        $anyLabel = $any ?? 'tots';
-        $filename = sprintf('lloguer-%s-%s.xlsx', $lloguer->acronim ?? $lloguer->id, $anyLabel);
-
         $spreadsheet = new Spreadsheet();
         $euroFormat = '#,##0.00';
-        $dateFormat = 'YYYY-MM-DD';
 
         $headerStyle = [
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
@@ -552,11 +584,6 @@ class LloguerController extends Controller
         // Activar la primera pestanya
         $spreadsheet->setActiveSheetIndex(0);
 
-        return response()->streamDownload(function () use ($spreadsheet) {
-            $writer = new Xlsx($spreadsheet);
-            $writer->save('php://output');
-        }, $filename, [
-            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ]);
+        return $spreadsheet;
     }
 }

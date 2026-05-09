@@ -23,12 +23,9 @@ class LlibreIvaController extends Controller
         $any      = $request->integer('any') ?: date('Y');
         $filename = sprintf('llibre-iva-%s-%s.xlsx', $lloguer->acronim ?? $lloguer->id, $any);
 
-        // Si no hi ha ruta configurada, el frontend ha de fer la descàrrega via GET
-        if (!$lloguer->ruta_descarrega) {
-            return response()->json(['use_download' => true]);
-        }
-
-        $rutaDir    = rtrim($lloguer->ruta_descarrega, '/\\');
+        $rutaDir = $lloguer->ruta_descarrega
+            ? rtrim($lloguer->ruta_descarrega, '/\\')
+            : env('IMPORT_SCAN_PATH', getenv('HOME') . '/Downloads');
         $rutaFitxer = $rutaDir . DIRECTORY_SEPARATOR . $filename;
 
         // Si el fitxer existeix i no s'ha confirmat, demanem confirmació

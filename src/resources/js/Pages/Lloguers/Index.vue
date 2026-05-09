@@ -165,25 +165,41 @@ function mostrarLlibreIvaMsg(text: string, ok: boolean) {
     setTimeout(() => { llibreIvaMsg.value = null; }, 4000);
 }
 
-async function exportarLlibreIva(lloguerEl: Lloguer, any: number) {
+async function desarFitxer(postUrl: string, force = false): Promise<any> {
     const csrfToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
+    return fetch(force ? postUrl + '&force=1' : postUrl, {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': csrfToken },
+    }).then(r => r.json()).catch(() => null);
+}
+
+async function exportarLlibreIva(lloguerEl: Lloguer, any: number) {
     const postUrl = `/lloguers/${lloguerEl.id}/desar-llibre-iva?any=${any}`;
-    const downloadUrl = `/lloguers/${lloguerEl.id}/exportar-llibre-iva?any=${any}`;
 
-    const doPost = async (force = false) =>
-        fetch(force ? postUrl + '&force=1' : postUrl, {
-            method: 'POST',
-            headers: { 'X-CSRF-TOKEN': csrfToken },
-        }).then(r => r.json()).catch(() => null);
-
-    let result = await doPost();
+    let result = await desarFitxer(postUrl);
     if (!result) { mostrarLlibreIvaMsg('Error de comunicació.', false); return; }
-
-    if (result.use_download) { window.location.href = downloadUrl; return; }
 
     if (result.exists) {
         if (!confirm(`El fitxer "${result.filename}" ja existeix.\n\nVols sobreescriure'l?`)) return;
-        result = await doPost(true);
+        result = await desarFitxer(postUrl, true);
+    }
+
+    mostrarLlibreIvaMsg(
+        result?.saved ? `Fitxer desat: ${result.filename}` : 'Error en desar el fitxer.',
+        result?.saved ?? false
+    );
+}
+
+async function exportarResum(lloguerEl: Lloguer, any: number | null) {
+    const anyParam = any ? `?any=${any}` : '';
+    const postUrl = `/lloguers/${lloguerEl.id}/desar-export${anyParam}`;
+
+    let result = await desarFitxer(postUrl);
+    if (!result) { mostrarLlibreIvaMsg('Error de comunicació.', false); return; }
+
+    if (result.exists) {
+        if (!confirm(`El fitxer "${result.filename}" ja existeix.\n\nVols sobreescriure'l?`)) return;
+        result = await desarFitxer(postUrl, true);
     }
 
     mostrarLlibreIvaMsg(
@@ -1513,16 +1529,16 @@ const formatCurrency = (value: string | null): string => {
                                     </svg>
                                     Resum
                                 </button>
-                                <a
-                                    :href="`/lloguers/${selectedLloguer.id}/exportar${movimentsFilterAny ? '?any=' + movimentsFilterAny : ''}`"
-                                    target="_blank"
+                                <button
+                                    type="button"
+                                    @click.stop="exportarResum(selectedLloguer, movimentsFilterAny ?? null)"
                                     class="inline-flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-amber-600 transition-colors"
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                     </svg>
                                     Exportar
-                                </a>
+                                </button>
                                 <button
                                     v-if="!selectedLloguer.es_habitatge"
                                     type="button"
