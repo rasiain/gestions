@@ -91,7 +91,7 @@ interface TotalsResult {
 
 const showTotalsModal = ref(false);
 const totalsCategoria = ref<(Categoria & { full_path: string }) | null>(null);
-const totalsMode = ref<'any_curs' | 'any_anterior' | 'personalitzat'>('any_curs');
+const totalsMode = ref<'any_curs' | 'any_anterior' | 'tot' | 'personalitzat'>('any_curs');
 const totalsDataInici = ref('');
 const totalsDataFi = ref('');
 const totalsLoading = ref(false);
@@ -125,6 +125,9 @@ const calcularTotals = async () => {
     } else if (totalsMode.value === 'any_anterior') {
         dataInici = `${any - 1}-01-01`;
         dataFi    = `${any - 1}-12-31`;
+    } else if (totalsMode.value === 'tot') {
+        dataInici = '';
+        dataFi    = '';
     }
 
     try {
@@ -498,6 +501,10 @@ const isCategoryExpanded = (categoriaId: number) => {
                             <label class="flex items-center gap-2 cursor-pointer">
                                 <input type="radio" v-model="totalsMode" value="any_anterior" class="text-indigo-600" />
                                 <span class="text-sm text-gray-700 dark:text-gray-300">Any anterior ({{ new Date().getFullYear() - 1 }})</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" v-model="totalsMode" value="tot" class="text-indigo-600" />
+                                <span class="text-sm text-gray-700 dark:text-gray-300">Tots els temps</span>
                             </label>
                             <label class="flex items-center gap-2 cursor-pointer">
                                 <input type="radio" v-model="totalsMode" value="personalitzat" class="text-indigo-600" />
