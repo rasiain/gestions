@@ -456,6 +456,24 @@ class MovimentCompteCorrentController extends Controller
         $query = MovimentCompteCorrent::with('concepte')
             ->where('compte_corrent_id', $compteCorrentId);
 
+        if ($request->boolean('des_de_darrer_revisat')) {
+            $darrerRevisat = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)
+                ->where('conciliat', true)
+                ->orderBy('data_moviment', 'desc')
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if ($darrerRevisat) {
+                $query->where(function ($q) use ($darrerRevisat) {
+                    $q->whereDate('data_moviment', '>', $darrerRevisat->data_moviment->format('Y-m-d'))
+                      ->orWhere(function ($q2) use ($darrerRevisat) {
+                          $q2->whereDate('data_moviment', '=', $darrerRevisat->data_moviment->format('Y-m-d'))
+                             ->where('id', '>=', $darrerRevisat->id);
+                      });
+                });
+            }
+        }
+
         if ($request->filled('search')) {
             $query->cerca($request->input('search'));
         }

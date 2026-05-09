@@ -293,13 +293,22 @@ const toggleCategoryPath = (movimentId: number) => {
 };
 
 const showVerificaModal = ref(false);
+const showVerificaOpcionsModal = ref(false);
+const verificaMode = ref<'des_de_darrer_revisat' | 'tots'>('des_de_darrer_revisat');
 const verificaLoading = ref(false);
 const verificaTotal = ref(0);
 const verificaErrors = ref<SaldoError[]>([]);
 const verificaSenseSaldo = ref<SenseSaldo[]>([]);
 
+const obreVerificaOpcions = () => {
+    if (!props.selectedCompteCorrentId) return;
+    verificaMode.value = 'des_de_darrer_revisat';
+    showVerificaOpcionsModal.value = true;
+};
+
 const verificaSaldos = async () => {
     if (!props.selectedCompteCorrentId) return;
+    showVerificaOpcionsModal.value = false;
     verificaLoading.value = true;
     showVerificaModal.value = true;
     verificaErrors.value = [];
@@ -308,6 +317,7 @@ const verificaSaldos = async () => {
 
     const params = new URLSearchParams();
     params.set('compte_corrent_id', String(props.selectedCompteCorrentId));
+    if (verificaMode.value === 'des_de_darrer_revisat') params.set('des_de_darrer_revisat', '1');
     if (filterForm.search)       params.set('search', filterForm.search);
     if (filterForm.categoria_id) params.set('categoria_id', String(filterForm.categoria_id));
     if (filterForm.data_inici)   params.set('data_inici', filterForm.data_inici);
@@ -761,7 +771,7 @@ const conciliarPagina = async (conciliat: boolean) => {
                                     Revisar pàgina
                                 </button>
                                 <button
-                                    @click="verificaSaldos"
+                                    @click="obreVerificaOpcions"
                                     :disabled="!selectedCompte"
                                     class="inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
@@ -1219,6 +1229,43 @@ const conciliarPagina = async (conciliat: boolean) => {
                 </div>
             </div>
         </div>
+        <!-- Modal opcions verificació de saldos -->
+        <div v-if="showVerificaOpcionsModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex min-h-screen items-center justify-center px-4">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75" @click="showVerificaOpcionsModal = false"></div>
+                <div class="relative w-full max-w-sm rounded-lg bg-white dark:bg-gray-800 shadow-xl">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                        <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Verificar saldos</h3>
+                        <button @click="showVerificaOpcionsModal = false" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">&times;</button>
+                    </div>
+                    <div class="px-6 py-4 space-y-3">
+                        <label class="flex items-start gap-3 cursor-pointer">
+                            <input type="radio" v-model="verificaMode" value="des_de_darrer_revisat" class="mt-0.5 text-blue-600" />
+                            <div>
+                                <span class="block text-sm font-medium text-gray-900 dark:text-gray-100">Des del darrer revisat</span>
+                                <span class="block text-xs text-gray-500 dark:text-gray-400">Només els moviments a partir de l'últim marcat com a revisat (✓)</span>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-3 cursor-pointer">
+                            <input type="radio" v-model="verificaMode" value="tots" class="mt-0.5 text-blue-600" />
+                            <div>
+                                <span class="block text-sm font-medium text-gray-900 dark:text-gray-100">Tots</span>
+                                <span class="block text-xs text-gray-500 dark:text-gray-400">Tots els moviments del compte (pot ser lent)</span>
+                            </div>
+                        </label>
+                    </div>
+                    <div class="px-6 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+                        <button @click="showVerificaOpcionsModal = false" class="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600">
+                            Cancel·lar
+                        </button>
+                        <button @click="verificaSaldos" class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+                            Verificar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Modal verificació de saldos -->
         <div v-if="showVerificaModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center px-4">
