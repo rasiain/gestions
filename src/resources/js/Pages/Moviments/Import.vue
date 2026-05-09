@@ -229,6 +229,23 @@ onMounted(scanFiles);
                                 </ul>
                             </div>
 
+                            <!-- Botons (dalt) -->
+                            <div class="mb-4 flex gap-3">
+                                <button
+                                    v-if="preview.to_import_count > 0"
+                                    @click="confirmImport"
+                                    class="inline-flex items-center rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+                                >
+                                    Importar {{ preview.to_import_count }} moviment{{ preview.to_import_count !== 1 ? 's' : '' }}
+                                </button>
+                                <button
+                                    @click="reset"
+                                    class="inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600"
+                                >
+                                    Tornar
+                                </button>
+                            </div>
+
                             <!-- Movements table -->
                             <div v-if="preview.movements.length > 0" class="overflow-x-auto mb-4">
                                 <table class="min-w-full text-sm">
@@ -255,22 +272,6 @@ onMounted(scanFiles);
 
                             <div v-else class="mb-4 text-sm text-gray-500 dark:text-gray-400">
                                 No hi ha moviments nous per importar.
-                            </div>
-
-                            <div class="flex gap-3">
-                                <button
-                                    v-if="preview.to_import_count > 0"
-                                    @click="confirmImport"
-                                    class="inline-flex items-center rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
-                                >
-                                    Importar {{ preview.to_import_count }} moviment{{ preview.to_import_count !== 1 ? 's' : '' }}
-                                </button>
-                                <button
-                                    @click="reset"
-                                    class="inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600"
-                                >
-                                    Tornar
-                                </button>
                             </div>
                         </div>
 
