@@ -223,6 +223,9 @@ const selectedLloguer = computed(() =>
     props.lloguers.find(l => l.id === selectedLloguerId.value) ?? null
 );
 
+const lloguersHabitatge = computed(() => props.lloguers.filter(l => l.es_habitatge));
+const lloguersNoHabitatge = computed(() => props.lloguers.filter(l => !l.es_habitatge));
+
 const contracteForm = useForm({
     lloguer_id: null as number | null,
     data_inici: '',
@@ -1178,71 +1181,100 @@ const formatCurrency = (value: string | null): string => {
                             </button>
                         </div>
 
-                        <div v-if="lloguers.length > 0" class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                                <thead class="bg-gray-50 dark:bg-gray-700">
-                                    <tr>
-                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Nom</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Acrònim</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Immoble</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Base (€/mes)</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Arrendador</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Contracte actiu</th>
-                                        <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Accions</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-                                    <tr
-                                        v-for="lloguer in lloguers"
-                                        :key="lloguer.id"
-                                        @click="selectLloguer(lloguer)"
-                                        class="cursor-pointer transition-colors"
-                                        :class="selectedLloguerId === lloguer.id
-                                            ? 'bg-amber-50 dark:bg-amber-900/20'
-                                            : 'hover:bg-gray-50 dark:hover:bg-gray-700'"
-                                    >
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
-                                            {{ lloguer.nom }}
-                                        </td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                                            {{ lloguer.acronim || '-' }}
-                                        </td>
-                                        <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
-                                            {{ lloguer.immoble?.adreca || '-' }}
-                                        </td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
-                                            {{ formatCurrency(lloguer.base_euros) }}
-                                        </td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                                            <span v-if="lloguer.contracte_actiu?.arrendador">
-                                                {{ lloguer.contracte_actiu.arrendador.arrendadorable?.nom ?? '—' }}
-                                            </span>
-                                            <span v-else class="italic text-gray-400 dark:text-gray-500">—</span>
-                                        </td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-sm">
-                                            <span v-if="lloguer.contracte_actiu" class="text-gray-900 dark:text-gray-100">
-                                                {{ lloguer.contracte_actiu.data_inici }}
-                                                → {{ lloguer.contracte_actiu.data_fi ?? 'indefinit' }}
-                                            </span>
-                                            <span v-else class="italic text-gray-400 dark:text-gray-500">Sense contracte</span>
-                                        </td>
-                                        <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium" @click.stop>
-                                            <button
-                                                @click="openEditLloguerModal(lloguer)"
-                                                class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300"
+                        <div v-if="lloguers.length > 0" class="space-y-6">
+
+                            <!-- Grup: Habitatges -->
+                            <div v-if="lloguersHabitatge.length">
+                                <h4 class="mb-2 text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Habitatges</h4>
+                                <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                        <thead class="bg-gray-50 dark:bg-gray-700">
+                                            <tr>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Nom</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Acrònim</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Immoble</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Base (€/mes)</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Arrendador</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Contracte actiu</th>
+                                                <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Accions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                                            <tr
+                                                v-for="lloguer in lloguersHabitatge"
+                                                :key="lloguer.id"
+                                                @click="selectLloguer(lloguer)"
+                                                class="cursor-pointer transition-colors"
+                                                :class="selectedLloguerId === lloguer.id ? 'bg-amber-50 dark:bg-amber-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700'"
                                             >
-                                                Editar
-                                            </button>
-                                            <button
-                                                @click="deleteLloguer(lloguer)"
-                                                class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                                <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">{{ lloguer.nom }}</td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ lloguer.acronim || '-' }}</td>
+                                                <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ lloguer.immoble?.adreca || '-' }}</td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ formatCurrency(lloguer.base_euros) }}</td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                                    <span v-if="lloguer.contracte_actiu?.arrendador">{{ lloguer.contracte_actiu.arrendador.arrendadorable?.nom ?? '—' }}</span>
+                                                    <span v-else class="italic text-gray-400 dark:text-gray-500">—</span>
+                                                </td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                                    <span v-if="lloguer.contracte_actiu" class="text-gray-900 dark:text-gray-100">{{ lloguer.contracte_actiu.data_inici }} → {{ lloguer.contracte_actiu.data_fi ?? 'indefinit' }}</span>
+                                                    <span v-else class="italic text-gray-400 dark:text-gray-500">Sense contracte</span>
+                                                </td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium" @click.stop>
+                                                    <button @click="openEditLloguerModal(lloguer)" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Editar</button>
+                                                    <button @click="deleteLloguer(lloguer)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Grup: Locals / Altres -->
+                            <div v-if="lloguersNoHabitatge.length">
+                                <h4 class="mb-2 text-sm font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">Locals i altres</h4>
+                                <div class="overflow-x-auto rounded-lg border border-amber-200 dark:border-amber-800">
+                                    <table class="min-w-full divide-y divide-amber-100 dark:divide-amber-900">
+                                        <thead class="bg-amber-50 dark:bg-amber-900/30">
+                                            <tr>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Nom</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Acrònim</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Immoble</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Base (€/mes)</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Arrendador</th>
+                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Contracte actiu</th>
+                                                <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Accions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-amber-100 bg-white dark:divide-amber-900 dark:bg-gray-800">
+                                            <tr
+                                                v-for="lloguer in lloguersNoHabitatge"
+                                                :key="lloguer.id"
+                                                @click="selectLloguer(lloguer)"
+                                                class="cursor-pointer transition-colors"
+                                                :class="selectedLloguerId === lloguer.id ? 'bg-amber-50 dark:bg-amber-900/20' : 'hover:bg-amber-50/50 dark:hover:bg-amber-900/10'"
                                             >
-                                                Eliminar
-                                            </button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                                                <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">{{ lloguer.nom }}</td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ lloguer.acronim || '-' }}</td>
+                                                <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ lloguer.immoble?.adreca || '-' }}</td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ formatCurrency(lloguer.base_euros) }}</td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                                    <span v-if="lloguer.contracte_actiu?.arrendador">{{ lloguer.contracte_actiu.arrendador.arrendadorable?.nom ?? '—' }}</span>
+                                                    <span v-else class="italic text-gray-400 dark:text-gray-500">—</span>
+                                                </td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                                    <span v-if="lloguer.contracte_actiu" class="text-gray-900 dark:text-gray-100">{{ lloguer.contracte_actiu.data_inici }} → {{ lloguer.contracte_actiu.data_fi ?? 'indefinit' }}</span>
+                                                    <span v-else class="italic text-gray-400 dark:text-gray-500">Sense contracte</span>
+                                                </td>
+                                                <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium" @click.stop>
+                                                    <button @click="openEditLloguerModal(lloguer)" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Editar</button>
+                                                    <button @click="deleteLloguer(lloguer)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
                         </div>
 
                         <div v-else class="py-12 text-center">
