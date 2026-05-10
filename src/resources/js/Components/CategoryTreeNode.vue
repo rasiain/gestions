@@ -27,6 +27,7 @@ const emit = defineEmits<{
     edit: [categoria: Categoria];
     delete: [categoriaId: number];
     calcularTotals: [categoria: Categoria];
+    veurMoviments: [categoria: Categoria];
 }>();
 
 const hasChildren = computed(() => {
@@ -80,6 +81,18 @@ const indentStyle = computed(() => {
 
             <!-- Actions -->
             <div class="flex items-center gap-2">
+                <!-- Moviments Button -->
+                <button
+                    @click="emit('veurMoviments', categoria)"
+                    class="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                    type="button"
+                    title="Veure moviments"
+                >
+                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                </button>
+
                 <!-- Totals Button -->
                 <button
                     @click="emit('calcularTotals', categoria)"
@@ -135,6 +148,7 @@ const indentStyle = computed(() => {
                 @edit="emit('edit', $event)"
                 @delete="emit('delete', $event)"
                 @calcular-totals="emit('calcularTotals', $event)"
+                @veur-moviments="emit('veurMoviments', $event)"
             />
         </template>
     </div>

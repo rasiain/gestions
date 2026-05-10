@@ -95,6 +95,37 @@ class CategoriaController extends Controller
         ]);
     }
 
+    public function moviments(Request $request, Categoria $category): JsonResponse
+    {
+        $dataInici = $request->input('data_inici');
+        $dataFi    = $request->input('data_fi');
+        $perPage   = 25;
+
+        $ids = $this->collectDescendantIds($category->id);
+
+        $moviments = MovimentCompteCorrent::with(['concepte', 'categoria'])
+            ->whereIn('categoria_id', $ids)
+            ->when($dataInici, fn($q) => $q->whereDate('data_moviment', '>=', $dataInici))
+            ->when($dataFi,    fn($q) => $q->whereDate('data_moviment', '<=', $dataFi))
+            ->orderBy('data_moviment', 'desc')
+            ->orderBy('id', 'desc')
+            ->paginate($perPage);
+
+        return response()->json([
+            'data' => $moviments->map(fn($m) => [
+                'id'             => $m->id,
+                'data_moviment'  => $m->data_moviment->format('Y-m-d'),
+                'concepte'       => $m->concepte?->concepte ?? $m->concepte_original,
+                'import'         => (float) $m->import,
+                'categoria_nom'  => $m->categoria?->nom,
+            ]),
+            'total'        => $moviments->total(),
+            'per_page'     => $perPage,
+            'current_page' => $moviments->currentPage(),
+            'last_page'    => $moviments->lastPage(),
+        ]);
+    }
+
     private function collectDescendantIds(int $categoriaId): array
     {
         $ids = [$categoriaId];

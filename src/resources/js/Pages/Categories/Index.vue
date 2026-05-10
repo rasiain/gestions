@@ -148,6 +148,80 @@ const calcularTotals = async () => {
 
 watch(totalsMode, () => { totalsResult.value = null; });
 
+// ── Llistat de moviments per categoria ───────────────────────────
+interface MovimentFila {
+    id: number;
+    data_moviment: string;
+    concepte: string | null;
+    import: number;
+    categoria_nom: string | null;
+}
+
+const showMovimentsModal   = ref(false);
+const movimentsCategoria   = ref<(Categoria & { full_path: string }) | null>(null);
+const movimentsMode        = ref<'any_curs' | 'any_anterior' | 'tot' | 'personalitzat'>('tot');
+const movimentsDataInici   = ref('');
+const movimentsDataFi      = ref('');
+const movimentsLoading     = ref(false);
+const movimentsData        = ref<MovimentFila[]>([]);
+const movimentsTotal       = ref(0);
+const movimentsPage        = ref(1);
+const movimentsLastPage    = ref(1);
+const movimentsPerPage     = ref(25);
+
+const xsrfToken = () => {
+    const m = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
+    return m ? decodeURIComponent(m[1]) : '';
+};
+
+const obreMoviments = (categoria: Categoria) => {
+    const flat = allCategories.value.find(c => c.id === categoria.id);
+    movimentsCategoria.value = flat ?? { ...categoria, level: 0, full_path: categoria.nom };
+    movimentsMode.value      = 'tot';
+    movimentsDataInici.value = '';
+    movimentsDataFi.value    = '';
+    movimentsData.value      = [];
+    movimentsTotal.value     = 0;
+    movimentsPage.value      = 1;
+    movimentsLastPage.value  = 1;
+    showMovimentsModal.value = true;
+    fetchMoviments(1);
+};
+
+const fetchMoviments = async (page: number) => {
+    if (!movimentsCategoria.value) return;
+    movimentsLoading.value = true;
+
+    const any = new Date().getFullYear();
+    let dataInici = movimentsDataInici.value;
+    let dataFi    = movimentsDataFi.value;
+
+    if (movimentsMode.value === 'any_curs')     { dataInici = `${any}-01-01`;     dataFi = `${any}-12-31`; }
+    if (movimentsMode.value === 'any_anterior')  { dataInici = `${any-1}-01-01`;   dataFi = `${any-1}-12-31`; }
+    if (movimentsMode.value === 'tot')           { dataInici = '';                  dataFi = ''; }
+
+    const params = new URLSearchParams({ page: String(page) });
+    if (dataInici) params.set('data_inici', dataInici);
+    if (dataFi)    params.set('data_fi',    dataFi);
+
+    try {
+        const res = await fetch(
+            route('categories.moviments', movimentsCategoria.value.id) + '?' + params,
+            { headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() } }
+        );
+        const json = await res.json();
+        movimentsData.value     = json.data;
+        movimentsTotal.value    = json.total;
+        movimentsPage.value     = json.current_page;
+        movimentsLastPage.value = json.last_page;
+        movimentsPerPage.value  = json.per_page;
+    } finally {
+        movimentsLoading.value = false;
+    }
+};
+
+watch(movimentsMode, () => fetchMoviments(1));
+
 const formatCurrency = (v: number) =>
     new Intl.NumberFormat('ca-ES', { style: 'currency', currency: 'EUR' }).format(v);
 
@@ -271,6 +345,15 @@ const isCategoryExpanded = (categoriaId: number) => {
                                     <span class="text-sm text-gray-700 dark:text-gray-300">{{ cat.full_path }}</span>
                                     <div class="flex items-center gap-2 ml-4 shrink-0">
                                         <button
+                                            @click="obreMoviments(cat)"
+                                            class="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                                            title="Veure moviments"
+                                        >
+                                            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                                            </svg>
+                                        </button>
+                                        <button
                                             @click="obreTotals(cat)"
                                             class="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
                                             title="Calcular totals"
@@ -336,6 +419,7 @@ const isCategoryExpanded = (categoriaId: number) => {
                                 @edit="openEditModal"
                                 @delete="deleteCategoria"
                                 @calcular-totals="obreTotals"
+                                @veur-moviments="obreMoviments"
                             />
                         </div>
 
@@ -479,6 +563,92 @@ const isCategoryExpanded = (categoriaId: number) => {
                 </div>
             </div>
         </div>
+        <!-- Modal moviments -->
+        <div v-if="showMovimentsModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex min-h-screen items-center justify-center px-4 py-8">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75" @click="showMovimentsModal = false"></div>
+                <div class="relative w-full max-w-3xl rounded-lg bg-white dark:bg-gray-800 shadow-xl flex flex-col max-h-[85vh]">
+
+                    <!-- Capçalera -->
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-start justify-between shrink-0">
+                        <div>
+                            <h3 class="text-base font-medium text-gray-900 dark:text-gray-100">Moviments</h3>
+                            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ movimentsCategoria?.full_path }}</p>
+                        </div>
+                        <button @click="showMovimentsModal = false" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none ml-4">&times;</button>
+                    </div>
+
+                    <!-- Filtre de període -->
+                    <div class="px-6 py-3 border-b border-gray-100 dark:border-gray-700 flex flex-wrap items-center gap-4 shrink-0">
+                        <label v-for="opt in [
+                            { value: 'tot',           label: 'Tots els temps' },
+                            { value: 'any_curs',      label: `Any ${new Date().getFullYear()}` },
+                            { value: 'any_anterior',  label: `Any ${new Date().getFullYear() - 1}` },
+                            { value: 'personalitzat', label: 'Personalitzat' },
+                        ]" :key="opt.value" class="flex items-center gap-1.5 cursor-pointer">
+                            <input type="radio" v-model="movimentsMode" :value="opt.value" class="text-indigo-600" />
+                            <span class="text-xs text-gray-700 dark:text-gray-300">{{ opt.label }}</span>
+                        </label>
+                        <template v-if="movimentsMode === 'personalitzat'">
+                            <input type="date" v-model="movimentsDataInici" @change="fetchMoviments(1)" class="rounded border-gray-300 text-xs dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                            <span class="text-xs text-gray-400">–</span>
+                            <input type="date" v-model="movimentsDataFi" @change="fetchMoviments(1)" class="rounded border-gray-300 text-xs dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                        </template>
+                    </div>
+
+                    <!-- Cos: taula -->
+                    <div class="overflow-y-auto flex-1">
+                        <div v-if="movimentsLoading" class="py-12 text-center text-sm text-gray-400">Carregant…</div>
+                        <div v-else-if="movimentsData.length === 0" class="py-12 text-center text-sm text-gray-400">Cap moviment en el període seleccionat.</div>
+                        <table v-else class="min-w-full text-sm">
+                            <thead class="sticky top-0 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+                                <tr>
+                                    <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Data</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Concepte</th>
+                                    <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Categoria</th>
+                                    <th class="px-4 py-2.5 text-right text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Import</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                <tr v-for="m in movimentsData" :key="m.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                    <td class="px-4 py-2 text-gray-500 dark:text-gray-400 whitespace-nowrap tabular-nums">{{ m.data_moviment }}</td>
+                                    <td class="px-4 py-2 text-gray-800 dark:text-gray-200 max-w-xs truncate">{{ m.concepte ?? '—' }}</td>
+                                    <td class="px-4 py-2 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">{{ m.categoria_nom ?? '—' }}</td>
+                                    <td class="px-4 py-2 text-right font-medium tabular-nums whitespace-nowrap"
+                                        :class="m.import >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
+                                        {{ formatCurrency(m.import) }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Peu: paginació + resum -->
+                    <div class="px-6 py-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between shrink-0">
+                        <span class="text-xs text-gray-500 dark:text-gray-400">
+                            {{ movimentsTotal }} moviment{{ movimentsTotal !== 1 ? 's' : '' }}
+                            <template v-if="movimentsLastPage > 1">
+                                · pàgina {{ movimentsPage }} / {{ movimentsLastPage }}
+                            </template>
+                        </span>
+                        <div class="flex gap-2">
+                            <button
+                                @click="fetchMoviments(movimentsPage - 1)"
+                                :disabled="movimentsPage <= 1 || movimentsLoading"
+                                class="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >‹ Anterior</button>
+                            <button
+                                @click="fetchMoviments(movimentsPage + 1)"
+                                :disabled="movimentsPage >= movimentsLastPage || movimentsLoading"
+                                class="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >Següent ›</button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
         <!-- Modal totals -->
         <div v-if="showTotalsModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center px-4">
