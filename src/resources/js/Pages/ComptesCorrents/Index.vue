@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import BalancCompteModal from '@/Components/BalancCompteModal.vue';
 import { Head, useForm, router, Link } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
 
@@ -100,6 +101,22 @@ const formatSaldo = (saldo: number | null): string => {
 
 const comptesPersonals = computed(() => props.comptesCorrents.filter(c => !c.lloguer_nom));
 const comptesLloguers = computed(() => props.comptesCorrents.filter(c => !!c.lloguer_nom));
+
+const showBalancModal = ref(false);
+const balancCompteId = ref<number | null>(null);
+const balancCompteNom = ref<string>('');
+
+const openBalancModal = (compte: CompteCorrent) => {
+    balancCompteId.value = compte.id;
+    balancCompteNom.value = compte.nom ?? compte.compte_corrent;
+    showBalancModal.value = true;
+};
+
+const closeBalancModal = () => {
+    showBalancModal.value = false;
+    balancCompteId.value = null;
+    balancCompteNom.value = '';
+};
 </script>
 
 <template>
@@ -175,6 +192,7 @@ const comptesLloguers = computed(() => props.comptesCorrents.filter(c => !!c.llo
                                                 <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                                                     <Link :href="route('moviments.index', { compte_corrent_id: compte.id })" class="mr-3 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">Moviments</Link>
                                                     <Link :href="route('maintenance.movements.import', { compte_corrent_id: compte.id })" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Importar</Link>
+                                                    <button @click="openBalancModal(compte)" class="mr-3 text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">Balanc</button>
                                                     <button @click="openEditModal(compte)" class="mr-3 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">Editar</button>
                                                     <button @click="deleteCompteCorrent(compte)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
                                                 </td>
@@ -209,6 +227,7 @@ const comptesLloguers = computed(() => props.comptesCorrents.filter(c => !!c.llo
                                                 <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                                                     <Link :href="route('moviments.index', { compte_corrent_id: compte.id })" class="mr-3 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">Moviments</Link>
                                                     <Link :href="route('maintenance.movements.import', { compte_corrent_id: compte.id })" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Importar</Link>
+                                                    <button @click="openBalancModal(compte)" class="mr-3 text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">Balanc</button>
                                                     <button @click="openEditModal(compte)" class="mr-3 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">Editar</button>
                                                     <button @click="deleteCompteCorrent(compte)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
                                                 </td>
@@ -267,6 +286,14 @@ const comptesLloguers = computed(() => props.comptesCorrents.filter(c => !!c.llo
                 </div>
             </div>
         </div>
+
+        <!-- Modal Balanc -->
+        <BalancCompteModal
+            :show="showBalancModal"
+            :compte-corrent-id="balancCompteId"
+            :compte-corrent-nom="balancCompteNom"
+            @close="closeBalancModal"
+        />
 
         <!-- Modal -->
         <div

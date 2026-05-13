@@ -107,6 +107,8 @@ Route::middleware('auth')->group(function () {
         ->only([
             'index', 'store', 'update', 'destroy'
         ]);
+    Route::get('/comptes-corrents/{compte_corrent}/balanc', [CompteCorrentController::class, 'balanc'])
+        ->name('comptes-corrents.balanc');
 
     // Categories management
     Route::get('/categories/{category}/totals', [CategoriaController::class, 'totals'])->name('categories.totals');
