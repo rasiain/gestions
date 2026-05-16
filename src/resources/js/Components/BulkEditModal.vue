@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
-import { ref, watch } from 'vue';
+import { ref, computed, watch } from 'vue';
 
 interface Categoria {
     id: number;
@@ -28,6 +28,7 @@ interface Props {
     open: boolean;
     count: number;
     categories: Categoria[];
+    compteCorrentId?: number | null;
     conceptes?: string[];
     suggeriments?: CategoriaSuggeriment[];
     saving?: boolean;
@@ -35,6 +36,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+    compteCorrentId: null,
     conceptes: () => [],
     suggeriments: () => [],
     saving: false,
@@ -44,12 +46,79 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
     'update:open': [value: boolean];
     'submit': [payload: BulkEditFormData];
+    'category-created': [categoria: Categoria];
 }>();
 
 const form = ref<BulkEditFormData>({ concepte: '', notes: '', categoria_id: null });
+const internalCategories = ref<Categoria[]>([...props.categories]);
+
+// ── Creació inline de nova categoria ────────────────────────────
+const showNewCategory = ref(false);
+const newCatNom = ref('');
+const newCatParentId = ref<number | null>(null);
+const newCatCreating = ref(false);
+const newCatError = ref('');
+
+const flatCategoryOptions = computed(() => {
+    const build = (parentId: number | null, prefix: string): { id: number; path: string }[] =>
+        internalCategories.value
+            .filter(c => c.categoria_pare_id === parentId)
+            .sort((a, b) => a.nom.localeCompare(b.nom))
+            .flatMap(c => [{ id: c.id, path: prefix + c.nom }, ...build(c.id, prefix + c.nom + ' > ')]);
+    return build(null, '');
+});
+
+const openNewCategory = () => {
+    newCatParentId.value = typeof form.value.categoria_id === 'number' ? form.value.categoria_id : null;
+    newCatNom.value = '';
+    newCatError.value = '';
+    showNewCategory.value = true;
+};
+
+const createCategory = async () => {
+    if (!newCatNom.value.trim() || !props.compteCorrentId) return;
+    newCatCreating.value = true;
+    newCatError.value = '';
+    try {
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+        const response = await fetch(route('categories.store'), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrf,
+            },
+            body: JSON.stringify({
+                compte_corrent_id: props.compteCorrentId,
+                nom: newCatNom.value.trim(),
+                categoria_pare_id: newCatParentId.value,
+            }),
+        });
+        if (!response.ok) {
+            const data = await response.json();
+            newCatError.value = Object.values(data.errors ?? {}).flat().join(', ') || 'Error creant la categoria.';
+            return;
+        }
+        const newCat: Categoria = await response.json();
+        internalCategories.value = [...internalCategories.value, newCat];
+        form.value.categoria_id = newCat.id;
+        showNewCategory.value = false;
+        emit('category-created', newCat);
+    } catch {
+        newCatError.value = 'Error de xarxa.';
+    } finally {
+        newCatCreating.value = false;
+    }
+};
 
 watch(() => props.open, (val) => {
-    if (val) form.value = { concepte: '', notes: '', categoria_id: null };
+    if (val) {
+        form.value = { concepte: '', notes: '', categoria_id: null };
+        internalCategories.value = [...props.categories];
+        showNewCategory.value = false;
+        newCatNom.value = '';
+        newCatError.value = '';
+    }
 });
 
 const close = () => emit('update:open', false);
@@ -133,11 +202,65 @@ const onSubmit = () => emit('submit', { ...form.value });
                                 </div>
 
                                 <CategoryTreeSelect
-                                    :categories="categories"
+                                    :categories="internalCategories"
                                     v-model="form.categoria_id"
                                     :allow-none="true"
                                     placeholder="— sense canvis —"
                                 />
+
+                                <!-- Crear nova categoria inline -->
+                                <div v-if="compteCorrentId" class="mt-2">
+                                    <button
+                                        v-if="!showNewCategory"
+                                        type="button"
+                                        @click="openNewCategory"
+                                        class="mt-1 inline-flex items-center gap-1 rounded border border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50"
+                                    >+ Nova categoria</button>
+
+                                    <div v-else class="mt-2 rounded-md border border-indigo-200 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/20 p-3 space-y-2">
+                                        <p class="text-xs font-semibold text-indigo-700 dark:text-indigo-300">Nova categoria</p>
+
+                                        <div>
+                                            <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Nom</label>
+                                            <input
+                                                v-model="newCatNom"
+                                                type="text"
+                                                placeholder="Nom de la categoria"
+                                                @keyup.enter="createCategory"
+                                                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Penja de (opcional)</label>
+                                            <select
+                                                v-model="newCatParentId"
+                                                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
+                                            >
+                                                <option :value="null">— Arrel —</option>
+                                                <option v-for="opt in flatCategoryOptions" :key="opt.id" :value="opt.id">
+                                                    {{ opt.path }}
+                                                </option>
+                                            </select>
+                                        </div>
+
+                                        <p v-if="newCatError" class="text-xs text-red-600 dark:text-red-400">{{ newCatError }}</p>
+
+                                        <div class="flex gap-2">
+                                            <button
+                                                type="button"
+                                                @click="createCategory"
+                                                :disabled="!newCatNom.trim() || newCatCreating"
+                                                class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                                            >{{ newCatCreating ? 'Creant...' : 'Crear i seleccionar' }}</button>
+                                            <button
+                                                type="button"
+                                                @click="showNewCategory = false"
+                                                class="inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50"
+                                            >Cancel·lar</button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

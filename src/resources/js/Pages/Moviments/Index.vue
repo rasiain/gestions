@@ -299,7 +299,8 @@ const toggleCategoryPath = (movimentId: number) => {
 
 const showVerificaModal = ref(false);
 const showVerificaOpcionsModal = ref(false);
-const verificaMode = ref<'des_de_darrer_revisat' | 'tots'>('des_de_darrer_revisat');
+const verificaMode = ref<'des_de_darrer_revisat' | 'des_de_data' | 'tots'>('des_de_darrer_revisat');
+const verificaDesDeData = ref('');
 const verificaLoading = ref(false);
 const verificaTotal = ref(0);
 const verificaErrors = ref<SaldoError[]>([]);
@@ -308,11 +309,13 @@ const verificaSenseSaldo = ref<SenseSaldo[]>([]);
 const obreVerificaOpcions = () => {
     if (!props.selectedCompteCorrentId) return;
     verificaMode.value = 'des_de_darrer_revisat';
+    verificaDesDeData.value = '';
     showVerificaOpcionsModal.value = true;
 };
 
 const verificaSaldos = async () => {
     if (!props.selectedCompteCorrentId) return;
+    if (verificaMode.value === 'des_de_data' && !verificaDesDeData.value) return;
     showVerificaOpcionsModal.value = false;
     verificaLoading.value = true;
     showVerificaModal.value = true;
@@ -323,9 +326,10 @@ const verificaSaldos = async () => {
     const params = new URLSearchParams();
     params.set('compte_corrent_id', String(props.selectedCompteCorrentId));
     if (verificaMode.value === 'des_de_darrer_revisat') params.set('des_de_darrer_revisat', '1');
+    if (verificaMode.value === 'des_de_data') params.set('data_inici', verificaDesDeData.value);
     if (filterForm.search)       params.set('search', filterForm.search);
     if (filterForm.categoria_id) params.set('categoria_id', String(filterForm.categoria_id));
-    if (filterForm.data_inici)   params.set('data_inici', filterForm.data_inici);
+    if (filterForm.data_inici && verificaMode.value !== 'des_de_data') params.set('data_inici', filterForm.data_inici);
     if (filterForm.data_fi)      params.set('data_fi', filterForm.data_fi);
     if (filterForm.tipus)        params.set('tipus', filterForm.tipus);
 
@@ -600,24 +604,15 @@ const conciliarPagina = async (conciliat: boolean) => {
                             </select>
                         </div>
 
-                        <!-- Stats Cards -->
-                        <div v-if="selectedCompte" class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                            <div class="rounded-lg bg-green-50 dark:bg-green-900/20 p-4">
-                                <p class="text-xs text-green-600 dark:text-green-400">Total Ingressos</p>
-                                <p class="text-2xl font-semibold text-green-700 dark:text-green-300">
-                                    {{ formatCurrency(stats.total_ingressos) }}
-                                </p>
-                            </div>
-                            <div class="rounded-lg bg-red-50 dark:bg-red-900/20 p-4">
-                                <p class="text-xs text-red-600 dark:text-red-400">Total Despeses</p>
-                                <p class="text-2xl font-semibold text-red-700 dark:text-red-300">
-                                    {{ formatCurrency(stats.total_despeses) }}
-                                </p>
-                            </div>
-                            <div class="rounded-lg bg-blue-50 dark:bg-blue-900/20 p-4">
-                                <p class="text-xs text-blue-600 dark:text-blue-400">Saldo Actual</p>
-                                <p class="text-2xl font-semibold text-blue-700 dark:text-blue-300">
-                                    {{ stats.saldo_actual !== null ? formatCurrency(stats.saldo_actual) : '-' }}
+                        <!-- Stats -->
+                        <div v-if="selectedCompte" class="flex items-center justify-between rounded-lg bg-blue-50 dark:bg-blue-900/20 px-6 py-4">
+                            <p class="text-5xl font-bold tracking-widest text-blue-300 dark:text-blue-700 select-none">
+                                ···· {{ selectedCompte.compte_corrent.slice(-4) }}
+                            </p>
+                            <div class="text-right">
+                                <p class="text-xs text-blue-600 dark:text-blue-400 uppercase tracking-wide">Saldo actual</p>
+                                <p class="text-4xl font-bold text-blue-700 dark:text-blue-300">
+                                    {{ stats.saldo_actual !== null ? formatCurrency(stats.saldo_actual) : '—' }}
                                 </p>
                             </div>
                         </div>
@@ -1263,6 +1258,19 @@ const conciliarPagina = async (conciliat: boolean) => {
                             </div>
                         </label>
                         <label class="flex items-start gap-3 cursor-pointer">
+                            <input type="radio" v-model="verificaMode" value="des_de_data" class="mt-0.5 text-blue-600" />
+                            <div class="flex-1">
+                                <span class="block text-sm font-medium text-gray-900 dark:text-gray-100">Des d'una data concreta</span>
+                                <span class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Verifica des de la data que indiquis</span>
+                                <input
+                                    v-if="verificaMode === 'des_de_data'"
+                                    type="date"
+                                    v-model="verificaDesDeData"
+                                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                />
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-3 cursor-pointer">
                             <input type="radio" v-model="verificaMode" value="tots" class="mt-0.5 text-blue-600" />
                             <div>
                                 <span class="block text-sm font-medium text-gray-900 dark:text-gray-100">Tots</span>
@@ -1274,7 +1282,11 @@ const conciliarPagina = async (conciliat: boolean) => {
                         <button @click="showVerificaOpcionsModal = false" class="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600">
                             Cancel·lar
                         </button>
-                        <button @click="verificaSaldos" class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+                        <button
+                            @click="verificaSaldos"
+                            :disabled="verificaMode === 'des_de_data' && !verificaDesDeData"
+                            class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
                             Verificar
                         </button>
                     </div>
@@ -1361,11 +1373,13 @@ const conciliarPagina = async (conciliat: boolean) => {
             v-model:open="showBulkEditModal"
             :count="selectedIds.size"
             :categories="localCategories"
+            :compte-corrent-id="selectedCompteCorrentId"
             :conceptes="conceptes"
             :suggeriments="bulkSuggeriments"
             :saving="bulkEditSaving"
             :error="bulkEditError"
             @submit="handleBulkEdit"
+            @category-created="(cat) => localCategories = [...localCategories, cat]"
         />
     </AuthenticatedLayout>
 </template>

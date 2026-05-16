@@ -2915,9 +2915,11 @@ const formatCurrency = (value: string | null): string => {
             v-model:open="showBulkEditModal"
             :count="selectedMovimentIds.size"
             :categories="movimentCategories"
+            :compte-corrent-id="selectedLloguer?.compte_corrent_id ?? null"
             :saving="bulkEditSaving"
             :error="bulkEditError"
             @submit="handleBulkEdit"
+            @category-created="(cat) => movimentCategories.push(cat)"
         />
 
     </AuthenticatedLayout>
