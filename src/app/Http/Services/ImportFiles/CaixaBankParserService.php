@@ -50,6 +50,11 @@ class CaixaBankParserService extends AbstractMovementParserService
                 continue;
             }
 
+            // "Fecha de operación: DD-MM-YYYY" és redundant (ja tenim data_moviment)
+            if (preg_match('/^Fecha de operaci[oó]n:\s*\d{2}-\d{2}-\d{4}$/i', $notes)) {
+                $notes = '';
+            }
+
             // Combine concept and notes
             $fullConcepte = $this->buildFullConcept($concepte, $notes);
 
