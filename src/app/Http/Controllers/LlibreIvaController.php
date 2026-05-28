@@ -338,7 +338,7 @@ class LlibreIvaController extends Controller
                 ? \Carbon\Carbon::parse($moviment->data_moviment)->format('d/m/Y')
                 : '';
             $concepte = $despesa->concepte ?? $moviment?->concepte?->concepte ?? $moviment?->concepte_original ?? '';
-            $import   = $moviment ? abs((float) $moviment->import) : 0;
+            $import   = $moviment ? -(float) $moviment->import : 0;
 
             $sheet3->setCellValue("A{$row}", $idx);
             $sheet3->setCellValue("B{$row}", '');
@@ -366,7 +366,7 @@ class LlibreIvaController extends Controller
             $sheet3->getStyle("L5:L" . ($row - 1))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
         }
 
-        $totalDespeses = $despeses->sum(fn($d) => abs((float) ($d->moviment?->import ?? 0)));
+        $totalDespeses = $despeses->sum(fn($d) => -(float) ($d->moviment?->import ?? 0));
 
         $sheet3->setCellValue("A{$row}", 'TOTALS');
         $sheet3->setCellValue("E{$row}", $totalDespeses);

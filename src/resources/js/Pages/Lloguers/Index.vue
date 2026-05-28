@@ -30,11 +30,13 @@ interface PersonaBasic {
 interface ComunitatBensBasic {
     id: number;
     nom: string;
+    comuners: number[];
 }
 
 interface Arrendadorable {
     id: number;
     nom: string;
+    comuners?: number[] | null;
 }
 
 interface Arrendador {
@@ -752,7 +754,8 @@ const classificacioAltresLloguer = (moviment: Moviment): boolean => {
 
 const classificacioLabel = (moviment: Moviment): string => {
     if (moviment.despesa?.lloguer_id === selectedLloguerId.value) {
-        return categoriesDespesa.find(c => c.value === moviment.despesa!.categoria)?.label ?? moviment.despesa.categoria ?? 'Despesa';
+        const catLabel = categoriesDespesa.find(c => c.value === moviment.despesa!.categoria)?.label ?? moviment.despesa.categoria ?? 'Despesa';
+        return parseFloat(moviment.import) > 0 ? `↩ ${catLabel}` : catLabel;
     }
     if (moviment.ingres?.lloguer_id === selectedLloguerId.value) return 'Ingrés';
     return '';
@@ -1016,6 +1019,36 @@ const closeResumModal = () => {
 // ── Factures i Revisions IPC ─────────────────────────────────
 const showFacturesModal = ref(false);
 const showRevisioIpcModal = ref(false);
+
+// ── Arrendador: validació coherència propietaris ─────────────────
+const arrendadorsValids = computed(() => (lloguer: Lloguer) => {
+    const ids = new Set(lloguer.propietaris.map(p => p.id));
+    return props.arrendadors.filter(a => {
+        if (!a.arrendadorable) return false;
+        if (a.arrendadorable_type === 'persona') return ids.has(a.arrendadorable.id);
+        const comuners = a.arrendadorable.comuners ?? [];
+        return comuners.length > 0 && comuners.every(id => ids.has(id));
+    });
+});
+
+const inconsistenciaArrendador = computed(() => (lloguer: Lloguer): string | null => {
+    const arrendador = lloguer.contracte_actiu?.arrendador;
+    if (!arrendador) return null;
+    const ids = new Set(lloguer.propietaris.map(p => p.id));
+    if (arrendador.arrendadorable_type === 'persona') {
+        if (!arrendador.arrendadorable) return 'Arrendador sense persona associada.';
+        if (!ids.has(arrendador.arrendadorable.id))
+            return `"${arrendador.arrendadorable.nom}" no és propietari/ària de l'immoble.`;
+    } else {
+        if (!arrendador.arrendadorable) return 'Arrendador sense comunitat de béns associada.';
+        const comuners = arrendador.arrendadorable.comuners ?? [];
+        if (comuners.length === 0)
+            return `La comunitat "${arrendador.arrendadorable.nom}" no té comuners definits.`;
+        if (!comuners.every(id => ids.has(id)))
+            return `No tots els comuners de "${arrendador.arrendadorable.nom}" són propietaris de l'immoble.`;
+    }
+    return null;
+});
 
 // ── Arrendador: suggerir propietaris de l'immoble ───────────────
 const suggerirArrendadorPerDefecte = (): number | null => {
@@ -1304,6 +1337,17 @@ const formatCurrency = (value: string | null): string => {
                     class="overflow-hidden bg-white shadow-sm dark:bg-gray-800 sm:rounded-lg border-l-4 border-amber-400"
                 >
                     <div class="p-6 text-gray-900 dark:text-gray-100">
+                        <!-- Avís incoherència arrendador/propietaris -->
+                        <div
+                            v-if="inconsistenciaArrendador(selectedLloguer)"
+                            class="mb-4 flex items-start gap-3 rounded-md border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-800 dark:text-red-300"
+                        >
+                            <svg class="mt-0.5 h-4 w-4 shrink-0 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                            </svg>
+                            <span><strong>Incoherència arrendador:</strong> {{ inconsistenciaArrendador(selectedLloguer) }}</span>
+                        </div>
+
                         <div class="mb-4 flex items-center justify-between">
                             <div>
                                 <h3 class="text-lg font-medium">
@@ -1519,7 +1563,7 @@ const formatCurrency = (value: string | null): string => {
                                             class="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                         >
                                             <option :value="null">Sense arrendador</option>
-                                            <option v-for="a in arrendadors" :key="a.id" :value="a.id">
+                                            <option v-for="a in arrendadorsValids(selectedLloguer)" :key="a.id" :value="a.id">
                                                 {{ a.arrendadorable?.nom ?? '—' }}
                                                 ({{ a.arrendadorable_type === 'persona' ? 'Persona' : 'Comunitat de Béns' }})
                                             </option>
@@ -1573,10 +1617,21 @@ const formatCurrency = (value: string | null): string => {
                                             >
                                                 <option :value="null">Selecciona…</option>
                                                 <template v-if="nouArrendadorForm.arrendadorable_type === 'persona'">
-                                                    <option v-for="p in persones" :key="p.id" :value="p.id">{{ p.nom }}</option>
+                                                    <option
+                                                        v-for="p in persones.filter(p => selectedLloguer?.propietaris.some(pr => pr.id === p.id))"
+                                                        :key="p.id"
+                                                        :value="p.id"
+                                                    >{{ p.nom }}</option>
                                                 </template>
                                                 <template v-else>
-                                                    <option v-for="c in comunitatsBens" :key="c.id" :value="c.id">{{ c.nom }}</option>
+                                                    <option
+                                                        v-for="c in comunitatsBens.filter(c => {
+                                                            const ids = new Set(selectedLloguer?.propietaris.map(p => p.id) ?? []);
+                                                            return c.comuners.length > 0 && c.comuners.every(id => ids.has(id));
+                                                        })"
+                                                        :key="c.id"
+                                                        :value="c.id"
+                                                    >{{ c.nom }}</option>
                                                 </template>
                                             </select>
                                             <p v-if="nouArrendadorErrors.arrendadorable_id" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ nouArrendadorErrors.arrendadorable_id }}</p>
@@ -2273,6 +2328,14 @@ const formatCurrency = (value: string | null): string => {
                                 </button>
                             </div>
 
+                            <!-- Avís devolució: moviment crèdit classificat com a despesa -->
+                            <div
+                                v-if="classificacioTipus === 'despesa' && parseFloat(classificacioMoviment?.import ?? '0') > 0"
+                                class="mb-4 rounded-md bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-700 dark:text-amber-300"
+                            >
+                                Aquest moviment és un ingrés bancari (+). En classificar-lo com a despesa es registra com a <strong>devolució o correcció</strong> i reduirà el total de despeses del lloguer.
+                            </div>
+
                             <!-- Despesa fields -->
                             <div v-if="classificacioTipus === 'despesa'" class="space-y-4">
                                 <div>
@@ -2691,7 +2754,10 @@ const formatCurrency = (value: string | null): string => {
                                                 <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100 max-w-[200px] truncate">{{ desp.concepte }}</td>
                                                 <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">{{ desp.proveidor }}</td>
                                                 <td class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">{{ desp.nif }}</td>
-                                                <td class="whitespace-nowrap px-3 py-2 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ formatCurrency(desp.import.toString()) }}</td>
+                                                <td
+                                                    class="whitespace-nowrap px-3 py-2 text-sm text-right font-mono"
+                                                    :class="desp.import > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+                                                >{{ formatCurrency(desp.import.toString()) }}</td>
                                                 <td class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 max-w-[150px] truncate">{{ desp.notes }}</td>
                                             </tr>
                                             <!-- Totals -->
