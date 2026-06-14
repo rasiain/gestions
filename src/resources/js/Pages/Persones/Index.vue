@@ -261,7 +261,7 @@ const deletePersona = (persona: Persona) => {
                                         v-model="form.nom"
                                         type="text"
                                         required
-                                        maxlength="20"
+                                        maxlength="30"
                                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                     />
                                     <p v-if="form.errors.nom" class="mt-1 text-sm text-red-600 dark:text-red-400">

@@ -25,7 +25,7 @@ class PersonaRequest extends FormRequest
             'nom' => [
                 'required',
                 'string',
-                'max:20',
+                'max:30',
             ],
             'cognoms' => [
                 'required',
