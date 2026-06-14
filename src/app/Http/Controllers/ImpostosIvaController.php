@@ -44,7 +44,7 @@ class ImpostosIvaController extends Controller
             $factures = Factura::where('lloguer_id', $lloguer->id)
                 ->where('any', $any)
                 ->get()
-                ->groupBy(fn ($f) => (int) ceil($f->mes / 3));
+                ->groupBy(fn ($f) => (int) ceil(($f->mes ?? $f->data_emissio?->month ?? 1) / 3));
 
             $despeses = MovimentLloguerDespesa::where('lloguer_id', $lloguer->id)
                 ->whereNotNull('iva_import')

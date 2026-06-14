@@ -20,8 +20,9 @@ interface Factura {
     id: number;
     lloguer_id: number;
     contracte_id: number | null;
-    any: number;
-    mes: number;
+    any: number | null;
+    mes: number | null;
+    tipus: 'mensual' | 'puntual';
     base: string;
     iva_percentatge: string;
     iva_import: string;
@@ -80,6 +81,9 @@ const movimentsLoading = ref(false);
 const selectedMovimentId = ref<number | null>(null);
 
 const editForm = ref({
+    tipus: 'mensual' as 'mensual' | 'puntual',
+    any: null as number | null,
+    mes: null as number | null,
     base: 0,
     iva_percentatge: 0,
     iva_import: 0,
@@ -155,6 +159,9 @@ const generarFactures = async () => {
 const openEditFactura = (factura: Factura) => {
     editingFactura.value = factura;
     editForm.value = {
+        tipus: factura.tipus,
+        any: factura.any,
+        mes: factura.mes,
         base: parseFloat(factura.base),
         iva_percentatge: parseFloat(factura.iva_percentatge),
         iva_import: parseFloat(factura.iva_import),
@@ -172,6 +179,30 @@ const openEditFactura = (factura: Factura) => {
             iva_import: parseFloat(l.iva_import),
             irpf_import: parseFloat(l.irpf_import),
         })),
+    };
+    editErrors.value = {};
+    showEditModal.value = true;
+};
+
+const openNewPuntual = () => {
+    editingFactura.value = null;
+    const avui = new Date();
+    const dataEmissio = avui.toISOString().slice(0, 10);
+    editForm.value = {
+        tipus: 'puntual',
+        any: avui.getFullYear(),
+        mes: avui.getMonth() + 1,
+        base: 0,
+        iva_percentatge: parseFloat(props.lloguer.iva_percentatge || '0'),
+        iva_import: 0,
+        irpf_percentatge: props.lloguer.retencio_irpf ? parseFloat(props.lloguer.irpf_percentatge || '0') : 0,
+        irpf_import: 0,
+        total: 0,
+        estat: 'esborrany',
+        numero_factura: '',
+        data_emissio: dataEmissio,
+        notes: '',
+        linies: [{ concepte: 'altres', descripcio: '', base: 0, iva_import: 0, irpf_import: 0 }],
     };
     editErrors.value = {};
     showEditModal.value = true;
@@ -200,12 +231,15 @@ const removeLinia = (index: number) => {
 };
 
 const submitEditFactura = async () => {
-    if (!editingFactura.value) return;
     editSaving.value = true;
     editErrors.value = {};
     try {
-        const res = await fetch(`/factures/${editingFactura.value.id}`, {
-            method: 'PUT',
+        const url = editingFactura.value
+            ? `/factures/${editingFactura.value.id}`
+            : `/lloguers/${props.lloguer.id}/factures`;
+        const method = editingFactura.value ? 'PUT' : 'POST';
+        const res = await fetch(url, {
+            method,
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
@@ -333,6 +367,12 @@ const anys = computed(() => {
                     >
                         Generar factures
                     </button>
+                    <button
+                        @click="openNewPuntual"
+                        class="inline-flex items-center gap-1 rounded-md border border-amber-600 px-3 py-1.5 text-sm font-medium text-amber-600 shadow-sm hover:bg-amber-50 dark:border-amber-400 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                    >
+                        Nova factura puntual
+                    </button>
                 </div>
 
                 <!-- Generar form -->
@@ -390,7 +430,17 @@ const anys = computed(() => {
                             </thead>
                             <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
                                 <tr v-for="factura in factures" :key="factura.id">
-                                    <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-900 dark:text-gray-100">{{ nomMes(factura.mes) }} {{ factura.any }}</td>
+                                    <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-900 dark:text-gray-100">
+                                        <template v-if="factura.tipus === 'puntual'">
+                                            <span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                                                Puntual
+                                            </span>
+                                            <span v-if="factura.mes && factura.any" class="ml-1 text-gray-500 dark:text-gray-400">{{ nomMes(factura.mes) }} {{ factura.any }}</span>
+                                        </template>
+                                        <template v-else>
+                                            {{ nomMes(factura.mes!) }} {{ factura.any }}
+                                        </template>
+                                    </td>
                                     <td class="whitespace-nowrap px-3 py-2 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ formatCurrency(factura.base) }}</td>
                                     <td class="whitespace-nowrap px-3 py-2 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ formatCurrency(factura.iva_import) }}</td>
                                     <td class="whitespace-nowrap px-3 py-2 text-sm text-right font-mono text-gray-900 dark:text-gray-100">{{ parseFloat(factura.irpf_import) > 0 ? formatCurrency(factura.irpf_import) : '-' }}</td>
@@ -448,9 +498,33 @@ const anys = computed(() => {
                     <form @submit.prevent="submitEditFactura">
                         <div class="px-4 pt-5 pb-4 sm:p-6">
                             <h3 class="mb-4 text-lg font-medium text-gray-900 dark:text-gray-100">
-                                Editar factura — {{ editingFactura ? nomMes(editingFactura.mes) + ' ' + editingFactura.any : '' }}
+                                <template v-if="!editingFactura">Nova factura puntual</template>
+                                <template v-else-if="editingFactura.tipus === 'puntual'">Editar factura puntual</template>
+                                <template v-else>Editar factura — {{ nomMes(editingFactura.mes!) }} {{ editingFactura.any }}</template>
                             </h3>
                             <div class="space-y-4">
+                                <!-- Any / Mes (puntuals o creació nova) -->
+                                <div v-if="!editingFactura || editForm.tipus === 'puntual'" class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Any</label>
+                                        <input
+                                            v-model.number="editForm.any"
+                                            type="number"
+                                            :disabled="!!editingFactura && editingFactura.tipus !== 'puntual'"
+                                            class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Mes</label>
+                                        <select
+                                            v-model.number="editForm.mes"
+                                            :disabled="!!editingFactura && editingFactura.tipus !== 'puntual'"
+                                            class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50"
+                                        >
+                                            <option v-for="m in 12" :key="m" :value="m">{{ nomMes(m) }}</option>
+                                        </select>
+                                    </div>
+                                </div>
                                 <!-- Línies -->
                                 <div>
                                     <div class="flex items-center justify-between mb-2">

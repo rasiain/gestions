@@ -176,7 +176,10 @@ class LlibreIvaController extends Controller
             $sheet1->setCellValue("A{$row}", $idx);
             $sheet1->setCellValue("B{$row}", $factura->numero_factura ?? '');
             $sheet1->setCellValue("C{$row}", $dataFormatada);
-            $sheet1->setCellValue("D{$row}", "Lloguer mensual del local {$adrecaImmoble}");
+            $concepteFra = $factura->tipus === 'puntual'
+                ? "Factura puntual del local {$adrecaImmoble}"
+                : "Lloguer mensual del local {$adrecaImmoble}";
+            $sheet1->setCellValue("D{$row}", $concepteFra);
             $sheet1->setCellValue("E{$row}", 100);
             $sheet1->setCellValue("F{$row}", (float) $factura->base);
             $sheet1->setCellValue("G{$row}", $factura->irpf_percentatge ? (float) $factura->irpf_percentatge : '');

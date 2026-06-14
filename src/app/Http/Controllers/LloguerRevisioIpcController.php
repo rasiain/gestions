@@ -47,6 +47,7 @@ class LloguerRevisioIpcController extends Controller
         if ($request->boolean('regularitzar')) {
             $factures = $lloguer->factures()
                 ->where('any', $validated['any_aplicacio'])
+                ->where('tipus', 'mensual')
                 ->where('estat', '!=', 'cobrada')
                 ->get();
 

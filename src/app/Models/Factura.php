@@ -15,6 +15,7 @@ class Factura extends Model
         'contracte_id',
         'any',
         'mes',
+        'tipus',
         'base',
         'iva_percentatge',
         'iva_import',

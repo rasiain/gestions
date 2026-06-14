@@ -12,10 +12,19 @@ class FacturaController extends Controller
 {
     public function index(Lloguer $lloguer, Request $request): JsonResponse
     {
-        $query = $lloguer->factures()->with(['linies', 'moviment:id,data_moviment,import'])->orderBy('mes');
+        $query = $lloguer->factures()
+            ->with(['linies', 'moviment:id,data_moviment,import'])
+            ->orderByRaw("CASE WHEN tipus = 'mensual' THEN 0 ELSE 1 END")
+            ->orderBy('mes')
+            ->orderBy('data_emissio');
 
         if ($any = $request->integer('any')) {
-            $query->where('any', $any);
+            $query->where(function ($q) use ($any) {
+                $q->where('any', $any)
+                    ->orWhere(function ($q2) use ($any) {
+                        $q2->whereNull('any')->whereYear('data_emissio', $any);
+                    });
+            });
         }
 
         $factures = $query->get();
@@ -28,8 +37,9 @@ class FacturaController extends Controller
     public function store(Request $request, Lloguer $lloguer): JsonResponse
     {
         $validated = $request->validate([
-            'any'              => 'required|integer|min:2000|max:2100',
-            'mes'              => 'required|integer|min:1|max:12',
+            'tipus'            => 'sometimes|string|in:mensual,puntual',
+            'any'              => 'nullable|integer|min:2000|max:2100|required_if:tipus,mensual',
+            'mes'              => 'nullable|integer|min:1|max:12|required_if:tipus,mensual',
             'base'             => 'required|numeric|min:0',
             'iva_percentatge'  => 'required|numeric|min:0|max:100',
             'iva_import'       => 'required|numeric',
@@ -48,6 +58,32 @@ class FacturaController extends Controller
             'linies.*.irpf_import' => 'nullable|numeric',
         ]);
 
+        $tipus = $validated['tipus'] ?? 'mensual';
+        $any = $validated['any'] ?? null;
+        $mes = $validated['mes'] ?? null;
+
+        if ($tipus === 'puntual' && ($any === null || $mes === null)) {
+            $dataEmissio = $validated['data_emissio'] ?? null;
+            $data = $dataEmissio ? \Carbon\Carbon::parse($dataEmissio) : now();
+            $any = $any ?? $data->year;
+            $mes = $mes ?? $data->month;
+        }
+
+        if ($tipus === 'mensual') {
+            $existeix = $lloguer->factures()
+                ->where('tipus', 'mensual')
+                ->where('any', $any)
+                ->where('mes', $mes)
+                ->exists();
+
+            if ($existeix) {
+                return response()->json([
+                    'message' => 'Ja existeix una factura mensual per a aquest any i mes.',
+                    'errors'  => ['mes' => ['Ja existeix una factura mensual per a aquest any i mes.']],
+                ], 422);
+            }
+        }
+
         $contracteActiu = $lloguer->contractes()
             ->where(function ($q) {
                 $q->whereNull('data_fi')->orWhere('data_fi', '>', now()->toDateString());
@@ -56,8 +92,9 @@ class FacturaController extends Controller
 
         $factura = $lloguer->factures()->create([
             'contracte_id'     => $contracteActiu?->id,
-            'any'              => $validated['any'],
-            'mes'              => $validated['mes'],
+            'any'              => $any,
+            'mes'              => $mes,
+            'tipus'            => $tipus,
             'base'             => $validated['base'],
             'iva_percentatge'  => $validated['iva_percentatge'],
             'iva_import'       => $validated['iva_import'],
@@ -88,6 +125,8 @@ class FacturaController extends Controller
     public function update(Request $request, Factura $factura): JsonResponse
     {
         $validated = $request->validate([
+            'any'              => 'nullable|integer|min:2000|max:2100',
+            'mes'              => 'nullable|integer|min:1|max:12',
             'base'             => 'required|numeric|min:0',
             'iva_percentatge'  => 'required|numeric|min:0|max:100',
             'iva_import'       => 'required|numeric',
@@ -106,7 +145,41 @@ class FacturaController extends Controller
             'linies.*.irpf_import' => 'nullable|numeric',
         ]);
 
+        $any = $validated['any'] ?? $factura->any;
+        $mes = $validated['mes'] ?? $factura->mes;
+        $dataEmissio = $validated['data_emissio'] ?? $factura->data_emissio;
+
+        // Per a puntuals, si canvia data_emissio i no s'envien any/mes explicitament, re-derivar-los
+        if (
+            $factura->tipus === 'puntual'
+            && !array_key_exists('any', $validated)
+            && !array_key_exists('mes', $validated)
+            && isset($validated['data_emissio'])
+        ) {
+            $data = \Carbon\Carbon::parse($validated['data_emissio']);
+            $any = $data->year;
+            $mes = $data->month;
+        }
+
+        if ($factura->tipus === 'mensual' && ($any !== $factura->any || $mes !== $factura->mes)) {
+            $existeix = $factura->lloguer->factures()
+                ->where('tipus', 'mensual')
+                ->where('id', '!=', $factura->id)
+                ->where('any', $any)
+                ->where('mes', $mes)
+                ->exists();
+
+            if ($existeix) {
+                return response()->json([
+                    'message' => 'Ja existeix una factura mensual per a aquest any i mes.',
+                    'errors'  => ['mes' => ['Ja existeix una factura mensual per a aquest any i mes.']],
+                ], 422);
+            }
+        }
+
         $factura->update([
+            'any'              => $any,
+            'mes'              => $mes,
             'base'             => $validated['base'],
             'iva_percentatge'  => $validated['iva_percentatge'],
             'iva_import'       => $validated['iva_import'],
@@ -115,7 +188,7 @@ class FacturaController extends Controller
             'total'            => $validated['total'],
             'estat'            => $validated['estat'] ?? $factura->estat,
             'numero_factura'   => $validated['numero_factura'] ?? $factura->numero_factura,
-            'data_emissio'     => $validated['data_emissio'] ?? $factura->data_emissio,
+            'data_emissio'     => $dataEmissio,
             'notes'            => $validated['notes'] ?? $factura->notes,
         ]);
 
@@ -169,6 +242,7 @@ class FacturaController extends Controller
         for ($mes = $validated['mes_inici']; $mes <= $validated['mes_fi']; $mes++) {
             // Skip if already exists
             $exists = $lloguer->factures()
+                ->where('tipus', 'mensual')
                 ->where('any', $validated['any'])
                 ->where('mes', $mes)
                 ->exists();
