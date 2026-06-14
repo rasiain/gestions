@@ -74,6 +74,35 @@ const form = useForm({
     propietari_data_fi: [] as (string | null)[],
 });
 
+interface PropietariLocal {
+    persona_id: number;
+    nom: string;
+    data_inici: string;
+}
+
+const localPropietaris = ref<PropietariLocal[]>([]);
+const nouPropietariId = ref<number | null>(null);
+
+const personesDisponibles = computed(() =>
+    props.persones.filter(p => !localPropietaris.value.some(lp => lp.persona_id === p.id))
+);
+
+const addPropietari = () => {
+    if (!nouPropietariId.value) return;
+    const persona = props.persones.find(p => p.id === nouPropietariId.value);
+    if (!persona) return;
+    localPropietaris.value.push({
+        persona_id: persona.id,
+        nom: persona.nom + ' ' + persona.cognoms,
+        data_inici: new Date().toISOString().split('T')[0],
+    });
+    nouPropietariId.value = null;
+};
+
+const removePropietari = (index: number) => {
+    localPropietaris.value.splice(index, 1);
+};
+
 const valorCadastral = computed(() => {
     const sol = Number(form.valor_sol) || 0;
     const construccio = Number(form.valor_construccio) || 0;
@@ -84,6 +113,8 @@ const openCreateModal = () => {
     isEditing.value = false;
     editingImmoble.value = null;
     form.reset();
+    localPropietaris.value = [];
+    nouPropietariId.value = null;
     showModal.value = true;
 };
 
@@ -100,20 +131,27 @@ const openEditModal = (immoble: Immoble) => {
     form.valor_adquisicio = immoble.valor_adquisicio;
     form.referencia_administracio = immoble.referencia_administracio || '';
     form.administrador_id = immoble.administrador_id;
-    form.propietari_ids = immoble.propietaris.map(p => p.id);
-    form.propietari_data_inici = immoble.propietaris.map(p => p.pivot.data_inici);
-    form.propietari_data_fi = immoble.propietaris.map(p => p.pivot.data_fi || '');
+    localPropietaris.value = immoble.propietaris.map(p => ({
+        persona_id: p.id,
+        nom: p.nom + ' ' + p.cognoms,
+        data_inici: p.pivot.data_inici,
+    }));
+    nouPropietariId.value = null;
     showModal.value = true;
 };
 
 const closeModal = () => {
     showModal.value = false;
     form.reset();
+    localPropietaris.value = [];
     isEditing.value = false;
     editingImmoble.value = null;
 };
 
 const submit = () => {
+    form.propietari_ids = localPropietaris.value.map(p => p.persona_id);
+    form.propietari_data_inici = localPropietaris.value.map(p => p.data_inici);
+    form.propietari_data_fi = localPropietaris.value.map(() => null);
     if (isEditing.value && editingImmoble.value) {
         form.put(route('immobles.update', editingImmoble.value.id), {
             onSuccess: () => closeModal(),
@@ -544,6 +582,56 @@ const formatNumber = (value: number | null, suffix: string = ''): string => {
                                         min="0"
                                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                     />
+                                </div>
+                            </div>
+
+                            <!-- Propietaris -->
+                            <div class="sm:col-span-2 mt-2">
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Propietaris
+                                </label>
+
+                                <!-- Llista de propietaris actuals -->
+                                <ul v-if="localPropietaris.length" class="mb-3 divide-y divide-gray-100 dark:divide-gray-700 rounded-md border border-gray-200 dark:border-gray-600">
+                                    <li
+                                        v-for="(p, i) in localPropietaris"
+                                        :key="p.persona_id"
+                                        class="flex items-center justify-between px-3 py-2 text-sm text-gray-800 dark:text-gray-200"
+                                    >
+                                        <span>{{ p.nom }}</span>
+                                        <button
+                                            type="button"
+                                            @click="removePropietari(i)"
+                                            class="ml-4 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                                            title="Eliminar propietari"
+                                        >
+                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                            </svg>
+                                        </button>
+                                    </li>
+                                </ul>
+                                <p v-else class="mb-3 text-xs text-gray-400 dark:text-gray-500">Sense propietaris definits.</p>
+
+                                <!-- Afegir propietari -->
+                                <div class="flex gap-2">
+                                    <select
+                                        v-model="nouPropietariId"
+                                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    >
+                                        <option :value="null">Selecciona una persona…</option>
+                                        <option v-for="p in personesDisponibles" :key="p.id" :value="p.id">
+                                            {{ p.cognoms }}, {{ p.nom }}
+                                        </option>
+                                    </select>
+                                    <button
+                                        type="button"
+                                        @click="addPropietari"
+                                        :disabled="!nouPropietariId"
+                                        class="shrink-0 rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                        Afegir
+                                    </button>
                                 </div>
                             </div>
                         </div>
