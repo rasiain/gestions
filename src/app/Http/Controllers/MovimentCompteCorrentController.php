@@ -230,7 +230,7 @@ class MovimentCompteCorrentController extends Controller
     /**
      * Update the specified movement.
      */
-    public function update(MovimentCompteCorrentRequest $request, MovimentCompteCorrent $moviment): RedirectResponse
+    public function update(MovimentCompteCorrentRequest $request, MovimentCompteCorrent $moviment): RedirectResponse|JsonResponse
     {
         $validated = $request->validated();
 
