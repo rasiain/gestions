@@ -522,6 +522,14 @@ const duplicarUn = (moviment: MovimentCompteCorrent) => {
     router.post(route('moviments.duplicar'), { ids: [moviment.id] });
 };
 
+// Estat local per als flags conciliat, evita mutar props directament
+const localConciliat = ref<Record<number, boolean>>(
+    Object.fromEntries(props.moviments.data.map(m => [m.id, m.conciliat]))
+);
+watch(() => props.moviments.data, (data) => {
+    localConciliat.value = Object.fromEntries(data.map(m => [m.id, m.conciliat]));
+});
+
 const toggleConciliat = async (moviment: MovimentCompteCorrent) => {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
     const res = await fetch(route('moviments.toggle-conciliat', moviment.id), {
@@ -530,7 +538,7 @@ const toggleConciliat = async (moviment: MovimentCompteCorrent) => {
     });
     if (res.ok) {
         const data = await res.json();
-        moviment.conciliat = data.conciliat;
+        localConciliat.value[moviment.id] = data.conciliat;
     }
 };
 
@@ -927,12 +935,12 @@ const conciliarPagina = async (conciliat: boolean) => {
                                         <td class="px-3 py-4 text-center">
                                             <button
                                                 @click="toggleConciliat(moviment)"
-                                                :title="moviment.conciliat ? 'Revisat — clic per desmarcar' : 'Pendent — clic per marcar com a revisat'"
-                                                :class="moviment.conciliat
+                                                :title="localConciliat[moviment.id] ? 'Revisat — clic per desmarcar' : 'Pendent — clic per marcar com a revisat'"
+                                                :class="localConciliat[moviment.id]
                                                     ? 'text-green-600 hover:text-green-400 dark:text-green-400 dark:hover:text-green-300'
                                                     : 'text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400'"
                                                 class="text-lg leading-none transition-colors"
-                                            >{{ moviment.conciliat ? '✓' : '○' }}</button>
+                                            >{{ localConciliat[moviment.id] ? '✓' : '○' }}</button>
                                         </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                                             <button
