@@ -49,6 +49,7 @@ class MovimentCompteCorrentController extends Controller
         $ordre = in_array($request->input('ordre'), ['asc', 'desc']) ? $request->input('ordre') : 'desc';
         $filters = [
             'search' => $request->input('search'),
+            'import_exacte' => $request->input('import_exacte'),
             'categoria_id' => $request->input('categoria_id'),
             'data_inici' => $request->input('data_inici'),
             'data_fi' => $request->input('data_fi'),
@@ -64,6 +65,13 @@ class MovimentCompteCorrentController extends Controller
         // Apply filters
         if ($filters['search']) {
             $query->cerca($filters['search']);
+        }
+
+        if ($filters['import_exacte'] !== null && $filters['import_exacte'] !== '') {
+            $digits = preg_replace('/[^0-9.]/', '', $filters['import_exacte']);
+            if ($digits !== '') {
+                $query->whereRaw("CAST(ABS(import) AS TEXT) LIKE ?", ['%' . $digits . '%']);
+            }
         }
 
         if ($filters['categoria_id']) {

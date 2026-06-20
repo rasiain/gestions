@@ -60,6 +60,7 @@ interface PaginatedMoviments {
 
 interface Filters {
     search: string | null;
+    import_exacte: string | null;
     categoria_id: number | null | 'none';
     data_inici: string | null;
     data_fi: string | null;
@@ -194,6 +195,7 @@ const form = useForm({
 const filterForm = useForm({
     compte_corrent_id: props.selectedCompteCorrentId,
     search: props.filters.search || '',
+    import_exacte: props.filters.import_exacte || '',
     categoria_id: props.filters.categoria_id || null,
     data_inici: props.filters.data_inici || '',
     data_fi: props.filters.data_fi || '',
@@ -227,13 +229,14 @@ const applyFilters = () => {
 };
 
 const filterSnapshot = computed(() => ({
-    search:       filterForm.search,
-    categoria_id: filterForm.categoria_id,
-    tipus:        filterForm.tipus,
-    conciliat:    filterForm.conciliat,
-    data_inici:   filterForm.data_inici,
-    data_fi:      filterForm.data_fi,
-    ordre:        filterForm.ordre,
+    search:        filterForm.search,
+    import_exacte: filterForm.import_exacte,
+    categoria_id:  filterForm.categoria_id,
+    tipus:         filterForm.tipus,
+    conciliat:     filterForm.conciliat,
+    data_inici:    filterForm.data_inici,
+    data_fi:       filterForm.data_fi,
+    ordre:         filterForm.ordre,
 }));
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -268,6 +271,7 @@ const setDateRange = (range: 'week' | 'month' | 'year') => {
 
 const clearFilters = () => {
     filterForm.search = '';
+    filterForm.import_exacte = '';
     filterForm.categoria_id = null;
     filterForm.data_inici = '';
     filterForm.data_fi = '';
@@ -644,6 +648,21 @@ const conciliarPagina = async (conciliat: boolean) => {
                                     v-model="filterForm.search"
                                     type="text"
                                     placeholder="Cerca concepte, notes, categoria…"
+                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                />
+                            </div>
+
+                            <!-- Import exacte -->
+                            <div>
+                                <label for="import_exacte" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Import
+                                </label>
+                                <input
+                                    id="import_exacte"
+                                    v-model="filterForm.import_exacte"
+                                    type="text"
+                                    inputmode="decimal"
+                                    placeholder="p. ex. 150 o 1234.56"
                                     class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                 />
                             </div>
