@@ -1812,8 +1812,8 @@ const formatCurrency = (value: string | null): string => {
                                                     : ingresNoQuadra(moviment)
                                                         ? 'bg-red-50 ring-1 ring-inset ring-red-200 dark:bg-red-900/20 dark:ring-red-800'
                                                         : classificacioThisLloguer(moviment)
-                                                            ? 'bg-green-50 dark:bg-green-900/20'
-                                                            : 'bg-amber-50 dark:bg-amber-900/10',
+                                                            ? 'bg-green-100 ring-1 ring-inset ring-green-200 dark:bg-green-900/50 dark:ring-green-700/60'
+                                                            : 'bg-amber-100 ring-1 ring-inset ring-amber-200 dark:bg-amber-900/40 dark:ring-amber-700/60',
                                         ]"
                                     >
                                         <!-- Selecció múltiple -->
