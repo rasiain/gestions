@@ -15,7 +15,9 @@ interface CompteCorrent {
     compte_corrent: string;
     nom: string | null;
     entitat: string;
+    entitat_id: number | null;
     ordre: number;
+    tipus: string;
     titulars: Titular[];
     saldo_actual: number | null;
     lloguer_nom: string | null;
@@ -24,9 +26,15 @@ interface CompteCorrent {
     updated_at: string;
 }
 
+interface Entitat {
+    id: number;
+    nom: string;
+}
+
 interface Props {
     comptesCorrents: CompteCorrent[];
     titulars: Titular[];
+    entitats: Entitat[];
 }
 
 const props = defineProps<Props>();
@@ -38,14 +46,19 @@ const editingCompteCorrent = ref<CompteCorrent | null>(null);
 const form = useForm({
     compte_corrent: '',
     nom: '',
-    entitat: '',
+    entitat_id: null as number | null,
+    entitat_nova_nom: '',
     ordre: 0,
+    tipus: 'corrent',
     titular_ids: [] as number[],
 });
+
+const entitatsNova = ref(false);
 
 const openCreateModal = () => {
     isEditing.value = false;
     editingCompteCorrent.value = null;
+    entitatsNova.value = false;
     form.reset();
     showModal.value = true;
 };
@@ -53,10 +66,13 @@ const openCreateModal = () => {
 const openEditModal = (compteCorrent: CompteCorrent) => {
     isEditing.value = true;
     editingCompteCorrent.value = compteCorrent;
+    entitatsNova.value = false;
     form.compte_corrent = compteCorrent.compte_corrent;
     form.nom = compteCorrent.nom || '';
-    form.entitat = compteCorrent.entitat;
+    form.entitat_id = compteCorrent.entitat_id ?? null;
+    form.entitat_nova_nom = '';
     form.ordre = compteCorrent.ordre;
+    form.tipus = compteCorrent.tipus || 'corrent';
     form.titular_ids = compteCorrent.titulars.map(t => t.id);
     showModal.value = true;
 };
@@ -99,8 +115,9 @@ const formatSaldo = (saldo: number | null): string => {
     }).format(saldo);
 };
 
-const comptesPersonals = computed(() => props.comptesCorrents.filter(c => !c.lloguer_nom));
+const comptesCorrents = computed(() => props.comptesCorrents.filter(c => !c.lloguer_nom && c.tipus !== 'fons_inversio'));
 const comptesLloguers = computed(() => props.comptesCorrents.filter(c => !!c.lloguer_nom));
+const comptesFonsInversio = computed(() => props.comptesCorrents.filter(c => c.tipus === 'fons_inversio'));
 
 const showBalancModal = ref(false);
 const balancCompteId = ref<number | null>(null);
@@ -164,79 +181,92 @@ const closeBalancModal = () => {
                             </button>
                         </div>
 
-                        <!-- Tables -->
-                        <div v-if="comptesCorrents.length > 0" class="space-y-8">
+                        <!-- Taula unificada -->
+                        <div v-if="comptesCorrents.length > 0" class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                <thead class="bg-gray-50 dark:bg-gray-700">
+                                    <tr>
+                                        <th class="px-6 py-3"></th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Compte Corrent</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Entitat</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Titulars</th>
+                                        <th class="px-6 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Saldo Actual</th>
+                                        <th class="px-6 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Accions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
 
-                            <!-- Grup: Personals -->
-                            <div v-if="comptesPersonals.length">
-                                <h4 class="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Personals</h4>
-                                <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-                                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                                        <thead class="bg-gray-50 dark:bg-gray-700">
-                                            <tr>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Compte Corrent</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Nom</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Entitat</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Titulars</th>
-                                                <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Saldo Actual</th>
-                                                <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Accions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-                                            <tr v-for="compte in comptesPersonals" :key="compte.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
-                                                <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">{{ compte.compte_corrent }}</td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ compte.nom || '-' }}</td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ compte.entitat }}</td>
-                                                <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ getTitularsNames(compte.titulars) }}</td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium" :class="compte.saldo_actual !== null && compte.saldo_actual < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'">{{ formatSaldo(compte.saldo_actual) }}</td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                                                    <Link :href="route('moviments.index', { compte_corrent_id: compte.id })" class="mr-3 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">Moviments</Link>
-                                                    <Link :href="route('maintenance.movements.import', { compte_corrent_id: compte.id })" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Importar</Link>
-                                                    <button @click="openBalancModal(compte)" class="mr-3 text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">Balanc</button>
-                                                    <button @click="openEditModal(compte)" class="mr-3 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">Editar</button>
-                                                    <button @click="deleteCompteCorrent(compte)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
+                                    <!-- Grup: Corrents -->
+                                    <template v-if="comptesCorrents.length">
+                                        <tr class="bg-gray-50 dark:bg-gray-900/40">
+                                            <td colspan="6" class="px-6 py-1.5 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">Corrents</td>
+                                        </tr>
+                                        <tr v-for="compte in comptesCorrents" :key="compte.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                            <td class="px-6 py-4"></td>
+                                            <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
+                                                {{ compte.nom || compte.compte_corrent }}
+                                                <span class="ml-1 font-mono text-xs tracking-widest text-gray-400 dark:text-gray-500">···· {{ compte.compte_corrent.slice(-4) }}</span>
+                                            </td>
+                                            <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ compte.entitat }}</td>
+                                            <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ getTitularsNames(compte.titulars) }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium" :class="compte.saldo_actual !== null && compte.saldo_actual < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'">{{ formatSaldo(compte.saldo_actual) }}</td>
+                                            <td class="px-6 py-4 text-right text-sm font-medium">
+                                                <Link :href="route('moviments.index', { compte_corrent_id: compte.id })" class="mr-3 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">Moviments</Link>
+                                                <Link :href="route('maintenance.movements.import', { compte_corrent_id: compte.id })" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Importar</Link>
+                                                <button @click="openBalancModal(compte)" class="mr-3 text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">Balanc</button>
+                                                <button @click="openEditModal(compte)" class="mr-3 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">Editar</button>
+                                                <button @click="deleteCompteCorrent(compte)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
+                                            </td>
+                                        </tr>
+                                    </template>
 
-                            <!-- Grup: Lloguers -->
-                            <div v-if="comptesLloguers.length">
-                                <h4 class="mb-3 text-sm font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">Lloguers</h4>
-                                <div class="overflow-x-auto rounded-lg border border-amber-200 dark:border-amber-800">
-                                    <table class="min-w-full divide-y divide-amber-100 dark:divide-amber-900">
-                                        <thead class="bg-amber-50 dark:bg-amber-900/30">
-                                            <tr>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Lloguer</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Compte Corrent</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Entitat</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Titulars</th>
-                                                <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Saldo Actual</th>
-                                                <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Accions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-amber-100 bg-white dark:divide-amber-900 dark:bg-gray-800">
-                                            <tr v-for="compte in comptesLloguers" :key="compte.id" class="hover:bg-amber-50 dark:hover:bg-amber-900/10">
-                                                <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-amber-700 dark:text-amber-300">{{ compte.lloguer_acronim || compte.lloguer_nom }}</td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ compte.nom || compte.compte_corrent }}</td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ compte.entitat }}</td>
-                                                <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ getTitularsNames(compte.titulars) }}</td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium" :class="compte.saldo_actual !== null && compte.saldo_actual < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'">{{ formatSaldo(compte.saldo_actual) }}</td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                                                    <Link :href="route('moviments.index', { compte_corrent_id: compte.id })" class="mr-3 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">Moviments</Link>
-                                                    <Link :href="route('maintenance.movements.import', { compte_corrent_id: compte.id })" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Importar</Link>
-                                                    <button @click="openBalancModal(compte)" class="mr-3 text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">Balanc</button>
-                                                    <button @click="openEditModal(compte)" class="mr-3 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">Editar</button>
-                                                    <button @click="deleteCompteCorrent(compte)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
+                                    <!-- Grup: Lloguers -->
+                                    <template v-if="comptesLloguers.length">
+                                        <tr class="bg-amber-50 dark:bg-amber-900/20">
+                                            <td colspan="6" class="px-6 py-1.5 text-xs font-semibold uppercase tracking-widest text-amber-500 dark:text-amber-400">Lloguers</td>
+                                        </tr>
+                                        <tr v-for="compte in comptesLloguers" :key="compte.id" class="hover:bg-amber-50 dark:hover:bg-amber-900/10">
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-amber-700 dark:text-amber-300">{{ compte.lloguer_acronim || compte.lloguer_nom }}</td>
+                                            <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                                                {{ compte.nom || compte.compte_corrent }}
+                                                <span class="ml-1 font-mono text-xs tracking-widest text-gray-400 dark:text-gray-500">···· {{ compte.compte_corrent.slice(-4) }}</span>
+                                            </td>
+                                            <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ compte.entitat }}</td>
+                                            <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ getTitularsNames(compte.titulars) }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium" :class="compte.saldo_actual !== null && compte.saldo_actual < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'">{{ formatSaldo(compte.saldo_actual) }}</td>
+                                            <td class="px-6 py-4 text-right text-sm font-medium">
+                                                <Link :href="route('moviments.index', { compte_corrent_id: compte.id })" class="mr-3 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">Moviments</Link>
+                                                <Link :href="route('maintenance.movements.import', { compte_corrent_id: compte.id })" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Importar</Link>
+                                                <button @click="openBalancModal(compte)" class="mr-3 text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">Balanc</button>
+                                                <button @click="openEditModal(compte)" class="mr-3 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">Editar</button>
+                                                <button @click="deleteCompteCorrent(compte)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
+                                            </td>
+                                        </tr>
+                                    </template>
 
+                                    <!-- Grup: Fons d'Inversió -->
+                                    <template v-if="comptesFonsInversio.length">
+                                        <tr class="bg-emerald-50 dark:bg-emerald-900/20">
+                                            <td colspan="6" class="px-6 py-1.5 text-xs font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Fons d'Inversió</td>
+                                        </tr>
+                                        <tr v-for="compte in comptesFonsInversio" :key="compte.id" class="hover:bg-emerald-50 dark:hover:bg-emerald-900/10">
+                                            <td class="px-6 py-4"></td>
+                                            <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
+                                                {{ compte.nom || compte.compte_corrent }}
+                                                <span class="ml-1 font-mono text-xs tracking-widest text-gray-400 dark:text-gray-500">{{ compte.compte_corrent }}</span>
+                                            </td>
+                                            <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ compte.entitat }}</td>
+                                            <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ getTitularsNames(compte.titulars) }}</td>
+                                            <td class="px-6 py-4 text-center text-sm text-gray-400">—</td>
+                                            <td class="px-6 py-4 text-right text-sm font-medium">
+                                                <button @click="openEditModal(compte)" class="mr-3 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">Editar</button>
+                                                <button @click="deleteCompteCorrent(compte)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
+                                            </td>
+                                        </tr>
+                                    </template>
+
+                                </tbody>
+                            </table>
                         </div>
 
                         <!-- Empty State -->
@@ -372,24 +402,35 @@ const closeBalancModal = () => {
 
                                 <!-- Entitat -->
                                 <div>
-                                    <label
-                                        for="entitat"
-                                        class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                                    >
-                                        Entitat Bancària
-                                    </label>
-                                    <input
-                                        id="entitat"
-                                        v-model="form.entitat"
-                                        type="text"
-                                        required
-                                        maxlength="200"
-                                        placeholder="CaixaBank, BBVA, etc."
-                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
-                                    />
-                                    <p v-if="form.errors.entitat" class="mt-1 text-sm text-red-600 dark:text-red-400">
-                                        {{ form.errors.entitat }}
+                                    <div class="flex items-center justify-between">
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Entitat bancària</label>
+                                        <button type="button" @click="entitatsNova = !entitatsNova; form.entitat_id = null; form.entitat_nova_nom = ''" class="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">
+                                            {{ entitatsNova ? '← Seleccionar existent' : '+ Entitat nova' }}
+                                        </button>
+                                    </div>
+                                    <div v-if="!entitatsNova" class="mt-1">
+                                        <select v-model="form.entitat_id" class="block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm">
+                                            <option :value="null">— Selecciona una entitat —</option>
+                                            <option v-for="e in props.entitats" :key="e.id" :value="e.id">{{ e.nom }}</option>
+                                        </select>
+                                    </div>
+                                    <div v-else class="mt-1">
+                                        <input v-model="form.entitat_nova_nom" type="text" maxlength="200" placeholder="p.ex. Caixa Enginyers"
+                                            class="block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
+                                    </div>
+                                    <p v-if="form.errors.entitat_id || form.errors.entitat_nova_nom" class="mt-1 text-sm text-red-600 dark:text-red-400">
+                                        {{ form.errors.entitat_id || form.errors.entitat_nova_nom }}
                                     </p>
+                                </div>
+
+                                <!-- Tipus -->
+                                <div>
+                                    <label for="tipus" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Tipus</label>
+                                    <select id="tipus" v-model="form.tipus" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm">
+                                        <option value="corrent">Corrent</option>
+                                        <option value="fons_inversio">Fons d'inversió</option>
+                                    </select>
+                                    <p v-if="form.errors.tipus" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.tipus }}</p>
                                 </div>
 
                                 <!-- Ordre -->

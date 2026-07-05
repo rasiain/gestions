@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\CompteCorrentRequest;
 use App\Models\Categoria;
 use App\Models\CompteCorrent;
+use App\Models\Entitat;
 use App\Models\Lloguer;
 use App\Models\MovimentCompteCorrent;
 use App\Models\Persona;
@@ -23,9 +24,8 @@ class CompteCorrentController extends Controller
             ->get()
             ->keyBy('compte_corrent_id');
 
-        $comptesCorrents = CompteCorrent::with('titulars')
+        $comptesCorrents = CompteCorrent::with(['titulars', 'entitatRelacio'])
             ->orderBy('ordre')
-            ->orderBy('entitat')
             ->get()
             ->map(function ($compte) use ($lloguersPerCompte) {
                 $compte->saldo_actual = $compte->saldo_actual;
@@ -39,9 +39,12 @@ class CompteCorrentController extends Controller
             ->orderBy('nom')
             ->get();
 
+        $entitats = Entitat::orderBy('nom')->get();
+
         return Inertia::render('ComptesCorrents/Index', [
             'comptesCorrents' => $comptesCorrents,
-            'titulars' => $titulars,
+            'titulars'        => $titulars,
+            'entitats'        => $entitats,
         ]);
     }
 
@@ -50,32 +53,35 @@ class CompteCorrentController extends Controller
      */
     public function store(CompteCorrentRequest $request)
     {
-        // Get validated data excluding titular_ids
         $validated = $request->validated();
-        unset($validated['titular_ids']);
+        $entitat_ids = $validated['titular_ids'] ?? [];
+        unset($validated['titular_ids'], $validated['entitat_nova_nom']);
+
+        if ($request->filled('entitat_nova_nom')) {
+            $entitat = Entitat::firstOrCreate(['nom' => trim($request->input('entitat_nova_nom'))]);
+            $validated['entitat_id'] = $entitat->id;
+        }
 
         $compteCorrent = CompteCorrent::create($validated);
-
-        // Sync titulars
-        $compteCorrent->titulars()->sync($request->input('titular_ids', []));
+        $compteCorrent->titulars()->sync($entitat_ids);
 
         return redirect()->route('comptes-corrents.index')
             ->with('success', 'Compte corrent creat correctament.');
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(CompteCorrentRequest $request, CompteCorrent $compteCorrent)
     {
-        // Get validated data excluding titular_ids
         $validated = $request->validated();
-        unset($validated['titular_ids']);
+        $titular_ids = $validated['titular_ids'] ?? [];
+        unset($validated['titular_ids'], $validated['entitat_nova_nom']);
+
+        if ($request->filled('entitat_nova_nom')) {
+            $entitat = Entitat::firstOrCreate(['nom' => trim($request->input('entitat_nova_nom'))]);
+            $validated['entitat_id'] = $entitat->id;
+        }
 
         $compteCorrent->update($validated);
-
-        // Sync titulars
-        $compteCorrent->titulars()->sync($request->input('titular_ids', []));
+        $compteCorrent->titulars()->sync($titular_ids);
 
         return redirect()->route('comptes-corrents.index')
             ->with('success', 'Compte corrent actualitzat correctament.');

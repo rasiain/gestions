@@ -18,7 +18,7 @@ class CategoriaController extends Controller
     public function index(Request $request)
     {
         // Get all comptes corrents for the selector
-        $comptesCorrents = CompteCorrent::orderBy('ordre')->orderBy('entitat')->get();
+        $comptesCorrents = CompteCorrent::with('entitatRelacio')->orderBy('ordre')->get();
 
         // Get the selected compte_corrent_id from request, or default to first one
         $compteCorrentId = $request->input('compte_corrent_id', $comptesCorrents->first()?->id);

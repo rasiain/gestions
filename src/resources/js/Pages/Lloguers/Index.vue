@@ -394,7 +394,7 @@ interface Moviment {
     categoria_id: number | null;
     categoria_nom: string | null;
     despesa: MovimentDespesa | null;
-    ingres: MovimentIngres | null;
+    ingressos: MovimentIngres[];
     factura: MovimentFactura | null;
 }
 
@@ -733,23 +733,40 @@ const categoriesIngresLinia = [
 ];
 
 const ingresNoQuadra = (moviment: Moviment): boolean => {
-    if (!moviment.ingres || moviment.ingres.lloguer_id !== selectedLloguerId.value) return false;
-    const base = parseFloat(moviment.ingres.base_lloguer) || 0;
-    const linies = moviment.ingres.linies.reduce((s, l) => s + (parseFloat(l.import) || 0), 0);
-    const netCalculat = (base - linies).toFixed(2);
-    const importBanc = parseFloat(moviment.import).toFixed(2);
-    return netCalculat !== importBanc;
+    const ingresLloguer = moviment.ingressos.find(i => i.lloguer_id === selectedLloguerId.value);
+    if (!ingresLloguer) return false;
+    // Suma de tots els ingressos del moviment
+    const sumaTotal = moviment.ingressos.reduce((s, ingres) => {
+        const base = parseFloat(ingres.base_lloguer) || 0;
+        const linies = ingres.linies.reduce((ls, l) => ls + (parseFloat(l.import) || 0), 0);
+        return s + (base - linies);
+    }, 0);
+    const importBanc = parseFloat(moviment.import);
+    return parseFloat(sumaTotal.toFixed(2)) !== parseFloat(importBanc.toFixed(2));
+};
+
+const ingresParcial = (moviment: Moviment): boolean => {
+    if (!moviment.ingressos.find(i => i.lloguer_id === selectedLloguerId.value)) return false;
+    const sumaTotal = moviment.ingressos.reduce((s, ingres) => {
+        const base = parseFloat(ingres.base_lloguer) || 0;
+        const linies = ingres.linies.reduce((ls, l) => ls + (parseFloat(l.import) || 0), 0);
+        return s + (base - linies);
+    }, 0);
+    const importBanc = parseFloat(moviment.import);
+    return parseFloat(sumaTotal.toFixed(2)) < parseFloat(importBanc.toFixed(2));
 };
 
 const classificacioThisLloguer = (moviment: Moviment) => {
     if (moviment.despesa?.lloguer_id === selectedLloguerId.value) return { tipus: 'despesa' as const, data: moviment.despesa };
-    if (moviment.ingres?.lloguer_id === selectedLloguerId.value) return { tipus: 'ingres' as const, data: moviment.ingres };
+    const ingresFound = moviment.ingressos.find(i => i.lloguer_id === selectedLloguerId.value);
+    if (ingresFound) return { tipus: 'ingres' as const, data: ingresFound };
     return null;
 };
 
 const classificacioAltresLloguer = (moviment: Moviment): boolean => {
-    return (!!moviment.despesa && moviment.despesa.lloguer_id !== selectedLloguerId.value) ||
-           (!!moviment.ingres && moviment.ingres.lloguer_id !== selectedLloguerId.value);
+    // Només bloca si hi ha una DESPESA d'un altre lloguer (les despeses son exclusives).
+    // Els ingressos permeten múltiples lloguers, mai no bloquen.
+    return !!(moviment.despesa && moviment.despesa.lloguer_id !== selectedLloguerId.value);
 };
 
 const classificacioLabel = (moviment: Moviment): string => {
@@ -757,7 +774,7 @@ const classificacioLabel = (moviment: Moviment): string => {
         const catLabel = categoriesDespesa.find(c => c.value === moviment.despesa!.categoria)?.label ?? moviment.despesa.categoria ?? 'Despesa';
         return parseFloat(moviment.import) > 0 ? `↩ ${catLabel}` : catLabel;
     }
-    if (moviment.ingres?.lloguer_id === selectedLloguerId.value) return 'Ingrés';
+    if (moviment.ingressos.find(i => i.lloguer_id === selectedLloguerId.value)) return 'Ingrés';
     return '';
 };
 
@@ -770,9 +787,22 @@ const ingresNetCalculat = computed(() => {
     return parseFloat((base - linies).toFixed(2));
 });
 
+// Suma dels ingressos d'altres lloguers ja classificats al moviment actual (per al resum del modal)
+const altresIngressosImport = computed(() => {
+    const moviment = classificacioMoviment.value;
+    if (!moviment) return 0;
+    return moviment.ingressos
+        .filter(i => i.lloguer_id !== selectedLloguerId.value)
+        .reduce((s, ingres) => {
+            const base = parseFloat(ingres.base_lloguer) || 0;
+            const linies = ingres.linies.reduce((ls, l) => ls + (parseFloat(l.import) || 0), 0);
+            return s + (base - linies);
+        }, 0);
+});
+
 const ingresDiferencia = computed(() => {
     const importBanc = classificacioMoviment.value ? parseFloat(classificacioMoviment.value.import) : 0;
-    return parseFloat((ingresNetCalculat.value - importBanc).toFixed(2));
+    return parseFloat((ingresNetCalculat.value + altresIngressosImport.value - importBanc).toFixed(2));
 });
 
 const computedGestoriaImport = computed(() => {
@@ -803,10 +833,11 @@ const openClassificacioModal = (moviment: Moviment) => {
         };
     } else if (cls?.tipus === 'ingres') {
         classificacioTipus.value = 'ingres';
+        const ingresExistent = moviment.ingressos.find(i => i.lloguer_id === selectedLloguerId.value) ?? cls.data;
         classificacioIngres.value = {
-            base_lloguer: parseFloat(cls.data.base_lloguer),
-            notes: cls.data.notes ?? '',
-            linies: cls.data.linies.map(l => ({
+            base_lloguer: parseFloat(ingresExistent.base_lloguer),
+            notes: ingresExistent.notes ?? '',
+            linies: ingresExistent.linies.map(l => ({
                 tipus: l.tipus,
                 descripcio: l.descripcio,
                 import: parseFloat(l.import),
@@ -891,7 +922,7 @@ const submitClassificacio = async () => {
 
         const index = moviments.value.findIndex(m => m.id === moviment.id);
         if (index !== -1) {
-            moviments.value[index] = { ...moviments.value[index], despesa: json.despesa, ingres: json.ingres };
+            moviments.value[index] = { ...moviments.value[index], despesa: json.despesa, ingressos: json.ingressos };
         }
         closeClassificacioModal();
     } finally {
@@ -903,7 +934,8 @@ const deleteClassificacio = async (moviment: Moviment) => {
     if (!confirm('Estàs segur que vols eliminar la classificació?')) return;
 
     try {
-        const res = await fetch(`/moviments/${moviment.id}/classificacio`, {
+        const lloguerId = selectedLloguerId.value;
+        const res = await fetch(`/moviments/${moviment.id}/classificacio?lloguer_id=${lloguerId}`, {
             method: 'DELETE',
             headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
@@ -911,7 +943,7 @@ const deleteClassificacio = async (moviment: Moviment) => {
         if (res.ok) {
             const index = moviments.value.findIndex(m => m.id === moviment.id);
             if (index !== -1) {
-                moviments.value[index] = { ...moviments.value[index], despesa: json.despesa, ingres: json.ingres };
+                moviments.value[index] = { ...moviments.value[index], despesa: json.despesa, ingressos: json.ingressos };
             }
         }
     } catch { /* ignore */ }
@@ -1214,100 +1246,85 @@ const formatCurrency = (value: string | null): string => {
                             </button>
                         </div>
 
-                        <div v-if="lloguers.length > 0" class="space-y-6">
+                        <div v-if="lloguers.length > 0" class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                <thead class="bg-gray-50 dark:bg-gray-700">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Nom</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Acrònim</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Immoble</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Base (€/mes)</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Arrendador</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Contracte actiu</th>
+                                        <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Accions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
 
-                            <!-- Grup: Habitatges -->
-                            <div v-if="lloguersHabitatge.length">
-                                <h4 class="mb-2 text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Habitatges</h4>
-                                <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-                                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                                        <thead class="bg-gray-50 dark:bg-gray-700">
-                                            <tr>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Nom</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Acrònim</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Immoble</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Base (€/mes)</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Arrendador</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Contracte actiu</th>
-                                                <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Accions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-                                            <tr
-                                                v-for="lloguer in lloguersHabitatge"
-                                                :key="lloguer.id"
-                                                @click="selectLloguer(lloguer)"
-                                                class="cursor-pointer transition-colors"
-                                                :class="selectedLloguerId === lloguer.id ? 'bg-amber-50 dark:bg-amber-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700'"
-                                            >
-                                                <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">{{ lloguer.nom }}</td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ lloguer.acronim || '-' }}</td>
-                                                <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ lloguer.immoble?.adreca || '-' }}</td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ formatCurrency(lloguer.base_euros) }}</td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                                                    <span v-if="lloguer.contracte_actiu?.arrendador">{{ lloguer.contracte_actiu.arrendador.arrendadorable?.nom ?? '—' }}</span>
-                                                    <span v-else class="italic text-gray-400 dark:text-gray-500">—</span>
-                                                </td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-sm">
-                                                    <span v-if="lloguer.contracte_actiu" class="text-gray-900 dark:text-gray-100">{{ lloguer.contracte_actiu.data_inici }} → {{ lloguer.contracte_actiu.data_fi ?? 'indefinit' }}</span>
-                                                    <span v-else class="italic text-gray-400 dark:text-gray-500">Sense contracte</span>
-                                                </td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium" @click.stop>
-                                                    <button @click="openEditLloguerModal(lloguer)" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Editar</button>
-                                                    <button @click="deleteLloguer(lloguer)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
+                                    <!-- Grup: Habitatges -->
+                                    <template v-if="lloguersHabitatge.length">
+                                        <tr class="bg-gray-50 dark:bg-gray-900/40">
+                                            <td colspan="7" class="px-6 py-1.5 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">Habitatges</td>
+                                        </tr>
+                                        <tr
+                                            v-for="lloguer in lloguersHabitatge"
+                                            :key="lloguer.id"
+                                            @click="selectLloguer(lloguer)"
+                                            class="cursor-pointer transition-colors"
+                                            :class="selectedLloguerId === lloguer.id ? 'bg-amber-50 dark:bg-amber-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700'"
+                                        >
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">{{ lloguer.nom }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ lloguer.acronim || '-' }}</td>
+                                            <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ lloguer.immoble?.adreca || '-' }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ formatCurrency(lloguer.base_euros) }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                                <span v-if="lloguer.contracte_actiu?.arrendador">{{ lloguer.contracte_actiu.arrendador.arrendadorable?.nom ?? '—' }}</span>
+                                                <span v-else class="italic text-gray-400 dark:text-gray-500">—</span>
+                                            </td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                                <span v-if="lloguer.contracte_actiu" class="text-gray-900 dark:text-gray-100">{{ lloguer.contracte_actiu.data_inici }} → {{ lloguer.contracte_actiu.data_fi ?? 'indefinit' }}</span>
+                                                <span v-else class="italic text-gray-400 dark:text-gray-500">Sense contracte</span>
+                                            </td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium" @click.stop>
+                                                <button @click="openEditLloguerModal(lloguer)" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Editar</button>
+                                                <button @click="deleteLloguer(lloguer)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
+                                            </td>
+                                        </tr>
+                                    </template>
 
-                            <!-- Grup: Locals / Altres -->
-                            <div v-if="lloguersNoHabitatge.length">
-                                <h4 class="mb-2 text-sm font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">Locals i altres</h4>
-                                <div class="overflow-x-auto rounded-lg border border-amber-200 dark:border-amber-800">
-                                    <table class="min-w-full divide-y divide-amber-100 dark:divide-amber-900">
-                                        <thead class="bg-amber-50 dark:bg-amber-900/30">
-                                            <tr>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Nom</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Acrònim</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Immoble</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Base (€/mes)</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Arrendador</th>
-                                                <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Contracte actiu</th>
-                                                <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400">Accions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-amber-100 bg-white dark:divide-amber-900 dark:bg-gray-800">
-                                            <tr
-                                                v-for="lloguer in lloguersNoHabitatge"
-                                                :key="lloguer.id"
-                                                @click="selectLloguer(lloguer)"
-                                                class="cursor-pointer transition-colors"
-                                                :class="selectedLloguerId === lloguer.id ? 'bg-amber-50 dark:bg-amber-900/20' : 'hover:bg-amber-50/50 dark:hover:bg-amber-900/10'"
-                                            >
-                                                <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">{{ lloguer.nom }}</td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ lloguer.acronim || '-' }}</td>
-                                                <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ lloguer.immoble?.adreca || '-' }}</td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ formatCurrency(lloguer.base_euros) }}</td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                                                    <span v-if="lloguer.contracte_actiu?.arrendador">{{ lloguer.contracte_actiu.arrendador.arrendadorable?.nom ?? '—' }}</span>
-                                                    <span v-else class="italic text-gray-400 dark:text-gray-500">—</span>
-                                                </td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-sm">
-                                                    <span v-if="lloguer.contracte_actiu" class="text-gray-900 dark:text-gray-100">{{ lloguer.contracte_actiu.data_inici }} → {{ lloguer.contracte_actiu.data_fi ?? 'indefinit' }}</span>
-                                                    <span v-else class="italic text-gray-400 dark:text-gray-500">Sense contracte</span>
-                                                </td>
-                                                <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium" @click.stop>
-                                                    <button @click="openEditLloguerModal(lloguer)" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Editar</button>
-                                                    <button @click="deleteLloguer(lloguer)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
+                                    <!-- Grup: Locals / Altres -->
+                                    <template v-if="lloguersNoHabitatge.length">
+                                        <tr class="bg-amber-50 dark:bg-amber-900/20">
+                                            <td colspan="7" class="px-6 py-1.5 text-xs font-semibold uppercase tracking-widest text-amber-500 dark:text-amber-400">Locals i altres</td>
+                                        </tr>
+                                        <tr
+                                            v-for="lloguer in lloguersNoHabitatge"
+                                            :key="lloguer.id"
+                                            @click="selectLloguer(lloguer)"
+                                            class="cursor-pointer transition-colors"
+                                            :class="selectedLloguerId === lloguer.id ? 'bg-amber-50 dark:bg-amber-900/20' : 'hover:bg-amber-50/50 dark:hover:bg-amber-900/10'"
+                                        >
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-amber-700 dark:text-amber-300">{{ lloguer.nom }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ lloguer.acronim || '-' }}</td>
+                                            <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ lloguer.immoble?.adreca || '-' }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ formatCurrency(lloguer.base_euros) }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                                <span v-if="lloguer.contracte_actiu?.arrendador">{{ lloguer.contracte_actiu.arrendador.arrendadorable?.nom ?? '—' }}</span>
+                                                <span v-else class="italic text-gray-400 dark:text-gray-500">—</span>
+                                            </td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm">
+                                                <span v-if="lloguer.contracte_actiu" class="text-gray-900 dark:text-gray-100">{{ lloguer.contracte_actiu.data_inici }} → {{ lloguer.contracte_actiu.data_fi ?? 'indefinit' }}</span>
+                                                <span v-else class="italic text-gray-400 dark:text-gray-500">Sense contracte</span>
+                                            </td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium" @click.stop>
+                                                <button @click="openEditLloguerModal(lloguer)" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Editar</button>
+                                                <button @click="deleteLloguer(lloguer)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
+                                            </td>
+                                        </tr>
+                                    </template>
 
+                                </tbody>
+                            </table>
                         </div>
 
                         <div v-else class="py-12 text-center">
@@ -1880,6 +1897,12 @@ const formatCurrency = (value: string | null): string => {
                                                             : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'"
                                                     >
                                                         {{ classificacioLabel(moviment) }}
+                                                    </span>
+                                                    <span
+                                                        v-if="ingresParcial(moviment)"
+                                                        class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                                                    >
+                                                        Parcial
                                                     </span>
                                                     <button @click.stop="openClassificacioModal(moviment)" class="text-xs text-amber-600 hover:text-amber-900 dark:text-amber-400">Editar</button>
                                                     <button @click.stop="deleteClassificacio(moviment)" class="text-xs text-red-500 hover:text-red-800 dark:text-red-400">✕</button>
@@ -2547,6 +2570,13 @@ const formatCurrency = (value: string | null): string => {
                                         <div class="mt-1 border-t border-gray-300 pt-1 dark:border-gray-600 flex justify-between font-medium text-gray-800 dark:text-gray-200">
                                             <span>= Net calculat</span>
                                             <span>{{ formatCurrency(ingresNetCalculat.toString()) }}</span>
+                                        </div>
+                                        <div
+                                            v-if="altresIngressosImport > 0"
+                                            class="flex justify-between text-gray-500 dark:text-gray-400"
+                                        >
+                                            <span>+ Altres lloguers classificats</span>
+                                            <span>{{ formatCurrency(altresIngressosImport.toString()) }}</span>
                                         </div>
                                         <div class="flex justify-between text-gray-500 dark:text-gray-400">
                                             <span>Import al banc</span>

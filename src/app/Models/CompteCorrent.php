@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CompteCorrent extends Model
 {
@@ -21,8 +22,9 @@ class CompteCorrent extends Model
     protected $fillable = [
         'compte_corrent',
         'nom',
-        'entitat',
+        'entitat_id',
         'ordre',
+        'tipus',
         'last_import_type',
     ];
 
@@ -42,7 +44,18 @@ class CompteCorrent extends Model
      */
     protected $appends = [
         'bank_type',
+        'entitat',
     ];
+
+    public function entitatRelacio(): BelongsTo
+    {
+        return $this->belongsTo(Entitat::class, 'entitat_id');
+    }
+
+    public function getEntitatAttribute(): ?string
+    {
+        return $this->getRelationValue('entitatRelacio')?->nom;
+    }
 
     /**
      * Get the titulars (persones) associated with this compte corrent.
@@ -93,7 +106,7 @@ class CompteCorrent extends Model
             return $this->last_import_type;
         }
 
-        $entitat = strtolower($this->entitat);
+        $entitat = strtolower($this->getRelationValue('entitatRelacio')?->nom ?? '');
 
         if (str_contains($entitat, 'enginyer')) {
             return 'caixa_enginyers';

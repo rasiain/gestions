@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class MovimentCompteCorrent extends Model
@@ -77,9 +78,9 @@ class MovimentCompteCorrent extends Model
         return $this->hasOne(MovimentLloguerDespesa::class, 'moviment_id');
     }
 
-    public function ingres(): HasOne
+    public function ingressos(): HasMany
     {
-        return $this->hasOne(MovimentLloguerIngres::class, 'moviment_id');
+        return $this->hasMany(MovimentLloguerIngres::class, 'moviment_id');
     }
 
     public function factura(): HasOne

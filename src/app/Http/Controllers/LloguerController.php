@@ -198,7 +198,7 @@ class LloguerController extends Controller
         $page    = max(1, $request->integer('page', 1));
         $perPage = 30;
 
-        $query = MovimentCompteCorrent::with(['concepte', 'categoria', 'despesa', 'ingres.linies', 'factura:id,moviment_id,numero_factura,total'])
+        $query = MovimentCompteCorrent::with(['concepte', 'categoria', 'despesa', 'ingressos.linies', 'factura:id,moviment_id,numero_factura,total'])
             ->where('compte_corrent_id', $lloguer->compte_corrent_id);
 
         if ($any = $request->integer('any')) {
@@ -208,14 +208,14 @@ class LloguerController extends Controller
         if ($request->boolean('classificats')) {
             $query->where(function ($q) use ($lloguer) {
                 $q->whereHas('despesa', fn($q2) => $q2->where('lloguer_id', $lloguer->id))
-                  ->orWhereHas('ingres', fn($q2) => $q2->where('lloguer_id', $lloguer->id))
+                  ->orWhereHas('ingressos', fn($q2) => $q2->where('lloguer_id', $lloguer->id))
                   ->orWhereHas('factura', fn($q2) => $q2->where('lloguer_id', $lloguer->id));
             });
         }
 
         if ($request->boolean('pendents')) {
             $query->whereDoesntHave('despesa')
-                  ->whereDoesntHave('ingres')
+                  ->whereDoesntHave('ingressos')
                   ->whereDoesntHave('factura', fn($q) => $q->where('lloguer_id', $lloguer->id))
                   ->where('exclou_lloguer', false);
         }
@@ -260,18 +260,19 @@ class LloguerController extends Controller
                     'iva_percentatge'         => $m->despesa->iva_percentatge,
                     'iva_import'              => $m->despesa->iva_import,
                 ] : null,
-                'ingres'          => $m->ingres ? [
-                    'id'              => $m->ingres->id,
-                    'lloguer_id'      => $m->ingres->lloguer_id,
-                    'base_lloguer'    => $m->ingres->base_lloguer,
-                    'linies'          => $m->ingres->linies->map(fn($l) => [
+                'ingressos'       => $m->ingressos->map(fn($ingres) => [
+                    'id'           => $ingres->id,
+                    'lloguer_id'   => $ingres->lloguer_id,
+                    'base_lloguer' => $ingres->base_lloguer,
+                    'notes'        => $ingres->notes,
+                    'linies'       => $ingres->linies->map(fn($l) => [
                         'id'           => $l->id,
                         'tipus'        => $l->tipus,
                         'descripcio'   => $l->descripcio,
                         'import'       => $l->import,
                         'proveidor_id' => $l->proveidor_id,
                     ])->toArray(),
-                ] : null,
+                ])->toArray(),
                 'factura'         => $m->factura ? [
                     'id'              => $m->factura->id,
                     'numero_factura'  => $m->factura->numero_factura,
@@ -317,11 +318,11 @@ class LloguerController extends Controller
 
         $moviments = MovimentCompteCorrent::where('compte_corrent_id', $lloguer->compte_corrent_id)
             ->where('exclou_lloguer', false)
-            ->with(['ingres.linies', 'despesa.proveidor', 'concepte'])
+            ->with(['ingressos.linies', 'despesa.proveidor', 'concepte'])
             ->when($any, fn($q) => $q->whereYear('data_moviment', $any))
             ->where(function ($q) use ($lloguer) {
                 $q->whereHas('despesa', fn($q2) => $q2->where('lloguer_id', $lloguer->id))
-                  ->orWhereHas('ingres', fn($q2) => $q2->where('lloguer_id', $lloguer->id));
+                  ->orWhereHas('ingressos', fn($q2) => $q2->where('lloguer_id', $lloguer->id));
             })
             ->orderBy('data_moviment')
             ->get();
@@ -336,17 +337,23 @@ class LloguerController extends Controller
         $totalDespeses = 0;
 
         foreach ($moviments as $moviment) {
-            if ($moviment->ingres && $moviment->ingres->lloguer_id === $lloguer->id) {
-                $base = (float) $moviment->ingres->base_lloguer;
+            $ingresLloguer = $moviment->ingressos->firstWhere('lloguer_id', $lloguer->id);
+            if ($ingresLloguer) {
+                $base = (float) $ingresLloguer->base_lloguer;
                 $totalBase += $base;
 
                 $concepte = $moviment->concepte?->concepte ?? $moviment->concepte_original ?? '';
                 $totalLinies = 0;
-                foreach ($moviment->ingres->linies as $linia) {
+                foreach ($ingresLloguer->linies as $linia) {
                     $totalLinies += (float) $linia->import;
                 }
                 $netCalculat = $base - $totalLinies;
                 $importBanc = (float) $moviment->import;
+
+                $altresIngressosNet = $moviment->ingressos
+                    ->filter(fn($i) => $i->lloguer_id !== $lloguer->id)
+                    ->sum(fn($i) => (float) $i->base_lloguer - $i->linies->sum(fn($l) => (float) $l->import));
+                $importBancAjustat = round($importBanc - $altresIngressosNet, 2);
 
                 $ingressos[] = [
                     'data' => $moviment->data_moviment->toDateString(),
@@ -354,12 +361,12 @@ class LloguerController extends Controller
                     'base' => $base,
                     'despeses' => $totalLinies > 0 ? -$totalLinies : null,
                     'net_calculat' => $netCalculat,
-                    'import_banc' => $importBanc,
-                    'diferencia' => round($netCalculat - $importBanc, 2),
-                    'notes' => $moviment->ingres->notes ?? '',
+                    'import_banc' => $importBancAjustat,
+                    'diferencia' => round($netCalculat - $importBancAjustat, 2),
+                    'notes' => $ingresLloguer->notes ?? '',
                 ];
 
-                foreach ($moviment->ingres->linies as $linia) {
+                foreach ($ingresLloguer->linies as $linia) {
                     $importLinia = (float) $linia->import;
                     $despeses[] = [
                         'data' => $moviment->data_moviment->toDateString(),

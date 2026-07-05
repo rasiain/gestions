@@ -39,8 +39,12 @@ class MovimentClassificacioController extends Controller
     {
         $validated = $request->validate($this->validationRules());
 
-        if ($moviment->despesa || $moviment->ingres) {
-            return response()->json(['error' => 'Aquest moviment ja està classificat.'], 422);
+        if ($moviment->despesa) {
+            return response()->json(['error' => 'Aquest moviment ja està classificat com a despesa.'], 422);
+        }
+
+        if ($validated['tipus'] === 'ingres' && $moviment->ingressos()->where('lloguer_id', $validated['lloguer_id'])->exists()) {
+            return response()->json(['error' => 'Aquest moviment ja té un ingrés classificat per a aquest lloguer.'], 422);
         }
 
         return $this->saveClassificacio($moviment, $validated);
@@ -54,9 +58,12 @@ class MovimentClassificacioController extends Controller
         try {
             if ($moviment->despesa) {
                 $moviment->despesa->delete();
-            } elseif ($moviment->ingres) {
-                $moviment->ingres->linies()->delete();
-                $moviment->ingres->delete();
+            } else {
+                $ingres = $moviment->ingressos()->where('lloguer_id', $validated['lloguer_id'])->first();
+                if ($ingres) {
+                    $ingres->linies()->delete();
+                    $ingres->delete();
+                }
             }
             DB::commit();
         } catch (\Exception $e) {
@@ -100,7 +107,7 @@ class MovimentClassificacioController extends Controller
             'iva_import'              => $request->input('iva_import'),
         ], fn($v) => $v !== null);
 
-        $moviments = MovimentCompteCorrent::with(['despesa', 'ingres'])
+        $moviments = MovimentCompteCorrent::with(['despesa', 'ingressos'])
             ->whereIn('id', $movimentIds)
             ->where('exclou_lloguer', false)
             ->get();
@@ -112,7 +119,7 @@ class MovimentClassificacioController extends Controller
         DB::beginTransaction();
         try {
             foreach ($moviments as $moviment) {
-                if ($moviment->ingres) {
+                if ($moviment->ingressos->isNotEmpty()) {
                     $skippedIngressos++;
                     continue;
                 }
@@ -148,15 +155,20 @@ class MovimentClassificacioController extends Controller
         ]);
     }
 
-    public function destroy(MovimentCompteCorrent $moviment): JsonResponse
+    public function destroy(Request $request, MovimentCompteCorrent $moviment): JsonResponse
     {
+        $lloguerId = $request->integer('lloguer_id');
+
         DB::beginTransaction();
         try {
             if ($moviment->despesa) {
                 $moviment->despesa->delete();
-            } elseif ($moviment->ingres) {
-                $moviment->ingres->linies()->delete();
-                $moviment->ingres->delete();
+            } else {
+                $ingres = $moviment->ingressos()->where('lloguer_id', $lloguerId)->first();
+                if ($ingres) {
+                    $ingres->linies()->delete();
+                    $ingres->delete();
+                }
             }
             DB::commit();
         } catch (\Exception $e) {
@@ -164,7 +176,15 @@ class MovimentClassificacioController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
 
-        return $this->movimentResponse($moviment->fresh(['despesa', 'ingres.linies']));
+        $fresh = $moviment->fresh(['despesa', 'ingressos.linies']);
+
+        // Si ja no queda cap classificació, desmarcar conciliat
+        if (!$fresh->despesa && $fresh->ingressos->isEmpty()) {
+            $fresh->update(['conciliat' => false]);
+            $fresh = $fresh->fresh(['despesa', 'ingressos.linies']);
+        }
+
+        return $this->movimentResponse($fresh);
     }
 
     private function saveClassificacio(MovimentCompteCorrent $moviment, array $data): JsonResponse
@@ -210,7 +230,7 @@ class MovimentClassificacioController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
 
-        return $this->movimentResponse($moviment->fresh(['despesa', 'ingres.linies']));
+        return $this->movimentResponse($moviment->fresh(['despesa', 'ingressos.linies']));
     }
 
     private function movimentResponse(MovimentCompteCorrent $moviment): JsonResponse
@@ -229,19 +249,19 @@ class MovimentClassificacioController extends Controller
                 'iva_percentatge'         => $moviment->despesa->iva_percentatge,
                 'iva_import'              => $moviment->despesa->iva_import,
             ] : null,
-            'ingres' => $moviment->ingres ? [
-                'id'              => $moviment->ingres->id,
-                'lloguer_id'      => $moviment->ingres->lloguer_id,
-                'base_lloguer'    => $moviment->ingres->base_lloguer,
-                'notes'           => $moviment->ingres->notes,
-                'linies'          => $moviment->ingres->linies->map(fn($l) => [
+            'ingressos' => $moviment->ingressos->map(fn($ingres) => [
+                'id'           => $ingres->id,
+                'lloguer_id'   => $ingres->lloguer_id,
+                'base_lloguer' => $ingres->base_lloguer,
+                'notes'        => $ingres->notes,
+                'linies'       => $ingres->linies->map(fn($l) => [
                     'id'           => $l->id,
                     'tipus'        => $l->tipus,
                     'descripcio'   => $l->descripcio,
                     'import'       => $l->import,
                     'proveidor_id' => $l->proveidor_id,
                 ])->toArray(),
-            ] : null,
+            ])->toArray(),
         ]);
     }
 }

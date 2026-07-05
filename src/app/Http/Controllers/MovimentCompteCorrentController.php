@@ -32,8 +32,8 @@ class MovimentCompteCorrentController extends Controller
             ->get()
             ->keyBy('compte_corrent_id');
 
-        $comptesCorrents = CompteCorrent::orderBy('ordre')
-            ->orderBy('entitat')
+        $comptesCorrents = CompteCorrent::with('entitatRelacio')
+            ->orderBy('ordre')
             ->get()
             ->map(function ($compte) use ($lloguersPerCompte) {
                 $lloguer = $lloguersPerCompte->get($compte->id);

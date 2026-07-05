@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\ArrendadorController;
+use App\Http\Controllers\EntitatController;
+use App\Http\Controllers\FonsInversioController;
 use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\CategoryImportController;
 use App\Http\Controllers\CompteCorrentController;
@@ -101,6 +103,12 @@ Route::middleware('auth')->group(function () {
         'store', 'update', 'destroy'
     ]);
 
+    // Entitats bancàries
+    Route::get('/entitats', [EntitatController::class, 'index'])->name('entitats.index');
+    Route::post('/entitats', [EntitatController::class, 'store'])->name('entitats.store');
+    Route::put('/entitats/{entitat}', [EntitatController::class, 'update'])->name('entitats.update');
+    Route::delete('/entitats/{entitat}', [EntitatController::class, 'destroy'])->name('entitats.destroy');
+
     // Comptes corrents management
     Route::resource('comptes-corrents', CompteCorrentController::class)
         ->parameters(['comptes-corrents' => 'compte_corrent'])
@@ -138,6 +146,23 @@ Route::middleware('auth')->group(function () {
     Route::get('/impostos/iva', [ImpostosIvaController::class, 'index'])->name('impostos.iva');
     Route::get('/impostos/tipus-despesa-fiscal', [TipusDespesaFiscalController::class, 'index'])->name('impostos.tipus-despesa-fiscal');
     Route::put('/impostos/tipus-despesa-fiscal', [TipusDespesaFiscalController::class, 'updateMapping'])->name('impostos.tipus-despesa-fiscal.update');
+
+    // Fons d'inversió
+    Route::resource('fons-inversio', FonsInversioController::class)->only([
+        'index', 'store', 'update', 'destroy'
+    ])->parameters(['fons-inversio' => 'fonsInversio']);
+    Route::post('/fons-inversio/contractes', [FonsInversioController::class, 'storeContracte'])->name('fons-inversio.contractes.store');
+    Route::put('/fons-inversio/contractes/{contracte}', [FonsInversioController::class, 'updateContracte'])->name('fons-inversio.contractes.update');
+    Route::delete('/fons-inversio/contractes/{contracte}', [FonsInversioController::class, 'destroyContracte'])->name('fons-inversio.contractes.destroy');
+    Route::post('/fons-inversio/aportacions', [FonsInversioController::class, 'storeAportacio'])->name('fons-inversio.aportacions.store');
+    Route::put('/fons-inversio/aportacions/{aportacio}', [FonsInversioController::class, 'updateAportacio'])->name('fons-inversio.aportacions.update');
+    Route::delete('/fons-inversio/aportacions/{aportacio}', [FonsInversioController::class, 'destroyAportacio'])->name('fons-inversio.aportacions.destroy');
+    Route::post('/fons-inversio/valors', [FonsInversioController::class, 'storeValor'])->name('fons-inversio.valors.store');
+    Route::put('/fons-inversio/valors/{valor}', [FonsInversioController::class, 'updateValor'])->name('fons-inversio.valors.update');
+    Route::delete('/fons-inversio/valors/{valor}', [FonsInversioController::class, 'destroyValor'])->name('fons-inversio.valors.destroy');
+    Route::post('/fons-inversio/despeses', [FonsInversioController::class, 'storeDespesa'])->name('fons-inversio.despeses.store');
+    Route::put('/fons-inversio/despeses/{despesa}', [FonsInversioController::class, 'updateDespesa'])->name('fons-inversio.despeses.update');
+    Route::delete('/fons-inversio/despeses/{despesa}', [FonsInversioController::class, 'destroyDespesa'])->name('fons-inversio.despeses.destroy');
 
     // Maintenance - Movement Import
     Route::get('/maintenance/movements/import', [MovementImportController::class, 'index'])->name('maintenance.movements.import');

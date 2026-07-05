@@ -36,8 +36,8 @@ class MovementImportController extends Controller
      */
     public function index(Request $request): Response
     {
-        $comptesCorrents = CompteCorrent::orderBy('ordre')
-            ->orderBy('entitat')
+        $comptesCorrents = CompteCorrent::with('entitatRelacio')
+            ->orderBy('ordre')
             ->get();
 
         return Inertia::render('Maintenance/MovementImport', [
@@ -296,7 +296,7 @@ class MovementImportController extends Controller
             }
 
             if (!$compte) {
-                $comptes = CompteCorrent::orderBy('ordre')->get()->map(fn ($c) => [
+                $comptes = CompteCorrent::with('entitatRelacio')->orderBy('ordre')->get()->map(fn ($c) => [
                     'id' => $c->id, 'nom' => $c->nom, 'iban' => $c->compte_corrent, 'entitat' => $c->entitat,
                 ]);
                 return response()->json([

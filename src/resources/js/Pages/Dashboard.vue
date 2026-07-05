@@ -69,6 +69,12 @@ import { Head, Link } from '@inertiajs/vue3';
                             >
                                 → Comptes Corrents
                             </Link>
+                            <Link
+                                :href="route('entitats.index')"
+                                class="block text-sm text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
+                            >
+                                → Entitats bancàries
+                            </Link>
                         </div>
                     </div>
 
@@ -100,11 +106,14 @@ import { Head, Link } from '@inertiajs/vue3';
                             </div>
                         </div>
 
-                        <!-- Empty state -->
-                        <div class="mt-4 ml-16 pl-4">
-                            <p class="text-sm italic text-gray-400 dark:text-gray-600">
-                                Properament disponible
-                            </p>
+                        <!-- Sub-links -->
+                        <div class="mt-4 ml-16 space-y-2 border-l-2 border-green-200 dark:border-green-800 pl-4">
+                            <Link
+                                :href="route('fons-inversio.index')"
+                                class="block text-sm text-gray-600 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 transition-colors"
+                            >
+                                → Fons d'Inversió
+                            </Link>
                         </div>
                     </div>
 

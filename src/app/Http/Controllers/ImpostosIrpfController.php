@@ -31,7 +31,7 @@ class ImpostosIrpfController extends Controller
             $moviments = MovimentCompteCorrent::where('compte_corrent_id', $lloguer->compte_corrent_id)
                 ->whereYear('data_moviment', $any)
                 ->where('exclou_lloguer', false)
-                ->with(['ingres.linies', 'despesa'])
+                ->with(['ingressos.linies', 'despesa'])
                 ->get();
 
             $totalIngressos = 0;
@@ -41,9 +41,10 @@ class ImpostosIrpfController extends Controller
             $movimentsDespeses = array_fill_keys($categories, []);
 
             foreach ($moviments as $moviment) {
-                if ($moviment->ingres && $moviment->ingres->lloguer_id === $lloguer->id) {
+                $ingresLloguer = $moviment->ingressos->firstWhere('lloguer_id', $lloguer->id);
+                if ($ingresLloguer) {
                     // L'ingrés comptable és la base_lloguer (import brut)
-                    $baseLloguer = (float) $moviment->ingres->base_lloguer;
+                    $baseLloguer = (float) $ingresLloguer->base_lloguer;
                     $totalIngressos += $baseLloguer;
                     $movimentsIngressos[] = [
                         'data' => $moviment->data_moviment->toDateString(),
@@ -51,7 +52,7 @@ class ImpostosIrpfController extends Controller
                     ];
 
                     // Les línies d'ingrés es comptabilitzen com a despeses per categoria
-                    foreach ($moviment->ingres->linies as $linia) {
+                    foreach ($ingresLloguer->linies as $linia) {
                         $cat = $linia->tipus ?? 'altres';
                         if (!isset($despesesPerCategoria[$cat])) {
                             $cat = 'altres';

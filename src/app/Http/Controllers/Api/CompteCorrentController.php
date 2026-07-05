@@ -10,8 +10,8 @@ class CompteCorrentController extends Controller
 {
     public function index(): JsonResponse
     {
-        $comptes = CompteCorrent::orderBy('ordre')
-            ->orderBy('entitat')
+        $comptes = CompteCorrent::with('entitatRelacio')
+            ->orderBy('ordre')
             ->get()
             ->map(fn (CompteCorrent $compte) => [
                 'id' => $compte->id,
