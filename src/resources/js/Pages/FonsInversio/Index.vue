@@ -800,42 +800,55 @@ const recalcFons = (fons: Fons) => {
                             </div>
                         </div>
 
-                        <div v-if="fonsList.length > 0" class="space-y-4">
-                            <div v-for="f in fonsList" :key="f.id" class="rounded-lg border-2 border-gray-300 dark:border-gray-500">
+                        <div v-if="fonsList.length > 0" class="overflow-hidden rounded-lg border-2 border-gray-300 dark:border-gray-500">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-50 dark:bg-gray-700/50">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Fons</th>
+                                        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Contractes</th>
+                                        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Valor total</th>
+                                        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Rdbt. bruta</th>
+                                        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Rdbt. neta</th>
+                                        <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Val./part.</th>
+                                        <th class="px-4 py-3"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template v-for="f in fonsList" :key="f.id">
 
-                                <!-- Capçalera fons -->
-                                <div class="flex cursor-pointer select-none items-center justify-between p-4" @click="toggleFons(f.id)">
-                                    <div class="flex min-w-0 flex-1 items-center gap-3">
-                                        <svg class="h-5 w-5 shrink-0 text-gray-400 transition-transform" :class="{ 'rotate-90': expandedFons.has(f.id) }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                                        <span class="font-semibold text-gray-900 dark:text-gray-100">{{ f.nom }}</span>
-                                        <span class="text-xs text-gray-400">{{ f.contractes.length }} contracte{{ f.contractes.length !== 1 ? 's' : '' }}</span>
-                                    </div>
-                                    <div class="mr-4 hidden shrink-0 items-center gap-8 sm:flex">
-                                        <div class="text-right">
-                                            <div class="text-xs text-gray-400">Valor total</div>
-                                            <div class="text-sm font-medium">{{ formatEur(f.resum_fons.total_valor) }}</div>
-                                        </div>
-                                        <div class="text-right">
-                                            <div class="text-xs text-gray-400">Rdbt. bruta</div>
-                                            <div class="text-sm" :class="classeRend(f.resum_fons.rendibilitat_bruta)">{{ formatEur(f.resum_fons.rendibilitat_bruta) }}</div>
-                                        </div>
-                                        <div class="text-right">
-                                            <div class="text-xs text-gray-400">Rdbt. neta</div>
-                                            <div class="text-sm" :class="classeRend(f.resum_fons.rendibilitat_neta)">{{ formatEur(f.resum_fons.rendibilitat_neta) }}</div>
-                                        </div>
-                                        <div v-if="f.resum_fons.valor_participacio !== null" class="text-right">
-                                            <div class="text-xs text-gray-400">Val./part.{{ f.resum_fons.data_valor_actual ? ` (${f.resum_fons.data_valor_actual})` : '' }}</div>
-                                            <div class="text-sm font-mono">{{ formatNum(f.resum_fons.valor_participacio, 4) }}</div>
-                                        </div>
-                                    </div>
-                                    <div class="flex shrink-0 items-center gap-3" @click.stop>
-                                        <button @click="openEditFons(f)" class="text-sm text-indigo-600 hover:text-indigo-900 dark:text-indigo-400">Editar</button>
-                                        <button @click="deleteFons(f)" class="text-sm text-red-600 hover:text-red-900 dark:text-red-400">Eliminar</button>
-                                    </div>
-                                </div>
+                                        <!-- Fila resum fons -->
+                                        <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30"
+                                            :class="expandedFons.has(f.id) ? '' : 'border-b-2 border-gray-300 dark:border-gray-500'"
+                                            @click="toggleFons(f.id)">
+                                            <td class="px-4 py-3">
+                                                <div class="flex items-center gap-2">
+                                                    <svg class="h-4 w-4 shrink-0 text-gray-400 transition-transform" :class="{ 'rotate-90': expandedFons.has(f.id) }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                                                    <span class="font-semibold text-gray-900 dark:text-gray-100">{{ f.nom }}</span>
+                                                </div>
+                                            </td>
+                                            <td class="px-4 py-3 text-right tabular-nums text-gray-500 dark:text-gray-400">{{ f.contractes.length }}</td>
+                                            <td class="px-4 py-3 text-right font-medium">{{ formatEur(f.resum_fons.total_valor) }}</td>
+                                            <td class="px-4 py-3 text-right" :class="classeRend(f.resum_fons.rendibilitat_bruta)">{{ formatEur(f.resum_fons.rendibilitat_bruta) }}</td>
+                                            <td class="px-4 py-3 text-right" :class="classeRend(f.resum_fons.rendibilitat_neta)">{{ formatEur(f.resum_fons.rendibilitat_neta) }}</td>
+                                            <td class="px-4 py-3 text-right">
+                                                <template v-if="f.resum_fons.valor_participacio !== null">
+                                                    <div class="font-mono">{{ formatNum(f.resum_fons.valor_participacio, 4) }}</div>
+                                                    <div v-if="f.resum_fons.data_valor_actual" class="text-xs text-gray-400">{{ f.resum_fons.data_valor_actual }}</div>
+                                                </template>
+                                                <span v-else class="text-gray-400">—</span>
+                                            </td>
+                                            <td class="px-4 py-3 text-right" @click.stop>
+                                                <div class="flex items-center justify-end gap-3">
+                                                    <button @click="openEditFons(f)" class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400">Editar</button>
+                                                    <button @click="deleteFons(f)" class="text-red-600 hover:text-red-900 dark:text-red-400">Eliminar</button>
+                                                </div>
+                                            </td>
+                                        </tr>
 
-                                <!-- Contingut fons -->
-                                <div v-if="expandedFons.has(f.id)" class="border-t border-gray-300 dark:border-gray-500">
+                                        <!-- Contingut expandit -->
+                                        <tr v-if="expandedFons.has(f.id)" class="border-b-2 border-gray-300 dark:border-gray-500">
+                                            <td colspan="7" class="p-0">
+                                                <div class="border-t border-gray-300 bg-gray-50 dark:border-gray-500 dark:bg-gray-900/60">
 
                                     <!-- Tabs fons -->
                                     <div class="flex items-center justify-between border-b border-gray-200 px-4 dark:border-gray-700">
@@ -1027,7 +1040,11 @@ const recalcFons = (fons: Fons) => {
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
                         </div>
 
                         <div v-else class="py-12 text-center">
