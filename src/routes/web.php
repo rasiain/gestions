@@ -3,6 +3,7 @@
 use App\Http\Controllers\ArrendadorController;
 use App\Http\Controllers\EntitatController;
 use App\Http\Controllers\FonsInversioController;
+use App\Http\Controllers\PlaPensionsController;
 use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\CategoryImportController;
 use App\Http\Controllers\CompteCorrentController;
@@ -163,6 +164,23 @@ Route::middleware('auth')->group(function () {
     Route::post('/fons-inversio/despeses', [FonsInversioController::class, 'storeDespesa'])->name('fons-inversio.despeses.store');
     Route::put('/fons-inversio/despeses/{despesa}', [FonsInversioController::class, 'updateDespesa'])->name('fons-inversio.despeses.update');
     Route::delete('/fons-inversio/despeses/{despesa}', [FonsInversioController::class, 'destroyDespesa'])->name('fons-inversio.despeses.destroy');
+
+    // Plans de pensions
+    Route::resource('plans-pensions', PlaPensionsController::class)->only([
+        'index', 'store', 'update', 'destroy'
+    ])->parameters(['plans-pensions' => 'plaPensions']);
+    Route::post('/plans-pensions/contractes', [PlaPensionsController::class, 'storeContracte'])->name('plans-pensions.contractes.store');
+    Route::put('/plans-pensions/contractes/{contracte}', [PlaPensionsController::class, 'updateContracte'])->name('plans-pensions.contractes.update');
+    Route::delete('/plans-pensions/contractes/{contracte}', [PlaPensionsController::class, 'destroyContracte'])->name('plans-pensions.contractes.destroy');
+    Route::post('/plans-pensions/aportacions', [PlaPensionsController::class, 'storeAportacio'])->name('plans-pensions.aportacions.store');
+    Route::put('/plans-pensions/aportacions/{aportacio}', [PlaPensionsController::class, 'updateAportacio'])->name('plans-pensions.aportacions.update');
+    Route::delete('/plans-pensions/aportacions/{aportacio}', [PlaPensionsController::class, 'destroyAportacio'])->name('plans-pensions.aportacions.destroy');
+    Route::post('/plans-pensions/valors', [PlaPensionsController::class, 'storeValor'])->name('plans-pensions.valors.store');
+    Route::put('/plans-pensions/valors/{valor}', [PlaPensionsController::class, 'updateValor'])->name('plans-pensions.valors.update');
+    Route::delete('/plans-pensions/valors/{valor}', [PlaPensionsController::class, 'destroyValor'])->name('plans-pensions.valors.destroy');
+    Route::post('/plans-pensions/despeses', [PlaPensionsController::class, 'storeDespesa'])->name('plans-pensions.despeses.store');
+    Route::put('/plans-pensions/despeses/{despesa}', [PlaPensionsController::class, 'updateDespesa'])->name('plans-pensions.despeses.update');
+    Route::delete('/plans-pensions/despeses/{despesa}', [PlaPensionsController::class, 'destroyDespesa'])->name('plans-pensions.despeses.destroy');
 
     // Maintenance - Movement Import
     Route::get('/maintenance/movements/import', [MovementImportController::class, 'index'])->name('maintenance.movements.import');

@@ -2,26 +2,26 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\AportacioFonsRequest;
-use App\Http\Requests\ContracteFonsRequest;
-use App\Http\Requests\DespesaFonsRequest;
-use App\Http\Requests\FonsInversioRequest;
-use App\Http\Requests\ValorFonsRequest;
-use App\Models\AportacioFons;
+use App\Http\Requests\AportacioPlaPensionsRequest;
+use App\Http\Requests\ContractePlaPensionsRequest;
+use App\Http\Requests\DespesaPlaPensionsRequest;
+use App\Http\Requests\PlaPensionsRequest;
+use App\Http\Requests\ValorPlaPensionsRequest;
+use App\Models\AportacioPlaPensions;
 use App\Models\CompteCorrent;
-use App\Models\ContracteFons;
+use App\Models\ContractePlaPensions;
 use App\Models\Entitat;
-use App\Models\DespesaFons;
-use App\Models\FonsInversio;
-use App\Models\ValorFons;
+use App\Models\DespesaPlaPensions;
+use App\Models\PlaPensions;
+use App\Models\ValorPlaPensions;
 use Illuminate\Http\JsonResponse;
 use Inertia\Inertia;
 
-class FonsInversioController extends Controller
+class PlaPensionsController extends Controller
 {
     public function index()
     {
-        $fons = FonsInversio::with([
+        $plans = PlaPensions::with([
                 'valors',
                 'contractes.compteCorrent.titulars',
                 'contractes.aportacions',
@@ -29,9 +29,9 @@ class FonsInversioController extends Controller
             ])
             ->orderBy('nom')
             ->get()
-            ->map(fn($f) => $this->formatFons($f));
+            ->map(fn($p) => $this->formatPla($p));
 
-        $comptesFonsInversio = CompteCorrent::where('tipus', 'fons_inversio')
+        $comptesPlaPensions = CompteCorrent::where('tipus', 'fons_inversio')
             ->with(['titulars', 'entitatRelacio'])
             ->orderBy('nom')
             ->get()
@@ -45,37 +45,37 @@ class FonsInversioController extends Controller
         $entitats = \App\Models\Entitat::orderBy('nom')->get(['id', 'nom']);
         $persones = \App\Models\Persona::orderBy('cognoms')->orderBy('nom')->get(['id', 'nom', 'cognoms']);
 
-        return Inertia::render('FonsInversio/Index', [
-            'fons'               => $fons,
-            'comptesFonsInversio' => $comptesFonsInversio,
+        return Inertia::render('PlaPensions/Index', [
+            'plans'              => $plans,
+            'comptesPlaPensions' => $comptesPlaPensions,
             'entitats'           => $entitats,
             'persones'           => $persones,
         ]);
     }
 
-    // === FONS ===
+    // === PLANS ===
 
-    public function store(FonsInversioRequest $request)
+    public function store(PlaPensionsRequest $request)
     {
-        FonsInversio::create($request->validated());
-        return redirect()->route('fons-inversio.index');
+        PlaPensions::create($request->validated());
+        return redirect()->route('plans-pensions.index');
     }
 
-    public function update(FonsInversioRequest $request, FonsInversio $fonsInversio)
+    public function update(PlaPensionsRequest $request, PlaPensions $plaPensions)
     {
-        $fonsInversio->update($request->validated());
-        return redirect()->route('fons-inversio.index');
+        $plaPensions->update($request->validated());
+        return redirect()->route('plans-pensions.index');
     }
 
-    public function destroy(FonsInversio $fonsInversio)
+    public function destroy(PlaPensions $plaPensions)
     {
-        $fonsInversio->delete();
-        return redirect()->route('fons-inversio.index');
+        $plaPensions->delete();
+        return redirect()->route('plans-pensions.index');
     }
 
     // === CONTRACTES ===
 
-    public function storeContracte(ContracteFonsRequest $request): JsonResponse
+    public function storeContracte(ContractePlaPensionsRequest $request): JsonResponse
     {
         $data = $request->validated();
 
@@ -98,8 +98,8 @@ class FonsInversioController extends Controller
             $compteCorrentId = $data['compte_corrent_id'];
         }
 
-        $contracte = ContracteFons::create([
-            'fons_id'          => $data['fons_id'],
+        $contracte = ContractePlaPensions::create([
+            'pla_id'           => $data['pla_id'],
             'compte_corrent_id' => $compteCorrentId,
             'data_inici'       => $data['data_inici'],
             'data_fi'          => $data['data_fi'] ?? null,
@@ -107,13 +107,13 @@ class FonsInversioController extends Controller
         ]);
 
         $contracte->load('compteCorrent.titulars', 'aportacions', 'despeses');
-        $fons = FonsInversio::with('valors')->find($data['fons_id']);
-        $valorActual = $fons->valors->sortByDesc('data')->first();
+        $pla = PlaPensions::with('valors')->find($data['pla_id']);
+        $valorActual = $pla->valors->sortByDesc('data')->first();
 
         return response()->json($this->formatContracte($contracte, $valorActual));
     }
 
-    public function updateContracte(ContracteFonsRequest $request, ContracteFons $contracte): JsonResponse
+    public function updateContracte(ContractePlaPensionsRequest $request, ContractePlaPensions $contracte): JsonResponse
     {
         $data = $request->validated();
 
@@ -127,13 +127,13 @@ class FonsInversioController extends Controller
         $contracte->compteCorrent->titulars()->sync($data['titular_ids'] ?? []);
 
         $contracte->load('compteCorrent.titulars', 'aportacions', 'despeses');
-        $fons = FonsInversio::with('valors')->find($contracte->fons_id);
-        $valorActual = $fons->valors->sortByDesc('data')->first();
+        $pla = PlaPensions::with('valors')->find($contracte->pla_id);
+        $valorActual = $pla->valors->sortByDesc('data')->first();
 
         return response()->json($this->formatContracte($contracte, $valorActual));
     }
 
-    public function destroyContracte(ContracteFons $contracte): JsonResponse
+    public function destroyContracte(ContractePlaPensions $contracte): JsonResponse
     {
         $contracte->delete();
         return response()->json(['ok' => true]);
@@ -141,19 +141,19 @@ class FonsInversioController extends Controller
 
     // === APORTACIONS ===
 
-    public function storeAportacio(AportacioFonsRequest $request): JsonResponse
+    public function storeAportacio(AportacioPlaPensionsRequest $request): JsonResponse
     {
-        $aportacio = AportacioFons::create($request->validated());
+        $aportacio = AportacioPlaPensions::create($request->validated());
         return response()->json($this->formatAportacio($aportacio));
     }
 
-    public function updateAportacio(AportacioFonsRequest $request, AportacioFons $aportacio): JsonResponse
+    public function updateAportacio(AportacioPlaPensionsRequest $request, AportacioPlaPensions $aportacio): JsonResponse
     {
         $aportacio->update($request->validated());
         return response()->json($this->formatAportacio($aportacio));
     }
 
-    public function destroyAportacio(AportacioFons $aportacio): JsonResponse
+    public function destroyAportacio(AportacioPlaPensions $aportacio): JsonResponse
     {
         $aportacio->delete();
         return response()->json(['ok' => true]);
@@ -161,22 +161,22 @@ class FonsInversioController extends Controller
 
     // === VALORS ===
 
-    public function storeValor(ValorFonsRequest $request): JsonResponse
+    public function storeValor(ValorPlaPensionsRequest $request): JsonResponse
     {
-        $valor = ValorFons::updateOrCreate(
-            ['fons_id' => $request->fons_id, 'data' => $request->data],
+        $valor = ValorPlaPensions::updateOrCreate(
+            ['pla_id' => $request->pla_id, 'data' => $request->data],
             ['valor_participacio' => $request->valor_participacio]
         );
         return response()->json($this->formatValor($valor));
     }
 
-    public function updateValor(ValorFonsRequest $request, ValorFons $valor): JsonResponse
+    public function updateValor(ValorPlaPensionsRequest $request, ValorPlaPensions $valor): JsonResponse
     {
         $valor->update($request->validated());
         return response()->json($this->formatValor($valor));
     }
 
-    public function destroyValor(ValorFons $valor): JsonResponse
+    public function destroyValor(ValorPlaPensions $valor): JsonResponse
     {
         $valor->delete();
         return response()->json(['ok' => true]);
@@ -184,19 +184,19 @@ class FonsInversioController extends Controller
 
     // === DESPESES ===
 
-    public function storeDespesa(DespesaFonsRequest $request): JsonResponse
+    public function storeDespesa(DespesaPlaPensionsRequest $request): JsonResponse
     {
-        $despesa = DespesaFons::create($request->validated());
+        $despesa = DespesaPlaPensions::create($request->validated());
         return response()->json($this->formatDespesa($despesa));
     }
 
-    public function updateDespesa(DespesaFonsRequest $request, DespesaFons $despesa): JsonResponse
+    public function updateDespesa(DespesaPlaPensionsRequest $request, DespesaPlaPensions $despesa): JsonResponse
     {
         $despesa->update($request->validated());
         return response()->json($this->formatDespesa($despesa));
     }
 
-    public function destroyDespesa(DespesaFons $despesa): JsonResponse
+    public function destroyDespesa(DespesaPlaPensions $despesa): JsonResponse
     {
         $despesa->delete();
         return response()->json(['ok' => true]);
@@ -204,23 +204,23 @@ class FonsInversioController extends Controller
 
     // === Formatadors ===
 
-    private function formatFons(FonsInversio $f): array
+    private function formatPla(PlaPensions $p): array
     {
-        $valorActual = $f->valors->sortByDesc('data')->first();
-        $contractes  = $f->contractes->map(fn($c) => $this->formatContracte($c, $valorActual))->values()->toArray();
+        $valorActual = $p->valors->sortByDesc('data')->first();
+        $contractes  = $p->contractes->map(fn($c) => $this->formatContracte($c, $valorActual))->values()->toArray();
 
-        $valors = $f->valors->sortByDesc('data')->map(fn($v) => $this->formatValor($v))->values()->toArray();
+        $valors = $p->valors->sortByDesc('data')->map(fn($v) => $this->formatValor($v))->values()->toArray();
 
         $totalValor     = array_sum(array_column($contractes, 'valor_contracte_num'));
         $totalRendBruta = array_sum(array_column(array_column($contractes, 'resum'), 'rendibilitat_bruta'));
         $totalRendNeta  = array_sum(array_column(array_column($contractes, 'resum'), 'rendibilitat_neta'));
 
         return [
-            'id'         => $f->id,
-            'nom'        => $f->nom,
+            'id'         => $p->id,
+            'nom'        => $p->nom,
             'valors'     => $valors,
             'contractes' => $contractes,
-            'resum_fons' => [
+            'resum_pla'  => [
                 'valor_participacio' => $valorActual ? (float) $valorActual->valor_participacio : null,
                 'data_valor_actual'  => $valorActual?->data->toDateString(),
                 'total_valor'        => round($totalValor, 2),
@@ -230,7 +230,7 @@ class FonsInversioController extends Controller
         ];
     }
 
-    private function formatContracte(ContracteFons $c, ?ValorFons $valorActual): array
+    private function formatContracte(ContractePlaPensions $c, ?ValorPlaPensions $valorActual): array
     {
         $valorPart      = $valorActual ? (float) $valorActual->valor_participacio : null;
         $totalPart      = $c->aportacions->sum(fn($a) => (float) $a->participacions);
@@ -255,7 +255,7 @@ class FonsInversioController extends Controller
 
         return [
             'id'                => $c->id,
-            'fons_id'           => $c->fons_id,
+            'pla_id'            => $c->pla_id,
             'compte_corrent_id' => $c->compte_corrent_id,
             'compte_nom'        => $compte?->nom ?? $compte?->compte_corrent ?? '',
             'compte_referencia' => $compte?->compte_corrent ?? '',
@@ -279,7 +279,7 @@ class FonsInversioController extends Controller
         ];
     }
 
-    private function formatAportacio(AportacioFons $a, ?float $valorPart = null): array
+    private function formatAportacio(AportacioPlaPensions $a, ?float $valorPart = null): array
     {
         $participacions = (float) $a->participacions;
         $import         = (float) $a->import;
@@ -298,17 +298,17 @@ class FonsInversioController extends Controller
         ];
     }
 
-    private function formatValor(ValorFons $v): array
+    private function formatValor(ValorPlaPensions $v): array
     {
         return [
             'id'                => $v->id,
-            'fons_id'           => $v->fons_id,
+            'pla_id'            => $v->pla_id,
             'data'              => $v->data->toDateString(),
             'valor_participacio' => (float) $v->valor_participacio,
         ];
     }
 
-    private function formatDespesa(DespesaFons $d): array
+    private function formatDespesa(DespesaPlaPensions $d): array
     {
         return [
             'id'           => $d->id,

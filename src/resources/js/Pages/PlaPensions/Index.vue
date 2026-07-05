@@ -6,7 +6,7 @@ import { Chart, registerables } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 Chart.register(...registerables);
 
-interface CompteFonsInversio {
+interface ComptePlaPensions {
     id: number;
     nom: string;
     entitat: string;
@@ -30,12 +30,12 @@ interface Aportacio {
 
 interface ValorParticipacio {
     id: number;
-    fons_id: number;
+    pla_id: number;
     data: string;
     valor_participacio: number;
 }
 
-interface DespesaFons {
+interface DespesaPla {
     id: number;
     contracte_id: number;
     data: string;
@@ -54,7 +54,7 @@ interface ResumContracte {
 
 interface Contracte {
     id: number;
-    fons_id: number;
+    pla_id: number;
     compte_corrent_id: number;
     compte_nom: string;
     compte_referencia: string;
@@ -65,12 +65,12 @@ interface Contracte {
     data_fi: string | null;
     notes: string | null;
     aportacions: Aportacio[];
-    despeses: DespesaFons[];
+    despeses: DespesaPla[];
     valor_contracte_num: number;
     resum: ResumContracte;
 }
 
-interface ResumFons {
+interface ResumPla {
     valor_participacio: number | null;
     data_valor_actual: string | null;
     total_valor: number;
@@ -78,12 +78,12 @@ interface ResumFons {
     rendibilitat_neta: number;
 }
 
-interface Fons {
+interface Pla {
     id: number;
     nom: string;
     valors: ValorParticipacio[];
     contractes: Contracte[];
-    resum_fons: ResumFons;
+    resum_pla: ResumPla;
 }
 
 interface Persona {
@@ -93,32 +93,30 @@ interface Persona {
 }
 
 interface Props {
-    fons: Fons[];
-    comptesFonsInversio: CompteFonsInversio[];
+    plans: Pla[];
+    comptesPlaPensions: ComptePlaPensions[];
     entitats: Entitat[];
     persones: Persona[];
 }
 
 const props = defineProps<Props>();
 
-const fonsList = ref<Fons[]>(JSON.parse(JSON.stringify(props.fons)));
-watch(() => props.fons, v => { fonsList.value = JSON.parse(JSON.stringify(v)); }, { deep: true });
+const plaList = ref<Pla[]>(JSON.parse(JSON.stringify(props.plans)));
+watch(() => props.plans, v => { plaList.value = JSON.parse(JSON.stringify(v)); }, { deep: true });
 
-const getFons = (id: number) => fonsList.value.find(f => f.id === id)!;
-const getContracte = (fonsId: number, contracteId: number) =>
-    getFons(fonsId).contractes.find(c => c.id === contracteId)!;
+const getPla = (id: number) => plaList.value.find(p => p.id === id)!;
 
 // --- Expand ---
-const expandedFons = ref<Set<number>>(new Set());
-const fonsTab = ref<Record<number, 'valors' | 'contractes'>>({});
+const expandedPlans = ref<Set<number>>(new Set());
+const plaTab = ref<Record<number, 'valors' | 'contractes'>>({});
 const expandedContractes = ref<Set<number>>(new Set());
 const contracteTab = ref<Record<number, 'aportacions' | 'despeses'>>({});
 
-const toggleFons = (id: number) => {
-    const s = new Set(expandedFons.value);
+const togglePla = (id: number) => {
+    const s = new Set(expandedPlans.value);
     s.has(id) ? s.delete(id) : s.add(id);
-    if (!fonsTab.value[id]) fonsTab.value[id] = 'contractes';
-    expandedFons.value = s;
+    if (!plaTab.value[id]) plaTab.value[id] = 'contractes';
+    expandedPlans.value = s;
 };
 
 const toggleContracte = (id: number) => {
@@ -146,10 +144,10 @@ const formatPct = (v: number | null) =>
 const csrf = () => document.querySelector('meta[name=csrf-token]')?.getAttribute('content') ?? '';
 
 // === GRÀFIQUES ===
-const personesAmbFI = computed(() => {
+const personesAmbPP = computed(() => {
     const ids = new Set<number>();
-    for (const f of fonsList.value)
-        for (const c of f.contractes)
+    for (const p of plaList.value)
+        for (const c of p.contractes)
             for (const id of c.titular_ids) ids.add(id);
     return props.persones.filter(p => ids.has(p.id));
 });
@@ -166,20 +164,19 @@ const APORT_COLORS  = ['#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#
 
 function getSeriesData(personaId: number | null) {
     const allDates = [...new Set(
-        fonsList.value.flatMap(f => f.valors.map(v => v.data))
+        plaList.value.flatMap(p => p.valors.map(v => v.data))
     )].sort();
 
     const aportacioByDate: Record<string, number> = {};
     const seriesTotal: { valor: number; invertit: number }[] = [];
 
-    // Gràfic 1: valor total cartera
     for (const date of allDates) {
         let totalValor = 0, totalInvertit = 0;
-        for (const fons of fonsList.value) {
-            const vp = fons.valors.find(v => v.data <= date);
+        for (const pla of plaList.value) {
+            const vp = pla.valors.find(v => v.data <= date);
             const valorPart = vp?.valor_participacio ?? null;
             let fV = 0, fI = 0, hasInv = false;
-            for (const contracte of fons.contractes) {
+            for (const contracte of pla.contractes) {
                 let share = 1;
                 if (personaId !== null) {
                     if (!contracte.titular_ids.includes(personaId)) continue;
@@ -197,9 +194,8 @@ function getSeriesData(personaId: number | null) {
         seriesTotal.push({ valor: Math.round(totalValor * 100) / 100, invertit: Math.round(totalInvertit * 100) / 100 });
     }
 
-    // Marcadors d'aportació (gràfic 1)
-    for (const fons of fonsList.value) {
-        for (const contracte of fons.contractes) {
+    for (const pla of plaList.value) {
+        for (const contracte of pla.contractes) {
             if (personaId !== null && !contracte.titular_ids.includes(personaId)) continue;
             const share = personaId !== null && contracte.titular_ids.length > 0 ? 1 / contracte.titular_ids.length : 1;
             for (const a of contracte.aportacions)
@@ -207,34 +203,31 @@ function getSeriesData(personaId: number | null) {
         }
     }
 
-    // Gràfics 2: per fons — rdbt total + per aportació
-    type FonsSeries = { fonsId: number; fonsIndex: number; fonsNom: string; startDate: string; dates: string[]; totalData: (number | null)[]; aportacions: { label: string; data: (number | null)[] }[] };
-    const fonsSeries: FonsSeries[] = [];
+    type PlaSeries = { plaId: number; plaIndex: number; plaNom: string; startDate: string; dates: string[]; totalData: (number | null)[]; aportacions: { label: string; data: (number | null)[] }[] };
+    const plaSeries: PlaSeries[] = [];
 
-    // Data final compartida: el valor més recent de qualsevol fons
     let globalEnd = '';
-    for (const fons of fonsList.value) {
-        if (fons.valors.length > 0) {
-            const latest = fons.valors[0].data; // valors ordenats desc
+    for (const pla of plaList.value) {
+        if (pla.valors.length > 0) {
+            const latest = pla.valors[0].data;
             if (!globalEnd || latest > globalEnd) globalEnd = latest;
         }
     }
 
-    // En mode global: rang compartit des de la primera aportació de qualsevol fons
     let globalStart = '';
-    let globalFonsDates: string[] = [];
+    let globalPlaDates: string[] = [];
     if (rangeMode.value === 'global') {
-        for (const fons of fonsList.value) {
-            for (const contracte of fons.contractes) {
+        for (const pla of plaList.value) {
+            for (const contracte of pla.contractes) {
                 if (personaId !== null && !contracte.titular_ids.includes(personaId)) continue;
                 for (const a of contracte.aportacions)
                     if (!globalStart || a.data < globalStart) globalStart = a.data;
             }
         }
         if (globalStart && globalEnd) {
-            globalFonsDates = [...new Set([
-                ...fonsList.value.flatMap(f => f.valors.map(v => v.data)),
-                ...fonsList.value.flatMap(f => f.contractes.flatMap(c =>
+            globalPlaDates = [...new Set([
+                ...plaList.value.flatMap(p => p.valors.map(v => v.data)),
+                ...plaList.value.flatMap(p => p.contractes.flatMap(c =>
                     (personaId === null || c.titular_ids.includes(personaId))
                         ? c.aportacions.map(a => a.data) : []
                 )),
@@ -242,38 +235,37 @@ function getSeriesData(personaId: number | null) {
         }
     }
 
-    for (const fons of fonsList.value) {
-        const fonsIndex = fonsList.value.findIndex(f => f.id === fons.id);
+    for (const pla of plaList.value) {
+        const plaIndex = plaList.value.findIndex(p => p.id === pla.id);
         const allAports: Aportacio[] = [];
         let firstAportDate = '';
-        for (const contracte of fons.contractes) {
+        for (const contracte of pla.contractes) {
             if (personaId !== null && !contracte.titular_ids.includes(personaId)) continue;
             for (const a of contracte.aportacions) {
                 allAports.push(a);
                 if (!firstAportDate || a.data < firstAportDate) firstAportDate = a.data;
             }
         }
-        if (!allAports.length || !fons.valors.length || !globalEnd) continue;
+        if (!allAports.length || !pla.valors.length || !globalEnd) continue;
 
-        // Eix X i data d'inici segons el mode triat
-        const fonsDates = rangeMode.value === 'global'
-            ? globalFonsDates
+        const plaDates = rangeMode.value === 'global'
+            ? globalPlaDates
             : [...new Set([
-                ...fons.valors.map(v => v.data),
+                ...pla.valors.map(v => v.data),
                 ...allAports.map(a => a.data),
               ])].sort().filter(d => d >= firstAportDate && d <= globalEnd);
         const startDate = rangeMode.value === 'global' ? globalStart : firstAportDate;
-        if (!fonsDates.length) continue;
+        if (!plaDates.length) continue;
 
         const totalData: (number | null)[] = [];
         const aportData = new Map<number, (number | null)[]>();
         for (const a of allAports) aportData.set(a.id, []);
 
-        for (const date of fonsDates) {
-            const vp = fons.valors.find(v => v.data <= date);
+        for (const date of plaDates) {
+            const vp = pla.valors.find(v => v.data <= date);
             const valorPart = vp?.valor_participacio ?? null;
             let fV = 0, fI = 0, hasInv = false;
-            for (const contracte of fons.contractes) {
+            for (const contracte of pla.contractes) {
                 let share = 1;
                 if (personaId !== null) {
                     if (!contracte.titular_ids.includes(personaId)) continue;
@@ -294,8 +286,8 @@ function getSeriesData(personaId: number | null) {
             }
         }
 
-        fonsSeries.push({
-            fonsId: fons.id, fonsIndex, fonsNom: fons.nom, startDate, dates: fonsDates, totalData,
+        plaSeries.push({
+            plaId: pla.id, plaIndex, plaNom: pla.nom, startDate, dates: plaDates, totalData,
             aportacions: allAports.map(a => {
                 const [ay, am, ad] = a.data.split('-');
                 return { label: `${ad}/${am}/${ay.slice(2)} · ${formatEur(a.import)}`, data: aportData.get(a.id)! };
@@ -303,22 +295,21 @@ function getSeriesData(personaId: number | null) {
         });
     }
 
-    return { allDates, seriesTotal, aportacioByDate, fonsSeries };
+    return { allDates, seriesTotal, aportacioByDate, plaSeries };
 }
 
 function buildCharts() {
     if (!showGrafiques.value) return;
     nextTick(() => {
-        const { allDates, seriesTotal, aportacioByDate, fonsSeries } = getSeriesData(selectedPersonaId.value);
+        const { allDates, seriesTotal, aportacioByDate, plaSeries } = getSeriesData(selectedPersonaId.value);
         const aportacioDates = new Set(Object.keys(aportacioByDate));
 
-        // === Gràfic 1: Valor total + capital invertit ===
         if (chartValorRef.value) {
             chartValorInstance?.destroy();
             chartValorInstance = new Chart(chartValorRef.value, {
                 type: 'line',
                 data: {
-                    labels: allDates, // ISO 'YYYY-MM-DD' → Chart.js time scale els interpreta com a dates reals
+                    labels: allDates,
                     datasets: [
                         {
                             label: 'Capital invertit',
@@ -369,17 +360,16 @@ function buildCharts() {
             } as any);
         }
 
-        // === Gràfics 2: un per fons ===
-        for (const fs of fonsSeries) {
-            const canvas = chartRendRefs[fs.fonsId];
+        for (const ps of plaSeries) {
+            const canvas = chartRendRefs[ps.plaId];
             if (!canvas) continue;
-            chartRendInstances[fs.fonsId]?.destroy();
-            chartRendInstances[fs.fonsId] = new Chart(canvas, {
+            chartRendInstances[ps.plaId]?.destroy();
+            chartRendInstances[ps.plaId] = new Chart(canvas, {
                 type: 'line',
                 data: {
-                    labels: fs.dates, // ISO 'YYYY-MM-DD' → escala temporal proporcional
+                    labels: ps.dates,
                     datasets: [
-                        ...fs.aportacions.map((ap, i) => ({
+                        ...ps.aportacions.map((ap, i) => ({
                             label: ap.label,
                             data: ap.data,
                             borderColor: APORT_COLORS[i % APORT_COLORS.length],
@@ -389,8 +379,8 @@ function buildCharts() {
                         } as any)),
                         {
                             label: 'Total',
-                            data: fs.totalData,
-                            borderColor: CHART_COLORS[fs.fonsIndex % CHART_COLORS.length], backgroundColor: 'transparent',
+                            data: ps.totalData,
+                            borderColor: CHART_COLORS[ps.plaIndex % CHART_COLORS.length], backgroundColor: 'transparent',
                             tension: 0.3, pointRadius: 0, borderWidth: 2.5, spanGaps: false,
                         } as any,
                     ],
@@ -402,7 +392,7 @@ function buildCharts() {
                         legend: { position: 'top', labels: { boxWidth: 16, padding: 10 } },
                         tooltip: { callbacks: {
                             title: (items: any) => {
-                                const d = fs.dates[items[0]?.dataIndex ?? -1];
+                                const d = ps.dates[items[0]?.dataIndex ?? -1];
                                 if (!d) return '';
                                 const [y, m, day] = d.split('-');
                                 return `${day}/${m}/${y}`;
@@ -413,7 +403,7 @@ function buildCharts() {
                     scales: {
                         x: {
                             type: 'time',
-                            min: fs.startDate, // força l'eix a comenzar des de la primera aportació
+                            min: ps.startDate,
                             time: { tooltipFormat: 'dd/MM/yyyy', displayFormats: { day: 'dd/MM/yy', month: 'MM/yy', year: 'yyyy' } },
                             ticks: { maxTicksLimit: 12, maxRotation: 0 },
                         },
@@ -426,37 +416,37 @@ function buildCharts() {
 }
 
 watch([showGrafiques, selectedPersonaId, rangeMode], buildCharts);
-watch(fonsList, () => { if (showGrafiques.value) buildCharts(); }, { deep: true });
+watch(plaList, () => { if (showGrafiques.value) buildCharts(); }, { deep: true });
 onUnmounted(() => {
     chartValorInstance?.destroy();
     Object.values(chartRendInstances).forEach(c => c?.destroy());
 });
 
-// === FONS CRUD (Inertia) ===
-const showFonsModal = ref(false);
-const isEditingFons = ref(false);
-const editingFonsId = ref<number | null>(null);
-const fonsForm = useForm({ nom: '' });
+// === PLANS CRUD (Inertia) ===
+const showPlaModal = ref(false);
+const isEditingPla = ref(false);
+const editingPlaId = ref<number | null>(null);
+const plaForm = useForm({ nom: '' });
 
-const openCreateFons = () => {
-    isEditingFons.value = false; editingFonsId.value = null;
-    fonsForm.reset(); showFonsModal.value = true;
+const openCreatePla = () => {
+    isEditingPla.value = false; editingPlaId.value = null;
+    plaForm.reset(); showPlaModal.value = true;
 };
-const openEditFons = (f: Fons) => {
-    isEditingFons.value = true; editingFonsId.value = f.id;
-    fonsForm.nom = f.nom; showFonsModal.value = true;
+const openEditPla = (p: Pla) => {
+    isEditingPla.value = true; editingPlaId.value = p.id;
+    plaForm.nom = p.nom; showPlaModal.value = true;
 };
-const closeFonsModal = () => { showFonsModal.value = false; };
-const submitFons = () => {
-    if (isEditingFons.value && editingFonsId.value) {
-        fonsForm.put(route('fons-inversio.update', editingFonsId.value), { onSuccess: closeFonsModal });
+const closePlaModal = () => { showPlaModal.value = false; };
+const submitPla = () => {
+    if (isEditingPla.value && editingPlaId.value) {
+        plaForm.put(route('plans-pensions.update', editingPlaId.value), { onSuccess: closePlaModal });
     } else {
-        fonsForm.post(route('fons-inversio.store'), { onSuccess: closeFonsModal });
+        plaForm.post(route('plans-pensions.store'), { onSuccess: closePlaModal });
     }
 };
-const deleteFons = (f: Fons) => {
-    if (confirm(`Estàs segur que vols eliminar el fons "${f.nom}"?`))
-        router.delete(route('fons-inversio.destroy', f.id));
+const deletePla = (p: Pla) => {
+    if (confirm(`Estàs segur que vols eliminar el pla "${p.nom}"?`))
+        router.delete(route('plans-pensions.destroy', p.id));
 };
 
 // === CONTRACTES CRUD (fetch) ===
@@ -468,23 +458,23 @@ const contracteError = ref<string | null>(null);
 const contracteSaving = ref(false);
 const compteNou = ref(false);
 const contracteForm = ref({
-    fons_id: 0, compte_corrent_id: '', compte_nou: false,
+    pla_id: 0, compte_corrent_id: '', compte_nou: false,
     compte_referencia: '', compte_nom: '', compte_entitat_id: null as number | null, compte_entitat_nova_nom: '',
     _compte_display: '',
     titular_ids: [] as number[],
     data_inici: '', data_fi: '', notes: '',
 });
 
-const openCreateContracte = (fonsId: number) => {
+const openCreateContracte = (plaId: number) => {
     isEditingContracte.value = false; editingContracteId.value = null; compteNou.value = true; entitatNova.value = false;
-    contracteForm.value = { fons_id: fonsId, compte_corrent_id: '', compte_nou: true, compte_referencia: '', compte_nom: '', compte_entitat_id: null, compte_entitat_nova_nom: '', _compte_display: '', titular_ids: [], data_inici: new Date().toISOString().slice(0, 10), data_fi: '', notes: '' };
+    contracteForm.value = { pla_id: plaId, compte_corrent_id: '', compte_nou: true, compte_referencia: '', compte_nom: '', compte_entitat_id: null, compte_entitat_nova_nom: '', _compte_display: '', titular_ids: [], data_inici: new Date().toISOString().slice(0, 10), data_fi: '', notes: '' };
     contracteError.value = null; showContracteModal.value = true;
 };
 const openEditContracte = (c: Contracte) => {
     isEditingContracte.value = true; editingContracteId.value = c.id; compteNou.value = false; entitatNova.value = false;
     const suffix = c.compte_referencia ? ` ···· ${c.compte_referencia.slice(-4)}` : '';
     const display = [c.compte_nom + suffix, c.compte_entitat].filter(Boolean).join(' — ');
-    contracteForm.value = { fons_id: c.fons_id, compte_corrent_id: String(c.compte_corrent_id), compte_nou: false, compte_referencia: '', compte_nom: c.compte_nom, compte_entitat_id: null, compte_entitat_nova_nom: '', _compte_display: display, titular_ids: [...(c.titular_ids ?? [])], data_inici: c.data_inici, data_fi: c.data_fi ?? '', notes: c.notes ?? '' };
+    contracteForm.value = { pla_id: c.pla_id, compte_corrent_id: String(c.compte_corrent_id), compte_nou: false, compte_referencia: '', compte_nom: c.compte_nom, compte_entitat_id: null, compte_entitat_nova_nom: '', _compte_display: display, titular_ids: [...(c.titular_ids ?? [])], data_inici: c.data_inici, data_fi: c.data_fi ?? '', notes: c.notes ?? '' };
     contracteError.value = null; showContracteModal.value = true;
 };
 const closeContracteModal = () => { showContracteModal.value = false; };
@@ -493,8 +483,8 @@ const submitContracte = async () => {
     contracteSaving.value = true; contracteError.value = null;
     try {
         const url = isEditingContracte.value
-            ? `/fons-inversio/contractes/${editingContracteId.value}`
-            : '/fons-inversio/contractes';
+            ? `/plans-pensions/contractes/${editingContracteId.value}`
+            : '/plans-pensions/contractes';
         const payload = { ...contracteForm.value, compte_nou: compteNou.value,
             compte_corrent_id: contracteForm.value.compte_corrent_id ? parseInt(contracteForm.value.compte_corrent_id) : null,
             data_fi: contracteForm.value.data_fi || null };
@@ -509,24 +499,24 @@ const submitContracte = async () => {
             return;
         }
         const saved: Contracte = await res.json();
-        const fons = getFons(saved.fons_id);
+        const pla = getPla(saved.pla_id);
         if (isEditingContracte.value) {
-            const idx = fons.contractes.findIndex(c => c.id === saved.id);
-            if (idx !== -1) fons.contractes[idx] = saved;
+            const idx = pla.contractes.findIndex(c => c.id === saved.id);
+            if (idx !== -1) pla.contractes[idx] = saved;
         } else {
-            fons.contractes.push(saved);
+            pla.contractes.push(saved);
         }
-        recalcFons(fons);
+        recalcPla(pla);
         closeContracteModal();
     } finally { contracteSaving.value = false; }
 };
 
 const deleteContracte = async (c: Contracte) => {
     if (!confirm('Estàs segur que vols eliminar aquest contracte?')) return;
-    await fetch(`/fons-inversio/contractes/${c.id}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': csrf() } });
-    const fons = getFons(c.fons_id);
-    fons.contractes = fons.contractes.filter(x => x.id !== c.id);
-    recalcFons(fons);
+    await fetch(`/plans-pensions/contractes/${c.id}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': csrf() } });
+    const pla = getPla(c.pla_id);
+    pla.contractes = pla.contractes.filter(x => x.id !== c.id);
+    recalcPla(pla);
 };
 
 // === VALORS CRUD (fetch) ===
@@ -535,16 +525,16 @@ const isEditingValor = ref(false);
 const editingValorId = ref<number | null>(null);
 const valorError = ref<string | null>(null);
 const valorSaving = ref(false);
-const valorForm = ref({ fons_id: 0, data: '', valor_participacio: '' });
+const valorForm = ref({ pla_id: 0, data: '', valor_participacio: '' });
 
-const openCreateValor = (fonsId: number) => {
+const openCreateValor = (plaId: number) => {
     isEditingValor.value = false; editingValorId.value = null;
-    valorForm.value = { fons_id: fonsId, data: new Date().toISOString().slice(0, 10), valor_participacio: '' };
+    valorForm.value = { pla_id: plaId, data: new Date().toISOString().slice(0, 10), valor_participacio: '' };
     valorError.value = null; showValorModal.value = true;
 };
 const openEditValor = (v: ValorParticipacio) => {
     isEditingValor.value = true; editingValorId.value = v.id;
-    valorForm.value = { fons_id: v.fons_id, data: v.data, valor_participacio: String(v.valor_participacio) };
+    valorForm.value = { pla_id: v.pla_id, data: v.data, valor_participacio: String(v.valor_participacio) };
     valorError.value = null; showValorModal.value = true;
 };
 const closeValorModal = () => { showValorModal.value = false; };
@@ -552,7 +542,7 @@ const closeValorModal = () => { showValorModal.value = false; };
 const submitValor = async () => {
     valorSaving.value = true; valorError.value = null;
     try {
-        const url = isEditingValor.value ? `/fons-inversio/valors/${editingValorId.value}` : '/fons-inversio/valors';
+        const url = isEditingValor.value ? `/plans-pensions/valors/${editingValorId.value}` : '/plans-pensions/valors';
         const res = await fetch(url, {
             method: isEditingValor.value ? 'PUT' : 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
@@ -564,21 +554,21 @@ const submitValor = async () => {
             return;
         }
         const saved: ValorParticipacio = await res.json();
-        const fons = getFons(saved.fons_id);
-        const idx = fons.valors.findIndex(v => v.id === saved.id);
-        if (idx !== -1) fons.valors[idx] = saved; else fons.valors.unshift(saved);
-        fons.valors.sort((a, b) => b.data.localeCompare(a.data));
-        recalcFons(fons);
+        const pla = getPla(saved.pla_id);
+        const idx = pla.valors.findIndex(v => v.id === saved.id);
+        if (idx !== -1) pla.valors[idx] = saved; else pla.valors.unshift(saved);
+        pla.valors.sort((a, b) => b.data.localeCompare(a.data));
+        recalcPla(pla);
         closeValorModal();
     } finally { valorSaving.value = false; }
 };
 
 const deleteValor = async (v: ValorParticipacio) => {
     if (!confirm('Estàs segur que vols eliminar aquest valor?')) return;
-    await fetch(`/fons-inversio/valors/${v.id}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': csrf() } });
-    const fons = getFons(v.fons_id);
-    fons.valors = fons.valors.filter(x => x.id !== v.id);
-    recalcFons(fons);
+    await fetch(`/plans-pensions/valors/${v.id}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': csrf() } });
+    const pla = getPla(v.pla_id);
+    pla.valors = pla.valors.filter(x => x.id !== v.id);
+    recalcPla(pla);
 };
 
 // === APORTACIONS CRUD (fetch) ===
@@ -588,17 +578,17 @@ const editingAportacioId = ref<number | null>(null);
 const aportacioError = ref<string | null>(null);
 const aportacioSaving = ref(false);
 const aportacioForm = ref({ contracte_id: 0, data: '', import: '', participacions: '', notes: '' });
-const aportacioFonsId = ref(0);
+const aportacioPlaId = ref(0);
 
 const openCreateAportacio = (contracte: Contracte) => {
     isEditingAportacio.value = false; editingAportacioId.value = null;
-    aportacioFonsId.value = contracte.fons_id;
+    aportacioPlaId.value = contracte.pla_id;
     aportacioForm.value = { contracte_id: contracte.id, data: new Date().toISOString().slice(0, 10), import: '', participacions: '', notes: '' };
     aportacioError.value = null; showAportacioModal.value = true;
 };
-const openEditAportacio = (a: Aportacio, fonsId: number) => {
+const openEditAportacio = (a: Aportacio, plaId: number) => {
     isEditingAportacio.value = true; editingAportacioId.value = a.id;
-    aportacioFonsId.value = fonsId;
+    aportacioPlaId.value = plaId;
     aportacioForm.value = { contracte_id: a.contracte_id, data: a.data, import: String(a.import), participacions: String(a.participacions), notes: a.notes ?? '' };
     aportacioError.value = null; showAportacioModal.value = true;
 };
@@ -607,7 +597,7 @@ const closeAportacioModal = () => { showAportacioModal.value = false; };
 const submitAportacio = async () => {
     aportacioSaving.value = true; aportacioError.value = null;
     try {
-        const url = isEditingAportacio.value ? `/fons-inversio/aportacions/${editingAportacioId.value}` : '/fons-inversio/aportacions';
+        const url = isEditingAportacio.value ? `/plans-pensions/aportacions/${editingAportacioId.value}` : '/plans-pensions/aportacions';
         const res = await fetch(url, {
             method: isEditingAportacio.value ? 'PUT' : 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
@@ -619,8 +609,8 @@ const submitAportacio = async () => {
             return;
         }
         const saved: Aportacio = await res.json();
-        const fons = getFons(aportacioFonsId.value);
-        const contracte = fons.contractes.find(c => c.id === saved.contracte_id)!;
+        const pla = getPla(aportacioPlaId.value);
+        const contracte = pla.contractes.find(c => c.id === saved.contracte_id)!;
         if (isEditingAportacio.value) {
             const idx = contracte.aportacions.findIndex(a => a.id === saved.id);
             if (idx !== -1) contracte.aportacions[idx] = saved;
@@ -628,18 +618,18 @@ const submitAportacio = async () => {
             contracte.aportacions.push(saved);
             contracte.aportacions.sort((a, b) => a.data.localeCompare(b.data));
         }
-        recalcFons(fons);
+        recalcPla(pla);
         closeAportacioModal();
     } finally { aportacioSaving.value = false; }
 };
 
-const deleteAportacio = async (a: Aportacio, fonsId: number) => {
+const deleteAportacio = async (a: Aportacio, plaId: number) => {
     if (!confirm('Estàs segur que vols eliminar aquesta aportació?')) return;
-    await fetch(`/fons-inversio/aportacions/${a.id}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': csrf() } });
-    const fons = getFons(fonsId);
-    const contracte = fons.contractes.find(c => c.id === a.contracte_id)!;
+    await fetch(`/plans-pensions/aportacions/${a.id}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': csrf() } });
+    const pla = getPla(plaId);
+    const contracte = pla.contractes.find(c => c.id === a.contracte_id)!;
     contracte.aportacions = contracte.aportacions.filter(x => x.id !== a.id);
-    recalcFons(fons);
+    recalcPla(pla);
 };
 
 // === DESPESES CRUD (fetch) ===
@@ -649,17 +639,17 @@ const editingDespesaId = ref<number | null>(null);
 const despesaError = ref<string | null>(null);
 const despesaSaving = ref(false);
 const despesaForm = ref({ contracte_id: 0, data: '', import: '', concepte: '' });
-const despesaFonsId = ref(0);
+const despesaPlaId = ref(0);
 
 const openCreateDespesa = (contracte: Contracte) => {
     isEditingDespesa.value = false; editingDespesaId.value = null;
-    despesaFonsId.value = contracte.fons_id;
+    despesaPlaId.value = contracte.pla_id;
     despesaForm.value = { contracte_id: contracte.id, data: new Date().toISOString().slice(0, 10), import: '', concepte: '' };
     despesaError.value = null; showDespesaModal.value = true;
 };
-const openEditDespesa = (d: DespesaFons, fonsId: number) => {
+const openEditDespesa = (d: DespesaPla, plaId: number) => {
     isEditingDespesa.value = true; editingDespesaId.value = d.id;
-    despesaFonsId.value = fonsId;
+    despesaPlaId.value = plaId;
     despesaForm.value = { contracte_id: d.contracte_id, data: d.data, import: String(d.import), concepte: d.concepte ?? '' };
     despesaError.value = null; showDespesaModal.value = true;
 };
@@ -668,7 +658,7 @@ const closeDespesaModal = () => { showDespesaModal.value = false; };
 const submitDespesa = async () => {
     despesaSaving.value = true; despesaError.value = null;
     try {
-        const url = isEditingDespesa.value ? `/fons-inversio/despeses/${editingDespesaId.value}` : '/fons-inversio/despeses';
+        const url = isEditingDespesa.value ? `/plans-pensions/despeses/${editingDespesaId.value}` : '/plans-pensions/despeses';
         const res = await fetch(url, {
             method: isEditingDespesa.value ? 'PUT' : 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
@@ -679,9 +669,9 @@ const submitDespesa = async () => {
             despesaError.value = Object.values(err.errors ?? {}).flat().join(' ') || 'Error desconegut.';
             return;
         }
-        const saved: DespesaFons = await res.json();
-        const fons = getFons(despesaFonsId.value);
-        const contracte = fons.contractes.find(c => c.id === saved.contracte_id)!;
+        const saved: DespesaPla = await res.json();
+        const pla = getPla(despesaPlaId.value);
+        const contracte = pla.contractes.find(c => c.id === saved.contracte_id)!;
         if (isEditingDespesa.value) {
             const idx = contracte.despeses.findIndex(d => d.id === saved.id);
             if (idx !== -1) contracte.despeses[idx] = saved;
@@ -689,26 +679,26 @@ const submitDespesa = async () => {
             contracte.despeses.unshift(saved);
             contracte.despeses.sort((a, b) => b.data.localeCompare(a.data));
         }
-        recalcFons(fons);
+        recalcPla(pla);
         closeDespesaModal();
     } finally { despesaSaving.value = false; }
 };
 
-const deleteDespesa = async (d: DespesaFons, fonsId: number) => {
+const deleteDespesa = async (d: DespesaPla, plaId: number) => {
     if (!confirm('Estàs segur que vols eliminar aquesta despesa?')) return;
-    await fetch(`/fons-inversio/despeses/${d.id}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': csrf() } });
-    const fons = getFons(fonsId);
-    const contracte = fons.contractes.find(c => c.id === d.contracte_id)!;
+    await fetch(`/plans-pensions/despeses/${d.id}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': csrf() } });
+    const pla = getPla(plaId);
+    const contracte = pla.contractes.find(c => c.id === d.contracte_id)!;
     contracte.despeses = contracte.despeses.filter(x => x.id !== d.id);
-    recalcFons(fons);
+    recalcPla(pla);
 };
 
 // === Recàlcul local ===
-const recalcFons = (fons: Fons) => {
-    const valorActual = fons.valors.length > 0 ? fons.valors[0] : null;
+const recalcPla = (pla: Pla) => {
+    const valorActual = pla.valors.length > 0 ? pla.valors[0] : null;
     const valorPart = valorActual ? valorActual.valor_participacio : null;
 
-    fons.contractes.forEach(c => {
+    pla.contractes.forEach(c => {
         const totalPart = c.aportacions.reduce((s, a) => s + a.participacions, 0);
         const totalInvertit = c.aportacions.reduce((s, a) => s + a.import, 0);
         const totalDespeses = c.despeses.reduce((s, d) => s + d.import, 0);
@@ -722,18 +712,18 @@ const recalcFons = (fons: Fons) => {
         });
     });
 
-    const totalValor = fons.contractes.reduce((s, c) => s + c.valor_contracte_num, 0);
-    const totalRendB = fons.contractes.reduce((s, c) => s + (c.resum.rendibilitat_bruta ?? 0), 0);
-    const totalRendN = fons.contractes.reduce((s, c) => s + (c.resum.rendibilitat_neta ?? 0), 0);
-    fons.resum_fons = { valor_participacio: valorPart, data_valor_actual: valorActual?.data ?? null, total_valor: Math.round(totalValor * 100) / 100, rendibilitat_bruta: Math.round(totalRendB * 100) / 100, rendibilitat_neta: Math.round(totalRendN * 100) / 100 };
+    const totalValor = pla.contractes.reduce((s, c) => s + c.valor_contracte_num, 0);
+    const totalRendB = pla.contractes.reduce((s, c) => s + (c.resum.rendibilitat_bruta ?? 0), 0);
+    const totalRendN = pla.contractes.reduce((s, c) => s + (c.resum.rendibilitat_neta ?? 0), 0);
+    pla.resum_pla = { valor_participacio: valorPart, data_valor_actual: valorActual?.data ?? null, total_valor: Math.round(totalValor * 100) / 100, rendibilitat_bruta: Math.round(totalRendB * 100) / 100, rendibilitat_neta: Math.round(totalRendN * 100) / 100 };
 };
 </script>
 
 <template>
-    <Head title="Fons d'Inversió" />
+    <Head title="Plans de Pensions" />
     <AuthenticatedLayout>
         <template #header>
-            <h2 class="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200">Fons d'Inversió</h2>
+            <h2 class="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200">Plans de Pensions</h2>
         </template>
 
         <div class="py-12">
@@ -743,12 +733,12 @@ const recalcFons = (fons: Fons) => {
 
                         <div class="mb-6 flex items-center justify-between">
                             <div>
-                                <h3 class="text-lg font-medium">Fons d'Inversió</h3>
-                                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">Catàleg de fons amb els seus contractes, aportacions i rendibilitat</p>
+                                <h3 class="text-lg font-medium">Plans de Pensions</h3>
+                                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">Catàleg de plans amb els seus contractes, aportacions i rendibilitat</p>
                             </div>
-                            <button @click="openCreateFons" class="inline-flex items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700">
+                            <button @click="openCreatePla" class="inline-flex items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700">
                                 <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-                                Nou Fons
+                                Nou Pla
                             </button>
                         </div>
 
@@ -760,18 +750,16 @@ const recalcFons = (fons: Fons) => {
                                     <span class="font-medium text-gray-900 dark:text-gray-100">Evolució de la cartera</span>
                                 </div>
                                 <div v-if="showGrafiques" class="flex items-center gap-3" @click.stop>
-                                    <!-- Selector de titular -->
                                     <label class="text-sm text-gray-500 dark:text-gray-400">Titular:</label>
                                     <select v-model="selectedPersonaId" style="color-scheme: auto" class="rounded-md border-gray-300 bg-white text-sm text-gray-900 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
                                         <option :value="null">Tots</option>
-                                        <option v-for="p in personesAmbFI" :key="p.id" :value="p.id">{{ p.nom }} {{ p.cognoms }}</option>
+                                        <option v-for="p in personesAmbPP" :key="p.id" :value="p.id">{{ p.nom }} {{ p.cognoms }}</option>
                                     </select>
-                                    <!-- Selector de rang de dates -->
                                     <div class="flex overflow-hidden rounded-md border border-gray-300 text-xs dark:border-gray-600">
                                         <button @click="rangeMode = 'individual'"
                                             class="px-3 py-1.5 transition-colors"
                                             :class="rangeMode === 'individual' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'">
-                                            Per fons
+                                            Per pla
                                         </button>
                                         <button @click="rangeMode = 'global'"
                                             class="border-l border-gray-300 px-3 py-1.5 transition-colors dark:border-gray-600"
@@ -789,22 +777,22 @@ const recalcFons = (fons: Fons) => {
                                         <canvas ref="chartValorRef"></canvas>
                                     </div>
                                 </div>
-                                <div v-for="f in fonsList" :key="f.id" class="border-t border-gray-100 pt-4 dark:border-gray-700">
+                                <div v-for="p in plaList" :key="p.id" class="border-t border-gray-100 pt-4 dark:border-gray-700">
                                     <h4 class="mb-3 text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Rendibilitat per aportació — <span class="font-semibold">{{ f.nom }}</span>
+                                        Rendibilitat per aportació — <span class="font-semibold">{{ p.nom }}</span>
                                     </h4>
                                     <div class="relative rounded-md bg-white" style="height:280px">
-                                        <canvas :ref="el => { chartRendRefs[f.id] = el as HTMLCanvasElement | null }"></canvas>
+                                        <canvas :ref="el => { chartRendRefs[p.id] = el as HTMLCanvasElement | null }"></canvas>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div v-if="fonsList.length > 0" class="overflow-hidden rounded-lg border-2 border-gray-300 dark:border-gray-500">
+                        <div v-if="plaList.length > 0" class="overflow-hidden rounded-lg border-2 border-gray-300 dark:border-gray-500">
                             <table class="w-full text-sm">
                                 <thead class="bg-gray-50 dark:bg-gray-700/50">
                                     <tr>
-                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Fons</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Pla</th>
                                         <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Contractes</th>
                                         <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Valor total</th>
                                         <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Rdbt. bruta</th>
@@ -814,64 +802,64 @@ const recalcFons = (fons: Fons) => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <template v-for="f in fonsList" :key="f.id">
+                                    <template v-for="p in plaList" :key="p.id">
 
-                                        <!-- Fila resum fons -->
+                                        <!-- Fila resum pla -->
                                         <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30"
-                                            :class="expandedFons.has(f.id) ? '' : 'border-b-2 border-gray-300 dark:border-gray-500'"
-                                            @click="toggleFons(f.id)">
+                                            :class="expandedPlans.has(p.id) ? '' : 'border-b-2 border-gray-300 dark:border-gray-500'"
+                                            @click="togglePla(p.id)">
                                             <td class="px-4 py-3">
                                                 <div class="flex items-center gap-2">
-                                                    <svg class="h-4 w-4 shrink-0 text-gray-400 transition-transform" :class="{ 'rotate-90': expandedFons.has(f.id) }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                                                    <span class="font-semibold text-gray-900 dark:text-gray-100">{{ f.nom }}</span>
+                                                    <svg class="h-4 w-4 shrink-0 text-gray-400 transition-transform" :class="{ 'rotate-90': expandedPlans.has(p.id) }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                                                    <span class="font-semibold text-gray-900 dark:text-gray-100">{{ p.nom }}</span>
                                                 </div>
                                             </td>
-                                            <td class="px-4 py-3 text-right tabular-nums text-gray-500 dark:text-gray-400">{{ f.contractes.length }}</td>
-                                            <td class="px-4 py-3 text-right font-medium">{{ formatEur(f.resum_fons.total_valor) }}</td>
-                                            <td class="px-4 py-3 text-right" :class="classeRend(f.resum_fons.rendibilitat_bruta)">{{ formatEur(f.resum_fons.rendibilitat_bruta) }}</td>
-                                            <td class="px-4 py-3 text-right" :class="classeRend(f.resum_fons.rendibilitat_neta)">{{ formatEur(f.resum_fons.rendibilitat_neta) }}</td>
+                                            <td class="px-4 py-3 text-right tabular-nums text-gray-500 dark:text-gray-400">{{ p.contractes.length }}</td>
+                                            <td class="px-4 py-3 text-right font-medium">{{ formatEur(p.resum_pla.total_valor) }}</td>
+                                            <td class="px-4 py-3 text-right" :class="classeRend(p.resum_pla.rendibilitat_bruta)">{{ formatEur(p.resum_pla.rendibilitat_bruta) }}</td>
+                                            <td class="px-4 py-3 text-right" :class="classeRend(p.resum_pla.rendibilitat_neta)">{{ formatEur(p.resum_pla.rendibilitat_neta) }}</td>
                                             <td class="px-4 py-3 text-right">
-                                                <template v-if="f.resum_fons.valor_participacio !== null">
-                                                    <div class="font-mono">{{ formatNum(f.resum_fons.valor_participacio, 4) }}</div>
-                                                    <div v-if="f.resum_fons.data_valor_actual" class="text-xs text-gray-400">{{ f.resum_fons.data_valor_actual }}</div>
+                                                <template v-if="p.resum_pla.valor_participacio !== null">
+                                                    <div class="font-mono">{{ formatNum(p.resum_pla.valor_participacio, 4) }}</div>
+                                                    <div v-if="p.resum_pla.data_valor_actual" class="text-xs text-gray-400">{{ p.resum_pla.data_valor_actual }}</div>
                                                 </template>
                                                 <span v-else class="text-gray-400">—</span>
                                             </td>
                                             <td class="px-4 py-3 text-right" @click.stop>
                                                 <div class="flex items-center justify-end gap-3">
-                                                    <button @click="openEditFons(f)" class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400">Editar</button>
-                                                    <button @click="deleteFons(f)" class="text-red-600 hover:text-red-900 dark:text-red-400">Eliminar</button>
+                                                    <button @click="openEditPla(p)" class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400">Editar</button>
+                                                    <button @click="deletePla(p)" class="text-red-600 hover:text-red-900 dark:text-red-400">Eliminar</button>
                                                 </div>
                                             </td>
                                         </tr>
 
                                         <!-- Contingut expandit -->
-                                        <tr v-if="expandedFons.has(f.id)" class="border-b-2 border-gray-300 dark:border-gray-500">
+                                        <tr v-if="expandedPlans.has(p.id)" class="border-b-2 border-gray-300 dark:border-gray-500">
                                             <td colspan="7" class="p-0">
                                                 <div class="border-t border-gray-300 bg-gray-50 dark:border-gray-500 dark:bg-gray-900/60">
 
-                                    <!-- Tabs fons -->
+                                    <!-- Tabs pla -->
                                     <div class="flex items-center justify-between border-b border-gray-200 px-4 dark:border-gray-700">
                                         <nav class="-mb-px flex space-x-6">
                                             <button v-for="tab in (['contractes', 'valors'] as const)" :key="tab"
-                                                @click="fonsTab[f.id] = tab"
+                                                @click="plaTab[p.id] = tab"
                                                 class="border-b-2 py-3 text-sm font-medium transition-colors"
-                                                :class="fonsTab[f.id] === tab ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'"
+                                                :class="plaTab[p.id] === tab ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'"
                                             >
                                                 {{ tab === 'contractes' ? 'Contractes' : 'Valors participació' }}
-                                                <span class="ml-1.5 rounded-full px-1.5 py-0.5 text-xs" :class="fonsTab[f.id] === tab ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'">
-                                                    {{ tab === 'contractes' ? f.contractes.length : f.valors.length }}
+                                                <span class="ml-1.5 rounded-full px-1.5 py-0.5 text-xs" :class="plaTab[p.id] === tab ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'">
+                                                    {{ tab === 'contractes' ? p.contractes.length : p.valors.length }}
                                                 </span>
                                             </button>
                                         </nav>
-                                        <button v-if="fonsTab[f.id] === 'contractes'" @click.stop="openCreateContracte(f.id)" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700">+ Nou contracte</button>
-                                        <button v-if="fonsTab[f.id] === 'valors'" @click.stop="openCreateValor(f.id)" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700">+ Nou valor</button>
+                                        <button v-if="plaTab[p.id] === 'contractes'" @click.stop="openCreateContracte(p.id)" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700">+ Nou contracte</button>
+                                        <button v-if="plaTab[p.id] === 'valors'" @click.stop="openCreateValor(p.id)" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700">+ Nou valor</button>
                                     </div>
 
                                     <!-- Tab: Valors -->
-                                    <div v-if="fonsTab[f.id] === 'valors'" class="p-4">
+                                    <div v-if="plaTab[p.id] === 'valors'" class="p-4">
                                         <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">Si ja existeix un valor per la mateixa data, s'actualitzarà automàticament.</p>
-                                        <div v-if="f.valors.length > 0" class="overflow-x-auto rounded-lg border border-gray-300 dark:border-gray-500">
+                                        <div v-if="p.valors.length > 0" class="overflow-x-auto rounded-lg border border-gray-300 dark:border-gray-500">
                                             <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700">
                                                 <thead class="bg-gray-50 dark:bg-gray-700">
                                                     <tr>
@@ -881,7 +869,7 @@ const recalcFons = (fons: Fons) => {
                                                     </tr>
                                                 </thead>
                                                 <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-                                                    <tr v-for="(v, idx) in f.valors" :key="v.id" class="hover:bg-gray-50 dark:hover:bg-gray-700" :class="{ 'bg-emerald-50 dark:bg-emerald-900/10': idx === 0 }">
+                                                    <tr v-for="(v, idx) in p.valors" :key="v.id" class="hover:bg-gray-50 dark:hover:bg-gray-700" :class="{ 'bg-emerald-50 dark:bg-emerald-900/10': idx === 0 }">
                                                         <td class="px-4 py-2 text-gray-900 dark:text-gray-100">{{ v.data }}<span v-if="idx === 0" class="ml-2 text-xs font-medium text-emerald-600 dark:text-emerald-400">actual</span></td>
                                                         <td class="px-4 py-2 text-right font-mono">{{ formatNum(v.valor_participacio, 4) }}</td>
                                                         <td class="whitespace-nowrap px-4 py-2 text-right">
@@ -896,10 +884,10 @@ const recalcFons = (fons: Fons) => {
                                     </div>
 
                                     <!-- Tab: Contractes -->
-                                    <div v-if="fonsTab[f.id] === 'contractes'" class="divide-y divide-gray-100 dark:divide-gray-700">
-                                        <p v-if="f.contractes.length === 0" class="p-4 text-sm text-gray-400">Cap contracte registrat.</p>
+                                    <div v-if="plaTab[p.id] === 'contractes'" class="divide-y divide-gray-100 dark:divide-gray-700">
+                                        <p v-if="p.contractes.length === 0" class="p-4 text-sm text-gray-400">Cap contracte registrat.</p>
 
-                                        <div v-for="c in f.contractes" :key="c.id">
+                                        <div v-for="c in p.contractes" :key="c.id">
                                             <!-- Capçalera contracte -->
                                             <div class="flex cursor-pointer select-none items-center justify-between bg-gray-50 px-4 py-3 dark:bg-gray-900/20" @click="toggleContracte(c.id)">
                                                 <div class="flex min-w-0 flex-1 items-center gap-3">
@@ -931,7 +919,6 @@ const recalcFons = (fons: Fons) => {
 
                                             <!-- Detall contracte -->
                                             <div v-if="expandedContractes.has(c.id)" class="border-t border-gray-100 dark:border-gray-700">
-                                                <!-- Resum contracte -->
                                                 <div class="grid grid-cols-2 gap-x-8 gap-y-1 bg-emerald-50 px-6 py-3 text-sm dark:bg-emerald-900/10 sm:grid-cols-4">
                                                     <div class="flex justify-between gap-2"><span class="text-gray-500">Participacions:</span><span class="font-mono font-medium">{{ formatNum(c.resum.total_participacions, 4) }}</span></div>
                                                     <div class="flex justify-between gap-2"><span class="text-gray-500">Total invertit:</span><span class="font-medium">{{ formatEur(c.resum.total_invertit) }}</span></div>
@@ -939,7 +926,6 @@ const recalcFons = (fons: Fons) => {
                                                     <div class="flex justify-between gap-2"><span class="text-gray-500">Valor contracte:</span><span class="font-medium">{{ formatEur(c.resum.valor_contracte) }}</span></div>
                                                 </div>
 
-                                                <!-- Tabs contracte -->
                                                 <div class="flex items-center justify-between border-b border-gray-100 px-6 dark:border-gray-700">
                                                     <nav class="-mb-px flex space-x-6">
                                                         <button v-for="tab in (['aportacions', 'despeses'] as const)" :key="tab"
@@ -981,8 +967,8 @@ const recalcFons = (fons: Fons) => {
                                                                     <td class="px-4 py-2 text-right font-mono" :class="classeRend(a.rendibilitat)">{{ formatPct(a.rendibilitat !== null && a.import > 0 ? a.rendibilitat / a.import * 100 : null) }}</td>
                                                                     <td class="px-4 py-2 text-gray-500">{{ a.notes ?? '' }}</td>
                                                                     <td class="whitespace-nowrap px-4 py-2 text-right">
-                                                                        <button @click.stop="openEditAportacio(a, f.id)" class="mr-2 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400">Editar</button>
-                                                                        <button @click.stop="deleteAportacio(a, f.id)" class="text-red-600 hover:text-red-900 dark:text-red-400">Eliminar</button>
+                                                                        <button @click.stop="openEditAportacio(a, p.id)" class="mr-2 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400">Editar</button>
+                                                                        <button @click.stop="deleteAportacio(a, p.id)" class="text-red-600 hover:text-red-900 dark:text-red-400">Eliminar</button>
                                                                     </td>
                                                                 </tr>
                                                             </tbody>
@@ -1020,8 +1006,8 @@ const recalcFons = (fons: Fons) => {
                                                                     <td class="px-4 py-2 text-right font-mono">{{ formatEur(d.import) }}</td>
                                                                     <td class="px-4 py-2 text-gray-500">{{ d.concepte ?? '' }}</td>
                                                                     <td class="whitespace-nowrap px-4 py-2 text-right">
-                                                                        <button @click.stop="openEditDespesa(d, f.id)" class="mr-2 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400">Editar</button>
-                                                                        <button @click.stop="deleteDespesa(d, f.id)" class="text-red-600 hover:text-red-900 dark:text-red-400">Eliminar</button>
+                                                                        <button @click.stop="openEditDespesa(d, p.id)" class="mr-2 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400">Editar</button>
+                                                                        <button @click.stop="deleteDespesa(d, p.id)" class="text-red-600 hover:text-red-900 dark:text-red-400">Eliminar</button>
                                                                     </td>
                                                                 </tr>
                                                             </tbody>
@@ -1048,8 +1034,8 @@ const recalcFons = (fons: Fons) => {
                         </div>
 
                         <div v-else class="py-12 text-center">
-                            <p class="text-sm text-gray-500 dark:text-gray-400">No hi ha fons d'inversió registrats.</p>
-                            <button @click="openCreateFons" class="mt-4 inline-flex items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">+ Nou Fons</button>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">No hi ha plans de pensions registrats.</p>
+                            <button @click="openCreatePla" class="mt-4 inline-flex items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">+ Nou Pla</button>
                         </div>
 
                     </div>
@@ -1057,24 +1043,24 @@ const recalcFons = (fons: Fons) => {
             </div>
         </div>
 
-        <!-- MODAL: FONS -->
-        <div v-if="showFonsModal" class="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
+        <!-- MODAL: PLA -->
+        <div v-if="showPlaModal" class="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
             <div class="flex min-h-screen items-end justify-center px-4 pb-20 pt-4 text-center sm:block sm:p-0">
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75" @click="closeFonsModal"></div>
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75" @click="closePlaModal"></div>
                 <span class="hidden sm:inline-block sm:h-screen sm:align-middle">&#8203;</span>
                 <div class="inline-block w-full transform overflow-hidden rounded-lg bg-white text-left align-bottom shadow-xl dark:bg-gray-800 sm:my-8 sm:max-w-md sm:align-middle">
-                    <form @submit.prevent="submitFons">
+                    <form @submit.prevent="submitPla">
                         <div class="px-6 py-5">
-                            <h3 class="mb-4 text-lg font-medium text-gray-900 dark:text-gray-100">{{ isEditingFons ? 'Editar fons' : "Nou fons d'inversió" }}</h3>
+                            <h3 class="mb-4 text-lg font-medium text-gray-900 dark:text-gray-100">{{ isEditingPla ? 'Editar pla' : 'Nou pla de pensions' }}</h3>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nom del fons *</label>
-                                <input v-model="fonsForm.nom" type="text" required maxlength="200" placeholder="p.ex. Fons Indexat S&P 500" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
-                                <p v-if="fonsForm.errors.nom" class="mt-1 text-sm text-red-600">{{ fonsForm.errors.nom }}</p>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nom del pla *</label>
+                                <input v-model="plaForm.nom" type="text" required maxlength="200" placeholder="p.ex. Pla de Pensions Indexat" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
+                                <p v-if="plaForm.errors.nom" class="mt-1 text-sm text-red-600">{{ plaForm.errors.nom }}</p>
                             </div>
                         </div>
                         <div class="bg-gray-50 px-4 py-3 dark:bg-gray-700 sm:flex sm:flex-row-reverse sm:px-6">
-                            <button type="submit" :disabled="fonsForm.processing" class="inline-flex w-full justify-center rounded-md bg-emerald-600 px-4 py-2 text-base font-medium text-white hover:bg-emerald-700 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm">{{ isEditingFons ? 'Actualitzar' : 'Crear' }}</button>
-                            <button type="button" @click="closeFonsModal" class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 sm:ml-3 sm:mt-0 sm:w-auto sm:text-sm">Cancel·lar</button>
+                            <button type="submit" :disabled="plaForm.processing" class="inline-flex w-full justify-center rounded-md bg-emerald-600 px-4 py-2 text-base font-medium text-white hover:bg-emerald-700 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm">{{ isEditingPla ? 'Actualitzar' : 'Crear' }}</button>
+                            <button type="button" @click="closePlaModal" class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 sm:ml-3 sm:mt-0 sm:w-auto sm:text-sm">Cancel·lar</button>
                         </div>
                     </form>
                 </div>
@@ -1092,16 +1078,14 @@ const recalcFons = (fons: Fons) => {
                             <h3 class="mb-4 text-lg font-medium text-gray-900 dark:text-gray-100">{{ isEditingContracte ? 'Editar contracte' : 'Nou contracte' }}</h3>
                             <p v-if="contracteError" class="mb-3 text-sm text-red-600">{{ contracteError }}</p>
                             <div class="space-y-4">
-                                <!-- Compte (lectura en edició) -->
                                 <div v-if="isEditingContracte">
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Compte bancari</label>
                                     <p class="mt-1 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:border-gray-600 dark:bg-gray-700/50 dark:text-gray-300">{{ contracteForm._compte_display || '—' }}</p>
                                 </div>
                                 <div v-if="isEditingContracte">
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nom descriptiu</label>
-                                    <input v-model="contracteForm.compte_nom" type="text" maxlength="100" placeholder="p.ex. Fons Amundi - Joan" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
+                                    <input v-model="contracteForm.compte_nom" type="text" maxlength="100" placeholder="p.ex. Pla Pensions - Joan" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
                                 </div>
-                                <!-- Compte (selector en creació) -->
                                 <div v-if="!isEditingContracte">
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Compte bancari</label>
                                     <div class="mt-1 flex gap-3">
@@ -1111,17 +1095,17 @@ const recalcFons = (fons: Fons) => {
                                     <div v-if="!compteNou" class="mt-2">
                                         <select v-model="contracteForm.compte_corrent_id" class="block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm">
                                             <option value="">— Selecciona un compte —</option>
-                                            <option v-for="c in props.comptesFonsInversio" :key="c.id" :value="c.id">{{ c.nom }} — {{ c.entitat }}{{ c.titulars ? ` (${c.titulars})` : '' }}</option>
+                                            <option v-for="c in props.comptesPlaPensions" :key="c.id" :value="c.id">{{ c.nom }} — {{ c.entitat }}{{ c.titulars ? ` (${c.titulars})` : '' }}</option>
                                         </select>
                                     </div>
                                     <div v-else class="mt-2 space-y-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-900/10">
                                         <div>
                                             <label class="block text-xs font-medium text-gray-600 dark:text-gray-400">Referència / número *</label>
-                                            <input v-model="contracteForm.compte_referencia" type="text" maxlength="24" placeholder="p.ex. FI-2024-001" class="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
+                                            <input v-model="contracteForm.compte_referencia" type="text" maxlength="24" placeholder="p.ex. PP-2024-001" class="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
                                         </div>
                                         <div>
                                             <label class="block text-xs font-medium text-gray-600 dark:text-gray-400">Nom descriptiu</label>
-                                            <input v-model="contracteForm.compte_nom" type="text" maxlength="100" placeholder="p.ex. Fons Amundi - Joan" class="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
+                                            <input v-model="contracteForm.compte_nom" type="text" maxlength="100" placeholder="p.ex. Pla Pensions - Joan" class="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
                                         </div>
                                         <div>
                                             <div class="flex items-center justify-between">
@@ -1142,13 +1126,12 @@ const recalcFons = (fons: Fons) => {
                                         </div>
                                     </div>
                                 </div>
-                                <!-- Titulars -->
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Titulars</label>
                                     <div v-if="props.persones.length > 0" class="mt-2 max-h-36 space-y-1.5 overflow-y-auto rounded-md border border-gray-300 p-3 dark:border-gray-600">
-                                        <label v-for="p in props.persones" :key="p.id" class="flex cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                                            <input type="checkbox" v-model="contracteForm.titular_ids" :value="p.id" class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700" />
-                                            {{ p.nom }} {{ p.cognoms }}
+                                        <label v-for="person in props.persones" :key="person.id" class="flex cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                            <input type="checkbox" v-model="contracteForm.titular_ids" :value="person.id" class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700" />
+                                            {{ person.nom }} {{ person.cognoms }}
                                         </label>
                                     </div>
                                     <p v-else class="mt-1 text-sm text-gray-400">Cap persona disponible.</p>

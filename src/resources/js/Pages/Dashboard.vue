@@ -114,6 +114,12 @@ import { Head, Link } from '@inertiajs/vue3';
                             >
                                 → Fons d'Inversió
                             </Link>
+                            <Link
+                                :href="route('plans-pensions.index')"
+                                class="block text-sm text-gray-600 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 transition-colors"
+                            >
+                                → Plans de Pensions
+                            </Link>
                         </div>
                     </div>
 
