@@ -1176,7 +1176,7 @@ const recalcPla = (pla: Pla) => {
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Valor per participació (€) *</label>
-                                    <input v-model="valorForm.valor_participacio" type="number" step="0.000001" min="0.000001" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
+                                    <input v-model="valorForm.valor_participacio" type="number" step="any" min="0.000001" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
                                 </div>
                             </div>
                         </div>
@@ -1202,7 +1202,7 @@ const recalcPla = (pla: Pla) => {
                             <div class="space-y-4">
                                 <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Data *</label><input v-model="aportacioForm.data" type="date" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" /></div>
                                 <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Import invertit (€) *</label><input v-model="aportacioForm.import" type="number" step="0.01" min="0.01" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" /></div>
-                                <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Participacions adquirides *</label><input v-model="aportacioForm.participacions" type="number" step="0.000001" min="0.000001" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" /></div>
+                                <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Participacions adquirides *</label><input v-model="aportacioForm.participacions" type="number" step="any" min="0.000001" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" /></div>
                                 <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label><input v-model="aportacioForm.notes" type="text" maxlength="500" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" /></div>
                             </div>
                         </div>
