@@ -11,6 +11,7 @@ use App\Models\Llogater;
 use App\Models\Lloguer;
 use App\Models\Categoria;
 use App\Models\MovimentCompteCorrent;
+use App\Models\MovimentConcepte;
 use App\Models\Persona;
 use App\Models\Proveidor;
 use Illuminate\Http\JsonResponse;
@@ -157,6 +158,8 @@ class LloguerController extends Controller
                 'comuners' => $c->comuners->pluck('id')->toArray(),
             ]);
 
+        $conceptes = MovimentConcepte::orderBy('concepte')->pluck('concepte');
+
         return Inertia::render('Lloguers/Index', [
             'lloguers'        => $lloguers,
             'immobles'        => $immobles,
@@ -166,6 +169,7 @@ class LloguerController extends Controller
             'arrendadors'     => $arrendadors,
             'persones'        => $persones,
             'comunitatsBens'  => $comunitatsBens,
+            'conceptes'       => $conceptes,
         ]);
     }
 

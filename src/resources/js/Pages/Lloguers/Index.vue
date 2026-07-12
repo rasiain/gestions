@@ -93,6 +93,7 @@ interface Props {
     arrendadors: Arrendador[];
     persones: PersonaBasic[];
     comunitatsBens: ComunitatBensBasic[];
+    conceptes: string[];
 }
 
 const props = defineProps<Props>();
@@ -2235,8 +2236,12 @@ const formatCurrency = (value: string | null): string => {
                                         v-model="movimentEditForm.concepte"
                                         type="text"
                                         required
+                                        list="concepte-options-lloguer"
                                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                     />
+                                    <datalist id="concepte-options-lloguer">
+                                        <option v-for="c in props.conceptes" :key="c" :value="c" />
+                                    </datalist>
                                     <p v-if="movimentEditErrors.concepte" class="mt-1 text-sm text-red-600">{{ movimentEditErrors.concepte }}</p>
                                 </div>
                                 <div>
