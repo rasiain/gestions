@@ -322,11 +322,12 @@ class LloguerController extends Controller
 
         $moviments = MovimentCompteCorrent::where('compte_corrent_id', $lloguer->compte_corrent_id)
             ->where('exclou_lloguer', false)
-            ->with(['ingressos.linies', 'despesa.proveidor', 'concepte'])
+            ->with(['ingressos.linies', 'despesa.proveidor', 'concepte', 'factura'])
             ->when($any, fn($q) => $q->whereYear('data_moviment', $any))
             ->where(function ($q) use ($lloguer) {
                 $q->whereHas('despesa', fn($q2) => $q2->where('lloguer_id', $lloguer->id))
-                  ->orWhereHas('ingressos', fn($q2) => $q2->where('lloguer_id', $lloguer->id));
+                  ->orWhereHas('ingressos', fn($q2) => $q2->where('lloguer_id', $lloguer->id))
+                  ->orWhereHas('factura', fn($q2) => $q2->where('lloguer_id', $lloguer->id));
             })
             ->orderBy('data_moviment')
             ->get();
@@ -383,6 +384,25 @@ class LloguerController extends Controller
                     ];
                     $totalDespeses -= $importLinia;
                 }
+            }
+
+            if ($moviment->factura && $moviment->factura->lloguer_id === $lloguer->id) {
+                $totalFactura = (float) $moviment->factura->total;
+                $totalBase += $totalFactura;
+                $importBanc = (float) $moviment->import;
+                $concepte = $moviment->concepte?->concepte ?? $moviment->concepte_original ?? '';
+                $ingressos[] = [
+                    'data'         => $moviment->data_moviment->toDateString(),
+                    'concepte'     => $moviment->factura->numero_factura
+                        ? ('Factura ' . $moviment->factura->numero_factura)
+                        : $concepte,
+                    'base'         => $totalFactura,
+                    'despeses'     => null,
+                    'net_calculat' => $totalFactura,
+                    'import_banc'  => $importBanc,
+                    'diferencia'   => round($totalFactura - $importBanc, 2),
+                    'notes'        => $moviment->factura->notes ?? '',
+                ];
             }
 
             if ($moviment->despesa && $moviment->despesa->lloguer_id === $lloguer->id) {

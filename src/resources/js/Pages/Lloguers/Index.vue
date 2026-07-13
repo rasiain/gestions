@@ -1829,7 +1829,7 @@ const formatCurrency = (value: string | null): string => {
                                                     ? 'opacity-40'
                                                     : ingresNoQuadra(moviment)
                                                         ? 'bg-red-50 ring-1 ring-inset ring-red-200 dark:bg-red-900/20 dark:ring-red-800'
-                                                        : classificacioThisLloguer(moviment)
+                                                        : (classificacioThisLloguer(moviment) || moviment.factura)
                                                             ? 'bg-green-100 ring-1 ring-inset ring-green-200 dark:bg-green-900/50 dark:ring-green-700/60'
                                                             : 'bg-amber-100 ring-1 ring-inset ring-amber-200 dark:bg-amber-900/40 dark:ring-amber-700/60',
                                         ]"
@@ -1879,15 +1879,25 @@ const formatCurrency = (value: string | null): string => {
                                         </td>
                                         <td class="px-4 py-3 text-sm">
                                             <template v-if="moviment.factura">
-                                                <button
-                                                    @click.stop="showFacturesModal = true"
-                                                    class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-                                                    :class="parseFloat(moviment.factura.total) !== parseFloat(moviment.import)
-                                                        ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 ring-2 ring-red-400'
-                                                        : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'"
-                                                >
-                                                    {{ moviment.factura.numero_factura || 'Factura vinculada' }}
-                                                </button>
+                                                <div class="flex flex-col gap-0.5">
+                                                    <button
+                                                        @click.stop="showFacturesModal = true"
+                                                        class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                                                        :class="parseFloat(moviment.factura.total) !== parseFloat(moviment.import)
+                                                            ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 ring-2 ring-red-400'
+                                                            : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'"
+                                                    >
+                                                        {{ moviment.factura.numero_factura || 'Factura vinculada' }}
+                                                    </button>
+                                                    <span
+                                                        v-if="parseFloat(moviment.factura.total) !== parseFloat(moviment.import)"
+                                                        class="text-xs text-red-600 dark:text-red-400"
+                                                    >Dif: {{ formatCurrency((parseFloat(moviment.import) - parseFloat(moviment.factura.total)).toFixed(2)) }}</span>
+                                                    <span
+                                                        v-else
+                                                        class="text-xs text-green-600 dark:text-green-400"
+                                                    >✓ Quadren</span>
+                                                </div>
                                             </template>
                                             <template v-else-if="classificacioThisLloguer(moviment)">
                                                 <div class="flex items-center gap-2">
