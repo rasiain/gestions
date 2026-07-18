@@ -527,14 +527,64 @@ const valorError = ref<string | null>(null);
 const valorSaving = ref(false);
 const valorForm = ref({ pla_id: 0, data: '', valor_participacio: '' });
 
+// Ajuda: calcular el valor/participació a partir del valor total del banc (per titular).
+const valorTotalInput = ref('');
+const valorTitularId = ref<number | null>(null);
+
+// Titulars disponibles al pla (distints entre tots els contractes).
+const valorTitularsDisponibles = computed(() => {
+    const pla = plaList.value.find(p => p.id === valorForm.value.pla_id);
+    if (!pla) return [] as { id: number; nom: string }[];
+    const ids = new Set<number>();
+    pla.contractes.forEach(c => c.titular_ids.forEach(id => ids.add(id)));
+    return [...ids].map(id => {
+        const p = props.persones.find(pp => pp.id === id);
+        return { id, nom: p ? `${p.nom} ${p.cognoms}` : `#${id}` };
+    });
+});
+
+// El pla té alguna aportació (perquè tingui sentit el càlcul des del total).
+const valorPlaTeParticipacions = computed(() => {
+    const pla = plaList.value.find(p => p.id === valorForm.value.pla_id);
+    return !!pla && pla.contractes.some(c => c.aportacions.length > 0);
+});
+
+// Participacions acumulades fins a la data del valor, filtrades pel titular seleccionat.
+const participacionsADataValor = computed(() => {
+    const pla = plaList.value.find(p => p.id === valorForm.value.pla_id);
+    if (!pla) return 0;
+    const d = valorForm.value.data;
+    const tid = valorTitularId.value;
+    return pla.contractes
+        .filter(c => tid === null || c.titular_ids.includes(tid))
+        .flatMap(c => c.aportacions)
+        .filter(a => !d || a.data <= d)
+        .reduce((s, a) => s + Number(a.participacions), 0);
+});
+
+const recalcValorDesDeTotal = () => {
+    const total = parseFloat(valorTotalInput.value);
+    const part = participacionsADataValor.value;
+    if (!isNaN(total) && part > 0) {
+        valorForm.value.valor_participacio = String(Math.round((total / part) * 1e6) / 1e6);
+    }
+};
+
+// Recalcula quan canvia el total introduït o les participacions a data (per canvi de data).
+watch([valorTotalInput, participacionsADataValor], recalcValorDesDeTotal);
+
 const openCreateValor = (plaId: number) => {
     isEditingValor.value = false; editingValorId.value = null;
     valorForm.value = { pla_id: plaId, data: new Date().toISOString().slice(0, 10), valor_participacio: '' };
+    valorTotalInput.value = '';
+    valorTitularId.value = valorTitularsDisponibles.value[0]?.id ?? null;
     valorError.value = null; showValorModal.value = true;
 };
 const openEditValor = (v: ValorParticipacio) => {
     isEditingValor.value = true; editingValorId.value = v.id;
     valorForm.value = { pla_id: v.pla_id, data: v.data, valor_participacio: String(v.valor_participacio) };
+    valorTotalInput.value = '';
+    valorTitularId.value = valorTitularsDisponibles.value[0]?.id ?? null;
     valorError.value = null; showValorModal.value = true;
 };
 const closeValorModal = () => { showValorModal.value = false; };
@@ -1173,6 +1223,15 @@ const recalcPla = (pla: Pla) => {
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Data *</label>
                                     <input v-model="valorForm.data" type="date" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
+                                </div>
+                                <div v-if="valorPlaTeParticipacions" class="space-y-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-900/20">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Calcular des del valor total</label>
+                                    <select v-if="valorTitularsDisponibles.length" v-model="valorTitularId" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm">
+                                        <option v-for="t in valorTitularsDisponibles" :key="t.id" :value="t.id">{{ t.nom }}</option>
+                                        <option :value="null">Tots els titulars</option>
+                                    </select>
+                                    <input v-model="valorTotalInput" type="number" step="any" min="0" placeholder="Valor total del titular (€)" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm" />
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">Participacions a {{ valorForm.data }}: <span class="font-mono font-medium">{{ formatNum(participacionsADataValor, 4) }}</span></p>
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Valor per participació (€) *</label>
