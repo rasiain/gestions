@@ -765,9 +765,21 @@ const classificacioThisLloguer = (moviment: Moviment) => {
 };
 
 const classificacioAltresLloguer = (moviment: Moviment): boolean => {
-    // Només bloca si hi ha una DESPESA d'un altre lloguer (les despeses son exclusives).
-    // Els ingressos permeten múltiples lloguers, mai no bloquen.
-    return !!(moviment.despesa && moviment.despesa.lloguer_id !== selectedLloguerId.value);
+    // Si aquest lloguer ja hi té classificació, no és "d'un altre".
+    if (classificacioThisLloguer(moviment)) return false;
+    // Despesa d'un altre lloguer (les despeses són exclusives).
+    if (moviment.despesa && moviment.despesa.lloguer_id !== selectedLloguerId.value) return true;
+    // Ingrés ja classificat per a un altre lloguer del mateix compte:
+    // cada ingrés pertany a un sol lloguer, així que no és pendent per a aquest.
+    return moviment.ingressos.some(i => i.lloguer_id !== selectedLloguerId.value);
+};
+
+// Nom del lloguer (aliè) on està classificat el moviment, per al badge informatiu.
+const altreLloguerNom = (moviment: Moviment): string => {
+    const id = moviment.despesa && moviment.despesa.lloguer_id !== selectedLloguerId.value
+        ? moviment.despesa.lloguer_id
+        : moviment.ingressos.find(i => i.lloguer_id !== selectedLloguerId.value)?.lloguer_id;
+    return props.lloguers.find(l => l.id === id)?.nom ?? 'Altre lloguer';
 };
 
 const classificacioLabel = (moviment: Moviment): string => {
@@ -1920,8 +1932,8 @@ const formatCurrency = (value: string | null): string => {
                                                 </div>
                                             </template>
                                             <template v-else-if="classificacioAltresLloguer(moviment)">
-                                                <span class="inline-flex items-center rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-700 dark:text-gray-400 italic">
-                                                    Altre lloguer
+                                                <span class="inline-flex items-center rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-700 dark:text-gray-400 italic" :title="`Classificat al lloguer ${altreLloguerNom(moviment)}`">
+                                                    → {{ altreLloguerNom(moviment) }}
                                                 </span>
                                             </template>
                                             <template v-else-if="!moviment.exclou_lloguer">
