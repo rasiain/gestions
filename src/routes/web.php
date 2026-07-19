@@ -161,6 +161,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/fons-inversio/valors', [FonsInversioController::class, 'storeValor'])->name('fons-inversio.valors.store');
     Route::put('/fons-inversio/valors/{valor}', [FonsInversioController::class, 'updateValor'])->name('fons-inversio.valors.update');
     Route::delete('/fons-inversio/valors/{valor}', [FonsInversioController::class, 'destroyValor'])->name('fons-inversio.valors.destroy');
+    Route::post('/fons-inversio/valors/import/parse', [FonsInversioController::class, 'parseValorsImport'])->name('fons-inversio.valors.import.parse');
+    Route::post('/fons-inversio/valors/import', [FonsInversioController::class, 'storeValorsImport'])->name('fons-inversio.valors.import.store');
     Route::post('/fons-inversio/despeses', [FonsInversioController::class, 'storeDespesa'])->name('fons-inversio.despeses.store');
     Route::put('/fons-inversio/despeses/{despesa}', [FonsInversioController::class, 'updateDespesa'])->name('fons-inversio.despeses.update');
     Route::delete('/fons-inversio/despeses/{despesa}', [FonsInversioController::class, 'destroyDespesa'])->name('fons-inversio.despeses.destroy');

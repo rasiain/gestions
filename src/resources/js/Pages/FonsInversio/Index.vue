@@ -581,6 +581,80 @@ const deleteValor = async (v: ValorParticipacio) => {
     recalcFons(fons);
 };
 
+// === IMPORTACIÓ DE VALORS (paste) ===
+interface ImportRow {
+    compte: string;
+    comptes?: string[];
+    nom_text: string;
+    fons_id: number | null;
+    fons_nom: string | null;
+    data: string;
+    valor_participacio: number;
+    reconegut: boolean;
+    conflicte: boolean;
+    incloure?: boolean;
+}
+
+const showImportModal = ref(false);
+const importText = ref('');
+const importRows = ref<ImportRow[]>([]);
+const importResum = ref<{ reconeguts: number; no_reconeguts: number; conflictes: number } | null>(null);
+const importParsing = ref(false);
+const importSaving = ref(false);
+const importError = ref<string | null>(null);
+const importParsed = ref(false);
+
+const importSeleccionats = computed(() => importRows.value.filter(r => r.reconegut && r.incloure));
+
+const openImportModal = () => {
+    importText.value = ''; importRows.value = []; importResum.value = null;
+    importParsed.value = false; importError.value = null;
+    showImportModal.value = true;
+};
+const closeImportModal = () => { showImportModal.value = false; };
+
+const parseImport = async () => {
+    importParsing.value = true; importError.value = null;
+    try {
+        const res = await fetch('/fons-inversio/valors/import/parse', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
+            body: JSON.stringify({ text: importText.value }),
+        });
+        if (!res.ok) { importError.value = "No s'ha pogut analitzar el text."; return; }
+        const data = await res.json();
+        importRows.value = (data.rows as ImportRow[]).map(r => ({ ...r, incloure: r.reconegut }));
+        importResum.value = data.resum;
+        importParsed.value = true;
+        if (!importRows.value.length) importError.value = "No s'ha reconegut cap fons al text enganxat.";
+    } finally { importParsing.value = false; }
+};
+
+const submitImport = async () => {
+    const valors = importSeleccionats.value.map(r => ({
+        fons_id: r.fons_id, data: r.data, valor_participacio: r.valor_participacio,
+    }));
+    if (!valors.length) return;
+    importSaving.value = true; importError.value = null;
+    try {
+        const res = await fetch('/fons-inversio/valors/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
+            body: JSON.stringify({ valors }),
+        });
+        if (!res.ok) { importError.value = 'Error en desar els valors.'; return; }
+        const data = await res.json();
+        for (const saved of data.valors as ValorParticipacio[]) {
+            const fons = getFons(saved.fons_id);
+            const idx = fons.valors.findIndex(v => v.id === saved.id);
+            if (idx !== -1) fons.valors[idx] = saved; else fons.valors.unshift(saved);
+            fons.valors.sort((a, b) => b.data.localeCompare(a.data));
+            recalcFons(fons);
+        }
+        closeImportModal();
+    } finally { importSaving.value = false; }
+};
+
 // === APORTACIONS CRUD (fetch) ===
 const showAportacioModal = ref(false);
 const isEditingAportacio = ref(false);
@@ -746,10 +820,16 @@ const recalcFons = (fons: Fons) => {
                                 <h3 class="text-lg font-medium">Fons d'Inversió</h3>
                                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">Catàleg de fons amb els seus contractes, aportacions i rendibilitat</p>
                             </div>
-                            <button @click="openCreateFons" class="inline-flex items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700">
-                                <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-                                Nou Fons
-                            </button>
+                            <div class="flex items-center gap-2">
+                                <button @click="openImportModal" class="inline-flex items-center rounded-md border border-emerald-600 bg-white px-4 py-2 text-sm font-medium text-emerald-700 shadow-sm hover:bg-emerald-50 dark:bg-gray-800 dark:text-emerald-400 dark:hover:bg-gray-700">
+                                    <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                                    Importar valors
+                                </button>
+                                <button @click="openCreateFons" class="inline-flex items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700">
+                                    <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                                    Nou Fons
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Gràfiques -->
@@ -1253,6 +1333,69 @@ const recalcFons = (fons: Fons) => {
                             <button type="button" @click="closeDespesaModal" class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 sm:ml-3 sm:mt-0 sm:w-auto sm:text-sm">Cancel·lar</button>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL: IMPORTAR VALORS -->
+        <div v-if="showImportModal" class="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
+            <div class="flex min-h-screen items-end justify-center px-4 pb-20 pt-4 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75" @click="closeImportModal"></div>
+                <span class="hidden sm:inline-block sm:h-screen sm:align-middle">&#8203;</span>
+                <div class="inline-block w-full transform overflow-hidden rounded-lg bg-white text-left align-bottom shadow-xl dark:bg-gray-800 sm:my-8 sm:max-w-3xl sm:align-middle">
+                    <div class="px-6 py-5">
+                        <h3 class="mb-1 text-lg font-medium text-gray-900 dark:text-gray-100">Importar valors de participació</h3>
+                        <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">Enganxa la posició de fons de Caixa d'Enginyers. S'identifiquen els fons pel número de compte i s'actualitza el valor a la data indicada al text.</p>
+                        <p v-if="importError" class="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-900/20">{{ importError }}</p>
+
+                        <!-- Pas 1: enganxar text -->
+                        <div v-if="!importParsed">
+                            <textarea v-model="importText" rows="10" placeholder="Enganxa aquí el text copiat del banc…" class="block w-full rounded-md border-gray-300 font-mono text-xs shadow-sm focus:border-emerald-500 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"></textarea>
+                        </div>
+
+                        <!-- Pas 2: previsió -->
+                        <div v-else>
+                            <div v-if="importResum" class="mb-3 flex flex-wrap gap-2 text-xs">
+                                <span class="rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">{{ importResum.reconeguts }} reconeguts</span>
+                                <span v-if="importResum.no_reconeguts" class="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">{{ importResum.no_reconeguts }} no reconeguts</span>
+                                <span v-if="importResum.conflictes" class="rounded-full bg-red-100 px-2.5 py-1 font-medium text-red-800 dark:bg-red-900/40 dark:text-red-300">{{ importResum.conflictes }} amb conflicte</span>
+                            </div>
+                            <div class="max-h-80 overflow-y-auto rounded-md border border-gray-200 dark:border-gray-700">
+                                <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700">
+                                    <thead class="bg-gray-50 dark:bg-gray-900/40">
+                                        <tr>
+                                            <th class="w-10 px-3 py-2"></th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Fons</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Data</th>
+                                            <th class="px-3 py-2 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Valor / part.</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                                        <tr v-for="(r, i) in importRows" :key="i" :class="!r.reconegut ? 'bg-amber-50 dark:bg-amber-900/10' : r.conflicte ? 'bg-red-50 dark:bg-red-900/10' : ''">
+                                            <td class="px-3 py-2 text-center">
+                                                <input v-if="r.reconegut" v-model="r.incloure" type="checkbox" class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+                                                <span v-else class="text-amber-500" title="Compte no reconegut">⚠</span>
+                                            </td>
+                                            <td class="px-3 py-2">
+                                                <div class="font-medium text-gray-900 dark:text-gray-100">{{ r.reconegut ? r.fons_nom : r.nom_text }}</div>
+                                                <div class="font-mono text-xs text-gray-400">{{ (r.comptes ?? [r.compte]).join(' · ') }}</div>
+                                                <div v-if="r.conflicte" class="text-xs text-red-600">Valors diferents per al mateix fons</div>
+                                                <div v-if="!r.reconegut" class="text-xs text-amber-600">Cap contracte amb aquest compte</div>
+                                            </td>
+                                            <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ r.data }}</td>
+                                            <td class="px-3 py-2 text-right font-mono">{{ formatNum(r.valor_participacio, 6) }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 px-4 py-3 dark:bg-gray-700 sm:flex sm:flex-row-reverse sm:px-6">
+                        <button v-if="!importParsed" type="button" @click="parseImport" :disabled="importParsing || !importText.trim()" class="inline-flex w-full justify-center rounded-md bg-emerald-600 px-4 py-2 text-base font-medium text-white hover:bg-emerald-700 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm">{{ importParsing ? 'Analitzant…' : 'Analitzar' }}</button>
+                        <button v-else type="button" @click="submitImport" :disabled="importSaving || !importSeleccionats.length" class="inline-flex w-full justify-center rounded-md bg-emerald-600 px-4 py-2 text-base font-medium text-white hover:bg-emerald-700 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm">{{ importSaving ? 'Desant…' : `Importar ${importSeleccionats.length} valor(s)` }}</button>
+                        <button v-if="importParsed" type="button" @click="importParsed = false" class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 sm:ml-3 sm:mt-0 sm:w-auto sm:text-sm">Enrere</button>
+                        <button type="button" @click="closeImportModal" class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 sm:ml-3 sm:mt-0 sm:w-auto sm:text-sm">Cancel·lar</button>
+                    </div>
                 </div>
             </div>
         </div>

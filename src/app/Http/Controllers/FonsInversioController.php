@@ -14,7 +14,9 @@ use App\Models\Entitat;
 use App\Models\DespesaFons;
 use App\Models\FonsInversio;
 use App\Models\ValorFons;
+use App\Http\Services\FonsValorsPasteParser;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class FonsInversioController extends Controller
@@ -180,6 +182,104 @@ class FonsInversioController extends Controller
     {
         $valor->delete();
         return response()->json(['ok' => true]);
+    }
+
+    // === IMPORTACIÓ DE VALORS (paste) ===
+
+    /** Analitza el text enganxat i retorna una previsió (sense desar res). */
+    public function parseValorsImport(Request $request, FonsValorsPasteParser $parser): JsonResponse
+    {
+        $text = (string) $request->input('text', '');
+        $records = $parser->parse($text);
+
+        // Mapa: número de compte normalitzat → fons.
+        $mapa = ContracteFons::with('compteCorrent', 'fons')->get()
+            ->filter(fn($c) => $c->compteCorrent)
+            ->keyBy(fn($c) => $this->normalitzaCompte($c->compteCorrent->compte_corrent));
+
+        $rows = [];
+        $index = [];   // fons_id → posició a $rows (per deduplicar)
+
+        foreach ($records as $rec) {
+            $contracte = $mapa->get($this->normalitzaCompte($rec['compte']));
+
+            if (!$contracte) {
+                $rows[] = [
+                    'compte'             => $rec['compte'],
+                    'nom_text'           => $rec['nom'],
+                    'fons_id'            => null,
+                    'fons_nom'           => null,
+                    'data'               => $rec['data'],
+                    'valor_participacio' => $rec['valor_participacio'],
+                    'reconegut'          => false,
+                    'conflicte'          => false,
+                ];
+                continue;
+            }
+
+            $fonsId = $contracte->fons_id;
+
+            if (isset($index[$fonsId])) {
+                // Ja tenim aquest fons: mateix valor/data és redundant, diferent és conflicte.
+                $prev = &$rows[$index[$fonsId]];
+                $prev['comptes'][] = $rec['compte'];
+                if ($prev['data'] !== $rec['data']
+                    || abs($prev['valor_participacio'] - $rec['valor_participacio']) > 1e-9) {
+                    $prev['conflicte'] = true;
+                }
+                unset($prev);
+                continue;
+            }
+
+            $index[$fonsId] = count($rows);
+            $rows[] = [
+                'compte'             => $rec['compte'],
+                'comptes'            => [$rec['compte']],
+                'nom_text'           => $rec['nom'],
+                'fons_id'            => $fonsId,
+                'fons_nom'           => $contracte->fons->nom,
+                'data'               => $rec['data'],
+                'valor_participacio' => $rec['valor_participacio'],
+                'reconegut'          => true,
+                'conflicte'          => false,
+            ];
+        }
+
+        return response()->json([
+            'rows'  => $rows,
+            'resum' => [
+                'reconeguts'    => count(array_filter($rows, fn($r) => $r['reconegut'])),
+                'no_reconeguts' => count(array_filter($rows, fn($r) => !$r['reconegut'])),
+                'conflictes'    => count(array_filter($rows, fn($r) => $r['conflicte'])),
+            ],
+        ]);
+    }
+
+    /** Desa els valors confirmats a la previsió. */
+    public function storeValorsImport(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'valors'                      => ['required', 'array', 'min:1'],
+            'valors.*.fons_id'            => ['required', 'integer', 'exists:g_fi_fons,id'],
+            'valors.*.data'               => ['required', 'date'],
+            'valors.*.valor_participacio' => ['required', 'numeric', 'min:0.000001'],
+        ]);
+
+        $desats = [];
+        foreach ($data['valors'] as $v) {
+            $valor = ValorFons::updateOrCreate(
+                ['fons_id' => $v['fons_id'], 'data' => $v['data']],
+                ['valor_participacio' => $v['valor_participacio']]
+            );
+            $desats[] = $this->formatValor($valor);
+        }
+
+        return response()->json(['valors' => $desats]);
+    }
+
+    private function normalitzaCompte(?string $compte): string
+    {
+        return preg_replace('/\s+/', '', (string) $compte);
     }
 
     // === DESPESES ===
