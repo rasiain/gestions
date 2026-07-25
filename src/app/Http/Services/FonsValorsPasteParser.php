@@ -29,8 +29,11 @@ class FonsValorsPasteParser
     public function parse(string $text): array
     {
         // Neteja: trim per línia i descarta les buides.
+        // Els tabuladors es tracten com a salts de línia: en copiar des de la
+        // taula de posició del banc, les cel·les d'una mateixa fila venen
+        // separades per \t i, si no, tot el registre quedaria en una sola línia.
         $lines = array_values(array_filter(
-            array_map('trim', preg_split('/\r\n|\r|\n/', $text)),
+            array_map('trim', preg_split('/\r\n|\r|\n|\t/', $text)),
             fn($l) => $l !== ''
         ));
 
