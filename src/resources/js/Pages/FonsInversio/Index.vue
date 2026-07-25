@@ -157,8 +157,10 @@ const showGrafiques = ref(false);
 const selectedPersonaId = ref<number | null>(null);
 const rangeMode = ref<'individual' | 'global'>('individual');
 const chartValorRef = ref<HTMLCanvasElement | null>(null);
+const chartVariacioRef = ref<HTMLCanvasElement | null>(null);
 const chartRendRefs: Record<number, HTMLCanvasElement | null> = {};
 let chartValorInstance: Chart | null = null;
+let chartVariacioInstance: Chart | null = null;
 const chartRendInstances: Record<number, Chart> = {};
 
 const CHART_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444'];
@@ -369,6 +371,91 @@ function buildCharts() {
             } as any);
         }
 
+        // === Gràfic 1bis: variació % del valor global respecte a la mesura anterior ===
+        if (chartVariacioRef.value) {
+            chartVariacioInstance?.destroy();
+            // Valor brut: canvi percentual entre mesures consecutives (period-over-period).
+            // Es deixen buits els intervals amb canvi de capital invertit: el salt és capital nou
+            // (aportació, venda o un fons que es valora per primer cop i entra a la cartera), no
+            // moviment de mercat, i comprimiria l'escala. L'invertit només canvia en aquests casos.
+            const variacio = seriesTotal.map((s, i) => {
+                if (i === 0) return null;
+                const prev = seriesTotal[i - 1];
+                if (!prev.valor || prev.valor <= 0) return null;
+                if (Math.abs(s.invertit - prev.invertit) > 0.005) return null;
+                return Math.round((s.valor - prev.valor) / prev.valor * 10000) / 100;
+            });
+            // Marcadors d'esdeveniments: aportacions (import > 0) i vendes (import < 0).
+            const esdevs = Object.entries(aportacioByDate).filter(([, v]) => Math.abs(v) > 1e-9);
+            const colorFor = (v: number | null) => v == null ? '#9ca3af' : v >= 0 ? '#10b981' : '#ef4444';
+            const compres = esdevs.filter(([, v]) => v > 0).map(([d, v]) => ({ x: d, y: 0, import: v }));
+            const vendes  = esdevs.filter(([, v]) => v < 0).map(([d, v]) => ({ x: d, y: 0, import: v }));
+            chartVariacioInstance = new Chart(chartVariacioRef.value, {
+                type: 'bar',
+                data: {
+                    labels: allDates, // ISO 'YYYY-MM-DD' → escala temporal proporcional
+                    datasets: [
+                        {
+                            label: 'Variació vs. mesura anterior',
+                            // {x, y} explícit: en barrejar amb scatter ({x,y}), un array pla es
+                            // llegiria com a índexs i les barres quedarien fora del rang temporal.
+                            data: allDates.map((d, i) => ({ x: d, y: variacio[i] })),
+                            backgroundColor: variacio.map(colorFor),
+                            borderColor: variacio.map(colorFor),
+                            maxBarThickness: 18,
+                            order: 2,
+                        } as any,
+                        ...(compres.length ? [{
+                            type: 'scatter', label: 'Aportació', data: compres,
+                            pointStyle: 'triangle', pointRadius: 7, pointHoverRadius: 9,
+                            backgroundColor: '#f59e0b', borderColor: '#b45309', order: 1,
+                        } as any] : []),
+                        ...(vendes.length ? [{
+                            type: 'scatter', label: 'Venda', data: vendes,
+                            pointStyle: 'triangle', rotation: 180, pointRadius: 7, pointHoverRadius: 9,
+                            backgroundColor: '#ef4444', borderColor: '#991b1b', order: 1,
+                        } as any] : []),
+                    ],
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    interaction: { mode: 'nearest', intersect: false },
+                    plugins: {
+                        legend: {
+                            display: compres.length > 0 || vendes.length > 0,
+                            labels: { filter: (item: any) => item.text !== 'Variació vs. mesura anterior', usePointStyle: true },
+                        },
+                        tooltip: { callbacks: {
+                            title: (items: any) => {
+                                const t = items[0]?.parsed?.x;
+                                if (t == null) return '';
+                                const dt = new Date(t);
+                                const p = (n: number) => String(n).padStart(2, '0');
+                                return `${p(dt.getDate())}/${p(dt.getMonth() + 1)}/${dt.getFullYear()}`;
+                            },
+                            label: (ctx: any) => {
+                                if (ctx.dataset.type === 'scatter') {
+                                    const imp = ctx.raw?.import ?? 0;
+                                    return imp >= 0 ? `Aportació: ${formatEur(imp)}` : `Venda: ${formatEur(Math.abs(imp))}`;
+                                }
+                                return ctx.parsed.y !== null
+                                    ? `${ctx.parsed.y >= 0 ? '+' : ''}${formatPct(ctx.parsed.y)}`
+                                    : '—';
+                            },
+                        }},
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: { tooltipFormat: 'dd/MM/yyyy', displayFormats: { day: 'dd/MM/yy', month: 'MM/yy', year: 'yyyy' } },
+                            ticks: { maxTicksLimit: 14, maxRotation: 0 },
+                        },
+                        y: { ticks: { callback: (v: any) => typeof v === 'number' ? formatPct(v) : String(v) } },
+                    },
+                },
+            } as any);
+        }
+
         // === Gràfics 2: un per fons ===
         for (const fs of fonsSeries) {
             const canvas = chartRendRefs[fs.fonsId];
@@ -429,6 +516,7 @@ watch([showGrafiques, selectedPersonaId, rangeMode], buildCharts);
 watch(fonsList, () => { if (showGrafiques.value) buildCharts(); }, { deep: true });
 onUnmounted(() => {
     chartValorInstance?.destroy();
+    chartVariacioInstance?.destroy();
     Object.values(chartRendInstances).forEach(c => c?.destroy());
 });
 
@@ -867,6 +955,13 @@ const recalcFons = (fons: Fons) => {
                                     <p class="mb-3 text-xs text-gray-400">Els punts taronges marquen les aportacions.</p>
                                     <div class="relative rounded-md bg-white" style="height:300px">
                                         <canvas ref="chartValorRef"></canvas>
+                                    </div>
+                                </div>
+                                <div class="border-t border-gray-100 pt-4 dark:border-gray-700">
+                                    <h4 class="mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">Variació del valor global respecte a la mesura anterior</h4>
+                                    <p class="mb-3 text-xs text-gray-400">Canvi percentual del valor brut de la cartera entre mesures consecutives. Els triangles marquen aportacions (▲) i vendes (▼).</p>
+                                    <div class="relative rounded-md bg-white" style="height:240px">
+                                        <canvas ref="chartVariacioRef"></canvas>
                                     </div>
                                 </div>
                                 <div v-for="f in fonsList" :key="f.id" class="border-t border-gray-100 pt-4 dark:border-gray-700">
