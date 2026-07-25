@@ -18,6 +18,7 @@ use App\Http\Controllers\LloguerRevisioIpcController;
 use App\Http\Controllers\MovementImportController;
 use App\Http\Controllers\ImpostosIrpfController;
 use App\Http\Controllers\ImpostosIvaController;
+use App\Http\Controllers\ImpostosTaxesController;
 use App\Http\Controllers\TipusDespesaFiscalController;
 use App\Http\Controllers\MovimentClassificacioController;
 use App\Http\Controllers\MovimentCompteCorrentController;
@@ -147,6 +148,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/impostos/iva', [ImpostosIvaController::class, 'index'])->name('impostos.iva');
     Route::get('/impostos/tipus-despesa-fiscal', [TipusDespesaFiscalController::class, 'index'])->name('impostos.tipus-despesa-fiscal');
     Route::put('/impostos/tipus-despesa-fiscal', [TipusDespesaFiscalController::class, 'updateMapping'])->name('impostos.tipus-despesa-fiscal.update');
+    Route::get('/impostos/taxes', [ImpostosTaxesController::class, 'index'])->name('impostos.taxes');
+    Route::get('/impostos/taxes/patrons', [ImpostosTaxesController::class, 'patrons'])->name('impostos.taxes.patrons');
+    Route::post('/impostos/taxes/patrons', [ImpostosTaxesController::class, 'storePatro'])->name('impostos.taxes.patrons.store');
+    Route::put('/impostos/taxes/patrons/{patro}', [ImpostosTaxesController::class, 'updatePatro'])->name('impostos.taxes.patrons.update');
+    Route::delete('/impostos/taxes/patrons/{patro}', [ImpostosTaxesController::class, 'destroyPatro'])->name('impostos.taxes.patrons.destroy');
 
     // Fons d'inversió
     Route::resource('fons-inversio', FonsInversioController::class)->only([

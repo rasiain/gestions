@@ -120,7 +120,8 @@ Sis passos seqüencials: (1) generar hashes, (2) trobar punt de junció per hash
               │                                                        │
               │  ComunitatBens (catàleg independent, CRUD propi)       │
               │                                                        │
-              │  Impostos: IVA, IRPF (calculats des de factures)       │
+              │  Impostos: IVA, IRPF (calculats des de factures);      │
+              │            Taxes (impostos municipals, vista derivada) │
               └────────────────────────────────────────────────────────┘
 ```
 
