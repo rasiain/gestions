@@ -184,6 +184,9 @@ Route::middleware('auth')->group(function () {
     Route::put('/plans-pensions/aportacions/{aportacio}', [PlaPensionsController::class, 'updateAportacio'])->name('plans-pensions.aportacions.update');
     Route::delete('/plans-pensions/aportacions/{aportacio}', [PlaPensionsController::class, 'destroyAportacio'])->name('plans-pensions.aportacions.destroy');
     Route::post('/plans-pensions/valors', [PlaPensionsController::class, 'storeValor'])->name('plans-pensions.valors.store');
+    Route::post('/plans-pensions/valors/import', [PlaPensionsController::class, 'importValors'])->name('plans-pensions.valors.import');
+    Route::post('/plans-pensions/valors/snapshot/parse', [PlaPensionsController::class, 'parseSnapshotImport'])->name('plans-pensions.valors.snapshot.parse');
+    Route::post('/plans-pensions/valors/snapshot', [PlaPensionsController::class, 'storeSnapshotImport'])->name('plans-pensions.valors.snapshot.store');
     Route::put('/plans-pensions/valors/{valor}', [PlaPensionsController::class, 'updateValor'])->name('plans-pensions.valors.update');
     Route::delete('/plans-pensions/valors/{valor}', [PlaPensionsController::class, 'destroyValor'])->name('plans-pensions.valors.destroy');
     Route::post('/plans-pensions/despeses', [PlaPensionsController::class, 'storeDespesa'])->name('plans-pensions.despeses.store');

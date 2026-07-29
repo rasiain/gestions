@@ -165,11 +165,22 @@ class FonsInversioController extends Controller
 
     public function storeValor(ValorFonsRequest $request): JsonResponse
     {
-        $valor = ValorFons::updateOrCreate(
-            ['fons_id' => $request->fons_id, 'data' => $request->data],
-            ['valor_participacio' => $request->valor_participacio]
-        );
+        $valor = $this->upsertValor($request->fons_id, $request->data, (float) $request->valor_participacio);
         return response()->json($this->formatValor($valor));
+    }
+
+    /**
+     * Crea o actualitza el valor d'un fons per una data. Cal casar per data (whereDate) perquè
+     * el cast 'date' desa la columna com a datetime i updateOrCreate, que cerca amb la data pelada,
+     * no la trobaria i violaria la restricció UNIQUE(fons_id, data).
+     */
+    private function upsertValor(int $fonsId, string $data, float $valorParticipacio): ValorFons
+    {
+        $valor = ValorFons::where('fons_id', $fonsId)->whereDate('data', $data)->first()
+            ?? new ValorFons(['fons_id' => $fonsId, 'data' => $data]);
+        $valor->valor_participacio = $valorParticipacio;
+        $valor->save();
+        return $valor;
     }
 
     public function updateValor(ValorFonsRequest $request, ValorFons $valor): JsonResponse
@@ -267,11 +278,7 @@ class FonsInversioController extends Controller
 
         $desats = [];
         foreach ($data['valors'] as $v) {
-            $valor = ValorFons::updateOrCreate(
-                ['fons_id' => $v['fons_id'], 'data' => $v['data']],
-                ['valor_participacio' => $v['valor_participacio']]
-            );
-            $desats[] = $this->formatValor($valor);
+            $desats[] = $this->formatValor($this->upsertValor((int) $v['fons_id'], $v['data'], (float) $v['valor_participacio']));
         }
 
         return response()->json(['valors' => $desats]);

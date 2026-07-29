@@ -163,11 +163,142 @@ class PlaPensionsController extends Controller
 
     public function storeValor(ValorPlaPensionsRequest $request): JsonResponse
     {
-        $valor = ValorPlaPensions::updateOrCreate(
-            ['pla_id' => $request->pla_id, 'data' => $request->data],
-            ['valor_participacio' => $request->valor_participacio]
-        );
+        $valor = $this->upsertValor($request->pla_id, $request->data, (float) $request->valor_participacio);
         return response()->json($this->formatValor($valor));
+    }
+
+    /**
+     * Crea o actualitza el valor d'un pla per una data. Cal casar per data (whereDate) perquè
+     * el cast 'date' desa la columna com a datetime (Y-m-d 00:00:00) i updateOrCreate, que cerca
+     * amb la data pelada, no la trobaria i violaria la restricció UNIQUE(pla_id, data).
+     */
+    private function upsertValor(int $plaId, string $data, float $valorParticipacio): ValorPlaPensions
+    {
+        $valor = ValorPlaPensions::where('pla_id', $plaId)->whereDate('data', $data)->first()
+            ?? new ValorPlaPensions(['pla_id' => $plaId, 'data' => $data]);
+        $valor->valor_participacio = $valorParticipacio;
+        $valor->save();
+        return $valor;
+    }
+
+    /** Importa una llista de valors en bloc (des de la posició enganxada). */
+    public function importValors(\Illuminate\Http\Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'pla_id'                      => ['required', 'integer', 'exists:g_pp_plans,id'],
+            'valors'                      => ['required', 'array', 'min:1'],
+            'valors.*.data'               => ['required', 'date'],
+            'valors.*.valor_participacio' => ['required', 'numeric', 'min:0.000001'],
+        ]);
+
+        $desats = [];
+        foreach ($data['valors'] as $v) {
+            $desats[] = $this->formatValor($this->upsertValor($data['pla_id'], $v['data'], (float) $v['valor_participacio']));
+        }
+
+        return response()->json(['valors' => $desats]);
+    }
+
+    /**
+     * Analitza un snapshot de saldos de Caixa d'Enginyers i el casa amb els plans pel compte.
+     * Format per línia:  <compte>  <producte>  <saldo> EUR  <disponible>
+     * El valor/participació surt de: saldo ÷ participacions del contracte.
+     */
+    public function parseSnapshotImport(\Illuminate\Http\Request $request): JsonResponse
+    {
+        $text = (string) $request->input('text', '');
+        $data = $request->input('data') ?: now()->toDateString();
+
+        // Mapa: compte normalitzat → contracte (amb participacions i pla).
+        $mapa = ContractePlaPensions::with('compteCorrent', 'aportacions', 'pla')->get()
+            ->filter(fn($c) => $c->compteCorrent)
+            ->keyBy(fn($c) => $this->normalitzaCompte($c->compteCorrent->compte_corrent));
+
+        $rows = [];
+        $index = [];   // pla_id → posició a $rows (per deduplicar)
+
+        foreach (preg_split('/\r\n|\r|\n/', $text) as $line) {
+            $line = trim($line);
+            if ($line === '' || !preg_match('/^(\d{4}\s\d{4}\s\d{2}\s\d+)[\s\t]+(.+?)[\s\t]+([\d.]+,\d+)\s*EUR/i', $line, $m)) {
+                continue;
+            }
+            $compte   = $m[1];
+            $producte = trim($m[2]);
+            $saldo    = $this->parseNumberCE($m[3]);
+            $contracte = $mapa->get($this->normalitzaCompte($compte));
+
+            if (!$contracte) {
+                $rows[] = [
+                    'compte' => $compte, 'producte' => $producte, 'saldo' => $saldo,
+                    'pla_id' => null, 'pla_nom' => null, 'participacions' => null,
+                    'valor_participacio' => null, 'reconegut' => false, 'conflicte' => false,
+                ];
+                continue;
+            }
+
+            $part  = (float) $contracte->aportacions->sum(fn($a) => (float) $a->participacions);
+            $valor = $part > 0 ? round($saldo / $part, 6) : null;
+            $plaId = $contracte->pla_id;
+
+            if (isset($index[$plaId])) {
+                // Dos comptes del mateix pla: mateix valor és redundant, diferent és conflicte.
+                $prev = &$rows[$index[$plaId]];
+                if ($valor !== null && $prev['valor_participacio'] !== null
+                    && abs($prev['valor_participacio'] - $valor) > 1e-6) {
+                    $prev['conflicte'] = true;
+                }
+                unset($prev);
+                continue;
+            }
+
+            $index[$plaId] = count($rows);
+            $rows[] = [
+                'compte' => $compte, 'producte' => $producte, 'saldo' => $saldo,
+                'pla_id' => $plaId, 'pla_nom' => $contracte->pla->nom, 'participacions' => round($part, 6),
+                'valor_participacio' => $valor, 'reconegut' => $valor !== null, 'conflicte' => false,
+            ];
+        }
+
+        return response()->json([
+            'data'  => $data,
+            'rows'  => $rows,
+            'resum' => [
+                'reconeguts'    => count(array_filter($rows, fn($r) => $r['reconegut'])),
+                'no_reconeguts' => count(array_filter($rows, fn($r) => !$r['reconegut'])),
+            ],
+        ]);
+    }
+
+    /** Desa els valors confirmats del snapshot (una data per pla). */
+    public function storeSnapshotImport(\Illuminate\Http\Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'valors'                      => ['required', 'array', 'min:1'],
+            'valors.*.pla_id'             => ['required', 'integer', 'exists:g_pp_plans,id'],
+            'valors.*.data'               => ['required', 'date'],
+            'valors.*.valor_participacio' => ['required', 'numeric', 'min:0.000001'],
+        ]);
+
+        $desats = [];
+        foreach ($data['valors'] as $v) {
+            $desats[] = $this->formatValor($this->upsertValor((int) $v['pla_id'], $v['data'], (float) $v['valor_participacio']));
+        }
+
+        return response()->json(['valors' => $desats]);
+    }
+
+    private function normalitzaCompte(?string $compte): string
+    {
+        return preg_replace('/\s+/', '', (string) $compte);
+    }
+
+    /** "11.186,83" (format espanyol) → 11186.83. */
+    private function parseNumberCE(string $raw): float
+    {
+        $clean = str_replace(['€', ' ', 'EUR'], '', $raw);
+        $clean = str_replace('.', '', $clean);
+        $clean = str_replace(',', '.', $clean);
+        return (float) $clean;
     }
 
     public function updateValor(ValorPlaPensionsRequest $request, ValorPlaPensions $valor): JsonResponse

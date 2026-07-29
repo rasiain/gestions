@@ -621,6 +621,189 @@ const deleteValor = async (v: ValorParticipacio) => {
     recalcPla(pla);
 };
 
+// === IMPORTACIÓ DE VALORS EN BLOC (paste) ===
+// Enganxa una llista "data valor" (una per línia). En mode "total", cada xifra és la
+// valoració total del pla i es divideix per les participacions per obtenir el valor/participació.
+const showImportValorsModal = ref(false);
+const importPlaId = ref(0);
+const importText = ref('');
+const importMode = ref<'unitari' | 'total'>('unitari');
+const importParticipacions = ref('');
+const importError = ref<string | null>(null);
+const importSaving = ref(false);
+
+const parseDataImport = (s: string): string | null => {
+    const m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
+    if (!m) return null;
+    let year = parseInt(m[3], 10);
+    if (year < 100) year += 2000;
+    return `${year}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+};
+const parseNumImport = (s: string): number | null => {
+    const n = parseFloat(s.replace(/\s/g, '').replace(/\./g, '').replace(',', '.'));
+    return isNaN(n) ? null : n;
+};
+
+// Parseja el text i, si escau, aplica la divisió per participacions.
+const importValorsResult = computed(() => {
+    const lines = importText.value.split(/\r\n|\r|\n/).map(l => l.trim()).filter(Boolean);
+    const part = parseFloat(importParticipacions.value.replace(',', '.')) || 0;
+    const rows: { data: string; brut: number; valor: number }[] = [];
+    let invalids = 0;
+    for (const line of lines) {
+        const toks = line.split(/\s+/);
+        if (toks.length < 2) { invalids++; continue; }
+        const data = parseDataImport(toks[0]);
+        const brut = parseNumImport(toks[toks.length - 1]);
+        if (!data || brut === null) { invalids++; continue; }
+        const valor = importMode.value === 'total' ? (part > 0 ? brut / part : NaN) : brut;
+        if (!isFinite(valor) || valor <= 0) { invalids++; continue; }
+        rows.push({ data, brut, valor: Math.round(valor * 1e6) / 1e6 });
+    }
+    return { rows, invalids };
+});
+
+// Participacions totals actuals del pla (suma de totes les aportacions), per pre-omplir el divisor.
+const participacionsTotalsPla = (plaId: number): number => {
+    const pla = plaList.value.find(p => p.id === plaId);
+    if (!pla) return 0;
+    return pla.contractes.flatMap(c => c.aportacions).reduce((s, a) => s + Number(a.participacions), 0);
+};
+
+const openImportValors = (plaId: number) => {
+    importPlaId.value = plaId;
+    importText.value = '';
+    importMode.value = 'unitari';
+    const part = participacionsTotalsPla(plaId);
+    importParticipacions.value = part > 0 ? String(Math.round(part * 1e6) / 1e6) : '';
+    importError.value = null;
+    showImportValorsModal.value = true;
+};
+const closeImportValors = () => { showImportValorsModal.value = false; };
+
+const submitImportValors = async () => {
+    const { rows } = importValorsResult.value;
+    if (!rows.length) { importError.value = 'No hi ha cap fila vàlida per importar.'; return; }
+    if (importMode.value === 'total' && !(parseFloat(importParticipacions.value.replace(',', '.')) > 0)) {
+        importError.value = 'Indica el nombre de participacions per dividir.';
+        return;
+    }
+    importSaving.value = true; importError.value = null;
+    try {
+        const res = await fetch('/plans-pensions/valors/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
+            body: JSON.stringify({
+                pla_id: importPlaId.value,
+                valors: rows.map(r => ({ data: r.data, valor_participacio: r.valor })),
+            }),
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            importError.value = Object.values(err.errors ?? {}).flat().join(' ') || 'Error desconegut.';
+            return;
+        }
+        const { valors } = await res.json() as { valors: ValorParticipacio[] };
+        const pla = getPla(importPlaId.value);
+        for (const saved of valors) {
+            const idx = pla.valors.findIndex(v => v.id === saved.id);
+            if (idx !== -1) pla.valors[idx] = saved; else pla.valors.push(saved);
+        }
+        pla.valors.sort((a, b) => b.data.localeCompare(a.data));
+        recalcPla(pla);
+        closeImportValors();
+    } finally { importSaving.value = false; }
+};
+
+// === IMPORTACIÓ DE SALDOS / SNAPSHOT (Caixa d'Enginyers) ===
+// Enganxa "compte · producte · saldo EUR". Casa cada línia amb un pla pel compte i
+// registra el valor/participació (saldo ÷ participacions del compte) a la data triada.
+interface SnapshotRow {
+    compte: string;
+    producte: string;
+    saldo: number;
+    pla_id: number | null;
+    pla_nom: string | null;
+    participacions: number | null;
+    valor_participacio: number | null;
+    reconegut: boolean;
+    conflicte: boolean;
+}
+const showSnapshotModal = ref(false);
+const snapshotText = ref('');
+const snapshotData = ref(new Date().toISOString().slice(0, 10));
+const snapshotRows = ref<SnapshotRow[]>([]);
+const snapshotResum = ref<{ reconeguts: number; no_reconeguts: number } | null>(null);
+const snapshotParsed = ref(false);
+const snapshotParsing = ref(false);
+const snapshotSaving = ref(false);
+const snapshotError = ref<string | null>(null);
+
+const snapshotSeleccionats = computed(() => snapshotRows.value.filter(r => r.reconegut));
+
+const openSnapshot = () => {
+    snapshotText.value = '';
+    snapshotData.value = new Date().toISOString().slice(0, 10);
+    snapshotRows.value = []; snapshotResum.value = null;
+    snapshotParsed.value = false; snapshotError.value = null;
+    showSnapshotModal.value = true;
+};
+const closeSnapshot = () => { showSnapshotModal.value = false; };
+
+const parseSnapshot = async () => {
+    snapshotParsing.value = true; snapshotError.value = null;
+    try {
+        const res = await fetch('/plans-pensions/valors/snapshot/parse', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
+            body: JSON.stringify({ text: snapshotText.value, data: snapshotData.value }),
+        });
+        if (!res.ok) {
+            snapshotError.value = res.status === 419
+                ? 'La sessió ha caducat. Recarrega la pàgina (F5) i torna-ho a provar.'
+                : `No s'ha pogut analitzar el text (error ${res.status}).`;
+            return;
+        }
+        const data = await res.json();
+        snapshotRows.value = data.rows as SnapshotRow[];
+        snapshotResum.value = data.resum;
+        snapshotParsed.value = true;
+        if (!snapshotSeleccionats.value.length) snapshotError.value = "No s'ha reconegut cap pla pel número de compte.";
+    } catch (e) {
+        snapshotError.value = `Error de xarxa: ${e instanceof Error ? e.message : e}`;
+    } finally { snapshotParsing.value = false; }
+};
+
+const submitSnapshot = async () => {
+    const rows = snapshotSeleccionats.value;
+    if (!rows.length) return;
+    snapshotSaving.value = true; snapshotError.value = null;
+    try {
+        const res = await fetch('/plans-pensions/valors/snapshot', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
+            body: JSON.stringify({
+                valors: rows.map(r => ({ pla_id: r.pla_id, data: snapshotData.value, valor_participacio: r.valor_participacio })),
+            }),
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            snapshotError.value = Object.values(err.errors ?? {}).flat().join(' ') || `Error en desar (${res.status}).`;
+            return;
+        }
+        const { valors } = await res.json() as { valors: ValorParticipacio[] };
+        for (const saved of valors) {
+            const pla = getPla(saved.pla_id);
+            if (!pla) continue;
+            const idx = pla.valors.findIndex(v => v.id === saved.id);
+            if (idx !== -1) pla.valors[idx] = saved; else pla.valors.push(saved);
+            pla.valors.sort((a, b) => b.data.localeCompare(a.data));
+            recalcPla(pla);
+        }
+        closeSnapshot();
+    } finally { snapshotSaving.value = false; }
+};
+
 // === APORTACIONS CRUD (fetch) ===
 const showAportacioModal = ref(false);
 const isEditingAportacio = ref(false);
@@ -786,10 +969,15 @@ const recalcPla = (pla: Pla) => {
                                 <h3 class="text-lg font-medium">Plans de Pensions</h3>
                                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">Catàleg de plans amb els seus contractes, aportacions i rendibilitat</p>
                             </div>
-                            <button @click="openCreatePla" class="inline-flex items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700">
-                                <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-                                Nou Pla
-                            </button>
+                            <div class="flex gap-2">
+                                <button @click="openSnapshot" class="inline-flex items-center rounded-md border border-emerald-600 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20">
+                                    Importa saldos (C. Enginyers)
+                                </button>
+                                <button @click="openCreatePla" class="inline-flex items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700">
+                                    <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                                    Nou Pla
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Gràfiques -->
@@ -903,7 +1091,10 @@ const recalcPla = (pla: Pla) => {
                                             </button>
                                         </nav>
                                         <button v-if="plaTab[p.id] === 'contractes'" @click.stop="openCreateContracte(p.id)" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700">+ Nou contracte</button>
-                                        <button v-if="plaTab[p.id] === 'valors'" @click.stop="openCreateValor(p.id)" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700">+ Nou valor</button>
+                                        <div v-if="plaTab[p.id] === 'valors'" class="flex gap-2">
+                                            <button @click.stop="openImportValors(p.id)" class="rounded-md border border-emerald-600 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20">Importa valors</button>
+                                            <button @click.stop="openCreateValor(p.id)" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700">+ Nou valor</button>
+                                        </div>
                                     </div>
 
                                     <!-- Tab: Valors -->
@@ -1244,6 +1435,154 @@ const recalcPla = (pla: Pla) => {
                             <button type="button" @click="closeValorModal" class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 sm:ml-3 sm:mt-0 sm:w-auto sm:text-sm">Cancel·lar</button>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL: IMPORTA VALORS -->
+        <div v-if="showImportValorsModal" class="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
+            <div class="flex min-h-screen items-end justify-center px-4 pb-20 pt-4 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75" @click="closeImportValors"></div>
+                <span class="hidden sm:inline-block sm:h-screen sm:align-middle">&#8203;</span>
+                <div class="inline-block transform overflow-hidden rounded-lg bg-white text-left align-bottom shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl sm:align-middle dark:bg-gray-800">
+                    <div class="bg-white px-4 pb-4 pt-5 sm:p-6 dark:bg-gray-800">
+                        <h3 class="mb-4 text-lg font-medium text-gray-900 dark:text-gray-100">Importa valors</h3>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Enganxa la llista (una línia per data)</label>
+                                <p class="mb-1 text-xs text-gray-500 dark:text-gray-400">Format: <code>data valor</code> — p. ex. <code>1/10/16&nbsp;&nbsp;1364,82</code></p>
+                                <textarea v-model="importText" rows="6" class="w-full rounded-md border-gray-300 font-mono text-xs shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" placeholder="1/10/16    1364,82&#10;6/11/16    1351,91&#10;..."></textarea>
+                            </div>
+
+                            <div>
+                                <span class="block text-sm font-medium text-gray-700 dark:text-gray-300">Què representen les xifres?</span>
+                                <div class="mt-1 space-y-1">
+                                    <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                        <input type="radio" value="unitari" v-model="importMode" /> Valor per participació (directe)
+                                    </label>
+                                    <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                        <input type="radio" value="total" v-model="importMode" /> Valoració total del pla (dividir per participacions)
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div v-if="importMode === 'total'">
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre de participacions</label>
+                                <input v-model="importParticipacions" type="text" inputmode="decimal" class="mt-1 w-48 rounded-md border-gray-300 shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" placeholder="86,382524" />
+                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Cada valoració es dividirà per aquest nombre. Pre-omplert amb les participacions de les aportacions del pla.</p>
+                            </div>
+
+                            <!-- Previsualització -->
+                            <div v-if="importText.trim()" class="rounded-md border border-gray-200 p-3 text-sm dark:border-gray-600">
+                                <div class="mb-2 flex flex-wrap gap-x-4 gap-y-1">
+                                    <span class="text-gray-700 dark:text-gray-300"><strong>{{ importValorsResult.rows.length }}</strong> vàlides</span>
+                                    <span v-if="importValorsResult.invalids > 0" class="text-amber-600 dark:text-amber-400"><strong>{{ importValorsResult.invalids }}</strong> ignorades</span>
+                                </div>
+                                <div v-if="importValorsResult.rows.length" class="max-h-48 overflow-y-auto">
+                                    <table class="w-full text-xs">
+                                        <thead class="text-gray-500 dark:text-gray-400">
+                                            <tr>
+                                                <th class="py-1 text-left font-medium">Data</th>
+                                                <th v-if="importMode === 'total'" class="py-1 text-right font-medium">Valoració total</th>
+                                                <th class="py-1 text-right font-medium">Valor/participació</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="font-mono">
+                                            <tr v-for="r in importValorsResult.rows" :key="r.data" class="border-t border-gray-100 dark:border-gray-700">
+                                                <td class="py-0.5">{{ r.data }}</td>
+                                                <td v-if="importMode === 'total'" class="py-0.5 text-right text-gray-500 dark:text-gray-400">{{ formatEur(r.brut) }}</td>
+                                                <td class="py-0.5 text-right">{{ formatNum(r.valor, 6) }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <p v-if="importError" class="text-sm text-red-600 dark:text-red-400">{{ importError }}</p>
+                        </div>
+
+                        <div class="mt-5 sm:mt-6 sm:flex sm:flex-row-reverse">
+                            <button type="button" @click="submitImportValors" :disabled="importSaving || !importValorsResult.rows.length" class="inline-flex w-full justify-center rounded-md bg-emerald-600 px-4 py-2 text-base font-medium text-white hover:bg-emerald-700 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm">
+                                {{ importSaving ? 'Important…' : `Importa ${importValorsResult.rows.length} valors` }}
+                            </button>
+                            <button type="button" @click="closeImportValors" class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 sm:mt-0 sm:w-auto sm:text-sm">Cancel·lar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL: IMPORTA SALDOS / SNAPSHOT (Caixa d'Enginyers) -->
+        <div v-if="showSnapshotModal" class="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
+            <div class="flex min-h-screen items-end justify-center px-4 pb-20 pt-4 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75" @click="closeSnapshot"></div>
+                <span class="hidden sm:inline-block sm:h-screen sm:align-middle">&#8203;</span>
+                <div class="inline-block transform overflow-hidden rounded-lg bg-white text-left align-bottom shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-3xl sm:align-middle dark:bg-gray-800">
+                    <div class="bg-white px-4 pb-4 pt-5 sm:p-6 dark:bg-gray-800">
+                        <h3 class="mb-1 text-lg font-medium text-gray-900 dark:text-gray-100">Importa saldos (Caixa d'Enginyers)</h3>
+                        <p class="mb-4 text-xs text-gray-500 dark:text-gray-400">Enganxa la taula de saldos. Cada línia es casa amb un pla pel número de compte i el saldo es converteix a valor/participació.</p>
+
+                        <div class="space-y-4">
+                            <div class="flex flex-wrap items-end gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Data del saldo</label>
+                                    <input v-model="snapshotData" type="date" class="mt-1 rounded-md border-gray-300 shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Text enganxat</label>
+                                <textarea v-model="snapshotText" rows="5" class="w-full rounded-md border-gray-300 font-mono text-xs shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" placeholder="3025 0016 10 8890061861    CE GLOB. SUSTAINABIL    11.186,83 EUR    ---"></textarea>
+                            </div>
+
+                            <div v-if="!snapshotParsed">
+                                <button type="button" @click="parseSnapshot" :disabled="snapshotParsing || !snapshotText.trim()" class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+                                    {{ snapshotParsing ? 'Analitzant…' : 'Analitza' }}
+                                </button>
+                            </div>
+
+                            <!-- Previsualització -->
+                            <div v-if="snapshotParsed" class="rounded-md border border-gray-200 p-3 dark:border-gray-600">
+                                <div v-if="snapshotResum" class="mb-2 flex flex-wrap gap-x-4 text-sm">
+                                    <span class="text-emerald-700 dark:text-emerald-400"><strong>{{ snapshotResum.reconeguts }}</strong> reconeguts</span>
+                                    <span v-if="snapshotResum.no_reconeguts > 0" class="text-amber-600 dark:text-amber-400"><strong>{{ snapshotResum.no_reconeguts }}</strong> no reconeguts</span>
+                                </div>
+                                <div class="max-h-64 overflow-y-auto">
+                                    <table class="w-full text-xs">
+                                        <thead class="text-gray-500 dark:text-gray-400">
+                                            <tr>
+                                                <th class="py-1 text-left font-medium">Pla / compte</th>
+                                                <th class="py-1 text-right font-medium">Saldo</th>
+                                                <th class="py-1 text-right font-medium">Participacions</th>
+                                                <th class="py-1 text-right font-medium">Valor/part.</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="r in snapshotRows" :key="r.compte" class="border-t border-gray-100 dark:border-gray-700" :class="{ 'opacity-50': !r.reconegut }">
+                                                <td class="py-1">
+                                                    <div class="font-medium text-gray-800 dark:text-gray-200">{{ r.pla_nom ?? r.producte }}</div>
+                                                    <div class="font-mono text-gray-400">{{ r.compte }}</div>
+                                                    <div v-if="!r.reconegut" class="text-amber-600 dark:text-amber-400">Compte no trobat en cap pla</div>
+                                                </td>
+                                                <td class="py-1 text-right font-mono">{{ formatEur(r.saldo) }}</td>
+                                                <td class="py-1 text-right font-mono text-gray-500 dark:text-gray-400">{{ r.participacions !== null ? formatNum(r.participacions, 6) : '—' }}</td>
+                                                <td class="py-1 text-right font-mono">{{ r.valor_participacio !== null ? formatNum(r.valor_participacio, 6) : '—' }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <p v-if="snapshotError" class="text-sm text-red-600 dark:text-red-400">{{ snapshotError }}</p>
+                        </div>
+
+                        <div class="mt-5 sm:mt-6 sm:flex sm:flex-row-reverse">
+                            <button v-if="snapshotParsed" type="button" @click="submitSnapshot" :disabled="snapshotSaving || !snapshotSeleccionats.length" class="inline-flex w-full justify-center rounded-md bg-emerald-600 px-4 py-2 text-base font-medium text-white hover:bg-emerald-700 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm">
+                                {{ snapshotSaving ? 'Desant…' : `Desa ${snapshotSeleccionats.length} valors` }}
+                            </button>
+                            <button type="button" @click="closeSnapshot" class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 sm:mt-0 sm:w-auto sm:text-sm">Cancel·lar</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

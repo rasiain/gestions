@@ -656,12 +656,19 @@ const parseImport = async () => {
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
             body: JSON.stringify({ text: importText.value }),
         });
-        if (!res.ok) { importError.value = "No s'ha pogut analitzar el text."; return; }
+        if (!res.ok) {
+            importError.value = res.status === 419
+                ? 'La sessió ha caducat. Recarrega la pàgina (F5) i torna-ho a provar.'
+                : `No s'ha pogut analitzar el text (error ${res.status}).`;
+            return;
+        }
         const data = await res.json();
         importRows.value = (data.rows as ImportRow[]).map(r => ({ ...r, incloure: r.reconegut }));
         importResum.value = data.resum;
         importParsed.value = true;
         if (!importRows.value.length) importError.value = "No s'ha reconegut cap fons al text enganxat.";
+    } catch (e) {
+        importError.value = `Error de xarxa en analitzar el text: ${e instanceof Error ? e.message : e}`;
     } finally { importParsing.value = false; }
 };
 
