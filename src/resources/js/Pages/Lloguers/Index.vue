@@ -782,6 +782,20 @@ const altreLloguerNom = (moviment: Moviment): string => {
     return props.lloguers.find(l => l.id === id)?.nom ?? 'Altre lloguer';
 };
 
+// Ingrés d'un altre lloguer del compte compartit, però encara no d'aquest lloguer.
+// A diferència de les despeses (exclusives), un ingrés es pot repartir: aquí SÍ es pot
+// afegir la part d'aquest lloguer (el modal ja resta l'ingrés de l'altre a la reconciliació).
+const ingresAltreLloguerCompartit = (moviment: Moviment): boolean => {
+    if (classificacioThisLloguer(moviment)) return false;
+    if (moviment.despesa) return false; // despesa d'un altre lloguer: exclusiva, no es reparteix
+    return moviment.ingressos.some(i => i.lloguer_id !== selectedLloguerId.value);
+};
+
+// Fila realment bloquejada (atenuada i no interactiva): classificació d'un altre lloguer que
+// NO es pot repartir. L'ingrés compartit queda fora perquè hi ha d'haver el botó d'afegir-hi.
+const classificacioBloquejada = (moviment: Moviment): boolean =>
+    classificacioAltresLloguer(moviment) && !ingresAltreLloguerCompartit(moviment);
+
 const classificacioLabel = (moviment: Moviment): string => {
     if (moviment.despesa?.lloguer_id === selectedLloguerId.value) {
         const catLabel = categoriesDespesa.find(c => c.value === moviment.despesa!.categoria)?.label ?? moviment.despesa.categoria ?? 'Despesa';
@@ -1835,7 +1849,7 @@ const formatCurrency = (value: string | null): string => {
                                         :key="moviment.id"
                                         class="transition-colors"
                                         :class="[
-                                            classificacioAltresLloguer(moviment)
+                                            classificacioBloquejada(moviment)
                                                 ? 'opacity-50 pointer-events-none select-none bg-gray-100 dark:bg-gray-900/60'
                                                 : moviment.exclou_lloguer
                                                     ? 'opacity-40'
@@ -1929,6 +1943,14 @@ const formatCurrency = (value: string | null): string => {
                                                     </span>
                                                     <button @click.stop="openClassificacioModal(moviment)" class="text-xs text-amber-600 hover:text-amber-900 dark:text-amber-400">Editar</button>
                                                     <button @click.stop="deleteClassificacio(moviment)" class="text-xs text-red-500 hover:text-red-800 dark:text-red-400">✕</button>
+                                                </div>
+                                            </template>
+                                            <template v-else-if="ingresAltreLloguerCompartit(moviment)">
+                                                <div class="flex items-center gap-2">
+                                                    <span class="inline-flex items-center rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-700 dark:text-gray-400 italic" :title="`Ingrés compartit amb el lloguer ${altreLloguerNom(moviment)}`">
+                                                        → {{ altreLloguerNom(moviment) }}
+                                                    </span>
+                                                    <button @click.stop="openClassificacioModal(moviment)" class="text-xs text-amber-600 hover:text-amber-900 dark:text-amber-400">+ Afegir la part d'aquest lloguer</button>
                                                 </div>
                                             </template>
                                             <template v-else-if="classificacioAltresLloguer(moviment)">
