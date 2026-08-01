@@ -4,7 +4,8 @@ import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref, watch, nextTick, onUnmounted, computed } from 'vue';
 import { Chart, registerables } from 'chart.js';
 import 'chartjs-adapter-date-fns';
-Chart.register(...registerables);
+import zoomPlugin from 'chartjs-plugin-zoom';
+Chart.register(...registerables, zoomPlugin);
 
 interface CompteFonsInversio {
     id: number;
@@ -160,6 +161,20 @@ const chartValorRef = ref<HTMLCanvasElement | null>(null);
 const chartRendRefs: Record<number, HTMLCanvasElement | null> = {};
 let chartValorInstance: Chart | null = null;
 const chartRendInstances: Record<number, Chart> = {};
+
+// Zoom als gràfics d'evolució: arrossega per ampliar una zona (eix temporal) o roda del ratolí.
+const valorZoomActiu = ref(false);
+const makeZoom = (onZoomed?: () => void) => ({
+    zoom: {
+        wheel: { enabled: true },
+        drag: { enabled: true, backgroundColor: 'rgba(16,185,129,0.15)', borderColor: 'rgba(16,185,129,0.5)', borderWidth: 1 },
+        mode: 'x' as const,
+        onZoomComplete: onZoomed,
+    },
+    pan: { enabled: false },
+});
+const resetValorZoom = () => { (chartValorInstance as any)?.resetZoom(); valorZoomActiu.value = false; };
+const resetRendZoom = (id: number) => { (chartRendInstances[id] as any)?.resetZoom(); };
 
 const CHART_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444'];
 const APORT_COLORS  = ['#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#84cc16', '#f97316', '#ec4899'];
@@ -331,6 +346,7 @@ function buildCharts() {
         // === Gràfic 1: Valor total + capital invertit ===
         if (chartValorRef.value) {
             chartValorInstance?.destroy();
+            valorZoomActiu.value = false;
             chartValorInstance = new Chart(chartValorRef.value, {
                 type: 'line',
                 data: {
@@ -357,6 +373,7 @@ function buildCharts() {
                     responsive: true, maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
                     plugins: {
+                        zoom: makeZoom(() => { valorZoomActiu.value = true; }),
                         legend: { position: 'top' },
                         tooltip: { callbacks: {
                             title: (items: any) => {
@@ -430,6 +447,7 @@ function buildCharts() {
                     responsive: true, maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
                     plugins: {
+                        zoom: makeZoom(),
                         legend: { position: 'top', labels: { boxWidth: 16, padding: 10 } },
                         tooltip: { callbacks: {
                             title: (items: any) => {
@@ -905,10 +923,13 @@ const recalcFons = (fons: Fons) => {
                             </div>
                             <div v-if="showGrafiques" class="space-y-8 border-t border-gray-200 p-6 dark:border-gray-700">
                                 <div>
-                                    <h4 class="mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">Valor de cartera i capital invertit</h4>
-                                    <p class="mb-3 text-xs text-gray-400">Els punts taronges marquen les aportacions.</p>
+                                    <div class="mb-1 flex items-center justify-between">
+                                        <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">Valor de cartera i capital invertit</h4>
+                                        <button v-if="valorZoomActiu" @click="resetValorZoom" class="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">Reinicia zoom</button>
+                                    </div>
+                                    <p class="mb-3 text-xs text-gray-400">Els punts taronges marquen les aportacions. Arrossega sobre el gràfic per ampliar una zona; doble clic per desfer.</p>
                                     <div class="relative rounded-md bg-white" style="height:300px">
-                                        <canvas ref="chartValorRef"></canvas>
+                                        <canvas ref="chartValorRef" @dblclick="resetValorZoom"></canvas>
                                     </div>
                                 </div>
                                 <div v-for="f in fonsList" :key="f.id" class="border-t border-gray-100 pt-4 dark:border-gray-700">
@@ -916,7 +937,7 @@ const recalcFons = (fons: Fons) => {
                                         Rendibilitat per aportació — <span class="font-semibold">{{ f.nom }}</span>
                                     </h4>
                                     <div class="relative rounded-md bg-white" style="height:280px">
-                                        <canvas :ref="el => { chartRendRefs[f.id] = el as HTMLCanvasElement | null }"></canvas>
+                                        <canvas :ref="el => { chartRendRefs[f.id] = el as HTMLCanvasElement | null }" @dblclick="resetRendZoom(f.id)"></canvas>
                                     </div>
                                 </div>
                             </div>
