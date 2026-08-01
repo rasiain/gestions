@@ -1446,7 +1446,7 @@ const recalcFons = (fons: Fons) => {
                                                 <div v-if="!r.reconegut" class="text-xs text-amber-600">Cap contracte amb aquest compte</div>
                                             </td>
                                             <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ r.data }}</td>
-                                            <td class="px-3 py-2 text-right font-mono">{{ formatNum(r.valor_participacio, 6) }}</td>
+                                            <td class="px-3 py-2 text-right font-mono text-gray-900 dark:text-gray-100">{{ formatNum(r.valor_participacio, 6) }}</td>
                                         </tr>
                                     </tbody>
                                 </table>
