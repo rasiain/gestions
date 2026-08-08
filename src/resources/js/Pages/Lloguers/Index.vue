@@ -733,28 +733,26 @@ const categoriesIngresLinia = [
     { value: 'comissions', label: 'Comissions bancàries' },
 ];
 
-const ingresNoQuadra = (moviment: Moviment): boolean => {
-    const ingresLloguer = moviment.ingressos.find(i => i.lloguer_id === selectedLloguerId.value);
-    if (!ingresLloguer) return false;
-    // Suma de tots els ingressos del moviment
-    const sumaTotal = moviment.ingressos.reduce((s, ingres) => {
+// Suma neta (base − línies) de tots els ingressos classificats al moviment, de qualsevol lloguer.
+const sumaIngressosNet = (moviment: Moviment): number =>
+    moviment.ingressos.reduce((s, ingres) => {
         const base = parseFloat(ingres.base_lloguer) || 0;
         const linies = ingres.linies.reduce((ls, l) => ls + (parseFloat(l.import) || 0), 0);
         return s + (base - linies);
     }, 0);
-    const importBanc = parseFloat(moviment.import);
-    return parseFloat(sumaTotal.toFixed(2)) !== parseFloat(importBanc.toFixed(2));
+
+// La suma dels ingressos ja iguala l'import del banc (el moviment queda completament repartit).
+const ingresQuadraTotal = (moviment: Moviment): boolean =>
+    parseFloat(sumaIngressosNet(moviment).toFixed(2)) === parseFloat(parseFloat(moviment.import).toFixed(2));
+
+const ingresNoQuadra = (moviment: Moviment): boolean => {
+    if (!moviment.ingressos.find(i => i.lloguer_id === selectedLloguerId.value)) return false;
+    return !ingresQuadraTotal(moviment);
 };
 
 const ingresParcial = (moviment: Moviment): boolean => {
     if (!moviment.ingressos.find(i => i.lloguer_id === selectedLloguerId.value)) return false;
-    const sumaTotal = moviment.ingressos.reduce((s, ingres) => {
-        const base = parseFloat(ingres.base_lloguer) || 0;
-        const linies = ingres.linies.reduce((ls, l) => ls + (parseFloat(l.import) || 0), 0);
-        return s + (base - linies);
-    }, 0);
-    const importBanc = parseFloat(moviment.import);
-    return parseFloat(sumaTotal.toFixed(2)) < parseFloat(importBanc.toFixed(2));
+    return parseFloat(sumaIngressosNet(moviment).toFixed(2)) < parseFloat(parseFloat(moviment.import).toFixed(2));
 };
 
 const classificacioThisLloguer = (moviment: Moviment) => {
@@ -783,18 +781,24 @@ const altreLloguerNom = (moviment: Moviment): string => {
 };
 
 // Ingrés d'un altre lloguer del compte compartit, però encara no d'aquest lloguer.
-// A diferència de les despeses (exclusives), un ingrés es pot repartir: aquí SÍ es pot
-// afegir la part d'aquest lloguer (el modal ja resta l'ingrés de l'altre a la reconciliació).
+// A diferència de les despeses (exclusives), un ingrés es pot repartir.
 const ingresAltreLloguerCompartit = (moviment: Moviment): boolean => {
     if (classificacioThisLloguer(moviment)) return false;
     if (moviment.despesa) return false; // despesa d'un altre lloguer: exclusiva, no es reparteix
     return moviment.ingressos.some(i => i.lloguer_id !== selectedLloguerId.value);
 };
 
-// Fila realment bloquejada (atenuada i no interactiva): classificació d'un altre lloguer que
-// NO es pot repartir. L'ingrés compartit queda fora perquè hi ha d'haver el botó d'afegir-hi.
+// Queda una part d'aquest ingrés compartit per assignar a aquest lloguer: la suma dels
+// ingressos de l'altre lloguer encara no cobreix l'import del banc. Aquí SÍ té sentit el botó
+// "+ Afegir la part d'aquest lloguer" (el modal resta l'ingrés de l'altre a la reconciliació).
+// Si ja quadra, el moviment és íntegrament de l'altre lloguer i es mostra com a resolt.
+const ingresCompartitPendent = (moviment: Moviment): boolean =>
+    ingresAltreLloguerCompartit(moviment) && !ingresQuadraTotal(moviment);
+
+// Fila resolta d'un altre lloguer (atenuada i no interactiva): despesa exclusiva o ingrés
+// compartit que ja quadra sense aquest lloguer. Només queda oberta si hi ha part pendent.
 const classificacioBloquejada = (moviment: Moviment): boolean =>
-    classificacioAltresLloguer(moviment) && !ingresAltreLloguerCompartit(moviment);
+    classificacioAltresLloguer(moviment) && !ingresCompartitPendent(moviment);
 
 const classificacioLabel = (moviment: Moviment): string => {
     if (moviment.despesa?.lloguer_id === selectedLloguerId.value) {
@@ -1945,7 +1949,7 @@ const formatCurrency = (value: string | null): string => {
                                                     <button @click.stop="deleteClassificacio(moviment)" class="text-xs text-red-500 hover:text-red-800 dark:text-red-400">✕</button>
                                                 </div>
                                             </template>
-                                            <template v-else-if="ingresAltreLloguerCompartit(moviment)">
+                                            <template v-else-if="ingresCompartitPendent(moviment)">
                                                 <div class="flex items-center gap-2">
                                                     <span class="inline-flex items-center rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-700 dark:text-gray-400 italic" :title="`Ingrés compartit amb el lloguer ${altreLloguerNom(moviment)}`">
                                                         → {{ altreLloguerNom(moviment) }}
