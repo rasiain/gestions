@@ -245,38 +245,39 @@ function desaEdicio() {
                             <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ grup.immoble }}</h3>
                             <div class="flex gap-6 text-sm">
                                 <span class="text-gray-500 dark:text-gray-400">
-                                    {{ props.anyAnterior }}: <span class="font-medium text-gray-700 dark:text-gray-300">{{ formatEur(grup.total_anterior) }}</span>
+                                    {{ props.anyActual }}: <span class="font-semibold text-gray-900 dark:text-gray-100">{{ formatEur(grup.total_actual) }}</span>
                                 </span>
                                 <span class="text-gray-500 dark:text-gray-400">
-                                    {{ props.anyActual }}: <span class="font-semibold text-gray-900 dark:text-gray-100">{{ formatEur(grup.total_actual) }}</span>
+                                    {{ props.anyAnterior }}: <span class="font-medium text-gray-700 dark:text-gray-300">{{ formatEur(grup.total_anterior) }}</span>
                                 </span>
                             </div>
                         </div>
-                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <!-- table-fixed + amples explícits: les columnes queden alineades entre immobles -->
+                        <table class="min-w-full table-fixed divide-y divide-gray-200 dark:divide-gray-700">
                             <thead class="bg-gray-50 dark:bg-gray-700">
                                 <tr>
-                                    <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Tipus</th>
-                                    <th class="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">{{ props.anyAnterior }}</th>
-                                    <th class="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-900 dark:text-gray-100">{{ props.anyActual }}</th>
-                                    <th class="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Variació</th>
+                                    <th class="w-2/5 px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Tipus</th>
+                                    <th class="w-1/5 px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-900 dark:text-gray-100">{{ props.anyActual }}</th>
+                                    <th class="w-1/5 px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">{{ props.anyAnterior }}</th>
+                                    <th class="w-1/5 px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Variació</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                                 <tr v-for="t in grup.tipus" :key="t.tipus" class="hover:bg-gray-50 dark:hover:bg-gray-700/40">
-                                    <td class="whitespace-nowrap px-4 py-2 text-sm font-medium text-gray-800 dark:text-gray-200">{{ t.tipus }}</td>
-                                    <td
-                                        class="whitespace-nowrap px-4 py-2 text-right text-sm text-gray-600 dark:text-gray-400"
-                                        :class="{ 'cursor-pointer hover:underline': t.moviments_anterior.length > 0 }"
-                                        @click="obreDetall(grup.immoble + ' — ' + t.tipus + ' (' + props.anyAnterior + ')', t.moviments_anterior, t.anterior)"
-                                    >
-                                        {{ formatEur(t.anterior) }}
-                                    </td>
+                                    <td class="truncate px-4 py-2 text-sm font-medium text-gray-800 dark:text-gray-200">{{ t.tipus }}</td>
                                     <td
                                         class="whitespace-nowrap px-4 py-2 text-right text-sm font-medium text-gray-900 dark:text-gray-100"
                                         :class="{ 'cursor-pointer hover:underline': t.moviments_actual.length > 0 }"
                                         @click="obreDetall(grup.immoble + ' — ' + t.tipus + ' (' + props.anyActual + ')', t.moviments_actual, t.actual)"
                                     >
                                         {{ formatEur(t.actual) }}
+                                    </td>
+                                    <td
+                                        class="whitespace-nowrap px-4 py-2 text-right text-sm text-gray-600 dark:text-gray-400"
+                                        :class="{ 'cursor-pointer hover:underline': t.moviments_anterior.length > 0 }"
+                                        @click="obreDetall(grup.immoble + ' — ' + t.tipus + ' (' + props.anyAnterior + ')', t.moviments_anterior, t.anterior)"
+                                    >
+                                        {{ formatEur(t.anterior) }}
                                     </td>
                                     <td class="whitespace-nowrap px-4 py-2 text-right text-xs">
                                         <span
