@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
-import { ref, watch, nextTick, onUnmounted, computed } from 'vue';
+import { ref, watch, nextTick, onMounted, onUnmounted, computed } from 'vue';
 import { Chart, registerables } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 import zoomPlugin from 'chartjs-plugin-zoom';
@@ -98,6 +98,8 @@ interface Props {
     comptesFonsInversio: CompteFonsInversio[];
     entitats: Entitat[];
     persones: Persona[];
+    /** Compte des del qual s'ha arribat: se n'obren les aportacions. */
+    focusCompteId?: number | null;
 }
 
 const props = defineProps<Props>();
@@ -128,6 +130,23 @@ const toggleContracte = (id: number) => {
     if (!contracteTab.value[id]) contracteTab.value[id] = 'aportacions';
     expandedContractes.value = s;
 };
+
+// Arribant des de la llista de comptes: desplega el fons i el contracte
+// d'aquell compte amb les aportacions a la vista.
+onMounted(async () => {
+    if (!props.focusCompteId) return;
+    const fons = fonsList.value.find(f => f.contractes.some(c => c.compte_corrent_id === props.focusCompteId));
+    const contracte = fons?.contractes.find(c => c.compte_corrent_id === props.focusCompteId);
+    if (!fons || !contracte) return;
+
+    expandedFons.value = new Set([fons.id]);
+    fonsTab.value[fons.id] = 'contractes';
+    expandedContractes.value = new Set([contracte.id]);
+    contracteTab.value[contracte.id] = 'aportacions';
+
+    await nextTick();
+    document.getElementById(`contracte-${contracte.id}`)?.scrollIntoView({ block: 'center' });
+});
 
 // --- Format ---
 const formatEur = (v: number | null) =>
@@ -1042,7 +1061,7 @@ const recalcFons = (fons: Fons) => {
                                     <div v-if="fonsTab[f.id] === 'contractes'" class="divide-y divide-gray-100 dark:divide-gray-700">
                                         <p v-if="f.contractes.length === 0" class="p-4 text-sm text-gray-400">Cap contracte registrat.</p>
 
-                                        <div v-for="c in f.contractes" :key="c.id">
+                                        <div v-for="c in f.contractes" :key="c.id" :id="`contracte-${c.id}`">
                                             <!-- Capçalera contracte -->
                                             <div class="flex cursor-pointer select-none items-center justify-between bg-gray-50 px-4 py-3 dark:bg-gray-900/20" @click="toggleContracte(c.id)">
                                                 <div class="flex min-w-0 flex-1 items-center gap-3">

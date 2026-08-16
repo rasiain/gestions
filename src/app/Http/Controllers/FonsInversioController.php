@@ -21,7 +21,7 @@ use Inertia\Inertia;
 
 class FonsInversioController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $fons = FonsInversio::with([
                 'valors',
@@ -52,6 +52,8 @@ class FonsInversioController extends Controller
             'comptesFonsInversio' => $comptesFonsInversio,
             'entitats'           => $entitats,
             'persones'           => $persones,
+            // Arribant des de la llista de comptes: obre les aportacions d'aquest compte
+            'focusCompteId'      => $request->integer('compte_corrent_id') ?: null,
         ]);
     }
 

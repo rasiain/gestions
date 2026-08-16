@@ -22,6 +22,8 @@ interface CompteCorrent {
     saldo_actual: number | null;
     lloguer_nom: string | null;
     lloguer_acronim: string | null;
+    /** Només per als comptes de fons d'inversió amb contracte. */
+    fons_nom: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -122,6 +124,12 @@ const comptesFonsInversio = computed(() => props.comptesCorrents.filter(c => c.t
 // Clicar la fila obre els moviments del compte, com a la llista de lloguers
 const obrirMoviments = (compte: CompteCorrent) => {
     router.visit(route('moviments.index', { compte_corrent_id: compte.id }));
+};
+
+// Els comptes de fons no tenen moviments bancaris: van a les aportacions del fons
+const obrirFons = (compte: CompteCorrent) => {
+    if (!compte.fons_nom) return;
+    router.visit(route('fons-inversio.index', { compte_corrent_id: compte.id }));
 };
 
 const showBalancModal = ref(false);
@@ -262,8 +270,21 @@ const closeBalancModal = () => {
                                         <tr class="bg-emerald-50 dark:bg-emerald-900/20">
                                             <td colspan="6" class="px-6 py-1.5 text-xs font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Fons d'Inversió</td>
                                         </tr>
-                                        <tr v-for="compte in comptesFonsInversio" :key="compte.id" class="hover:bg-emerald-50 dark:hover:bg-emerald-900/10">
-                                            <td class="px-6 py-4"></td>
+                                        <tr
+                                            v-for="compte in comptesFonsInversio"
+                                            :key="compte.id"
+                                            @click="obrirFons(compte)"
+                                            class="transition-colors hover:bg-emerald-50 dark:hover:bg-emerald-900/10"
+                                            :class="compte.fons_nom ? 'cursor-pointer' : ''"
+                                        >
+                                            <td class="px-6 py-4 text-sm" @click.stop>
+                                                <Link
+                                                    v-if="compte.fons_nom"
+                                                    :href="route('fons-inversio.index', { compte_corrent_id: compte.id })"
+                                                    class="text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-300"
+                                                >{{ compte.fons_nom }}</Link>
+                                                <span v-else class="text-xs italic text-gray-400 dark:text-gray-500">Sense fons</span>
+                                            </td>
                                             <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
                                                 {{ compte.nom || compte.compte_corrent }}
                                                 <span class="ml-1 font-mono text-xs tracking-widest text-gray-400 dark:text-gray-500">{{ compte.compte_corrent }}</span>
@@ -271,7 +292,7 @@ const closeBalancModal = () => {
                                             <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ compte.entitat }}</td>
                                             <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ getTitularsNames(compte.titulars) }}</td>
                                             <td class="px-6 py-4 text-center text-sm text-gray-400">—</td>
-                                            <td class="px-6 py-4 text-right text-sm font-medium">
+                                            <td class="px-6 py-4 text-right text-sm font-medium" @click.stop>
                                                 <button @click="openEditModal(compte)" class="mr-3 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">Editar</button>
                                                 <button @click="deleteCompteCorrent(compte)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
                                             </td>

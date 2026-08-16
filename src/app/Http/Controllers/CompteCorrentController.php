@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\CompteCorrentRequest;
 use App\Models\Categoria;
 use App\Models\CompteCorrent;
+use App\Models\ContracteFons;
 use App\Models\Entitat;
 use App\Models\Lloguer;
 use App\Models\MovimentCompteCorrent;
@@ -24,14 +25,20 @@ class CompteCorrentController extends Controller
             ->get()
             ->keyBy('compte_corrent_id');
 
+        // Els comptes de fons d'inversió tenen un contracte amb el fons corresponent
+        $contractesFonsPerCompte = ContracteFons::with('fons:id,nom')
+            ->get()
+            ->keyBy('compte_corrent_id');
+
         $comptesCorrents = CompteCorrent::with(['titulars', 'entitatRelacio'])
             ->orderBy('ordre')
             ->get()
-            ->map(function ($compte) use ($lloguersPerCompte) {
+            ->map(function ($compte) use ($lloguersPerCompte, $contractesFonsPerCompte) {
                 $compte->saldo_actual = $compte->saldo_actual;
                 $lloguer = $lloguersPerCompte->get($compte->id);
                 $compte->lloguer_nom = $lloguer?->nom;
                 $compte->lloguer_acronim = $lloguer?->acronim;
+                $compte->fons_nom = $contractesFonsPerCompte->get($compte->id)?->fons?->nom;
                 return $compte;
             });
 
