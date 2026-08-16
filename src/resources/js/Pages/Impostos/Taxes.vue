@@ -20,9 +20,25 @@ interface TipusImmoble {
 
 interface ImmobleGrup {
     immoble: string;
+    poblacio: string | null;
+    lloguer: string | null;
+    seccio: 'lloguer' | 'identificat' | 'resta';
+    /** Path complet de les categories: pista per als no identificats. */
+    paths: string[];
     tipus: TipusImmoble[];
     total_actual: number;
     total_anterior: number;
+}
+
+interface PoblacioGrup {
+    poblacio: string | null;
+    immobles: ImmobleGrup[];
+}
+
+interface Seccio {
+    clau: 'lloguer' | 'identificat' | 'resta';
+    titol: string;
+    poblacions: PoblacioGrup[];
 }
 
 interface MovimentLlista {
@@ -51,7 +67,7 @@ interface Categoria {
 }
 
 interface Props {
-    perImmoble: ImmobleGrup[];
+    seccions: Seccio[];
     moviments: MovimentLlista[];
     anyActual: number;
     anyAnterior: number;
@@ -75,6 +91,10 @@ const anyOpcions = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() 
 
 // ---- Tabs ----
 const tab = ref<'immoble' | 'moviments'>('immoble');
+
+// ---- Vista 1 ----
+const seccionsAmbDades = computed(() => props.seccions.filter(s => s.poblacions.length > 0));
+const capImmoble = computed(() => seccionsAmbDades.value.length === 0);
 
 // ---- Modal detall ----
 const showDetall = ref(false);
@@ -231,18 +251,35 @@ function desaEdicio() {
                 </div>
 
                 <!-- Vista 1 — Per immoble -->
-                <div v-if="tab === 'immoble'" class="space-y-6">
-                    <p v-if="props.perImmoble.length === 0" class="text-sm text-gray-500 dark:text-gray-400">
+                <div v-if="tab === 'immoble'" class="space-y-10">
+                    <p v-if="capImmoble" class="text-sm text-gray-500 dark:text-gray-400">
                         No s'han trobat impostos per als anys {{ props.anyAnterior }}–{{ props.anyActual }}.
                     </p>
 
+                    <section v-for="seccio in seccionsAmbDades" :key="seccio.clau">
+                        <h2 class="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">{{ seccio.titol }}</h2>
+                        <p v-if="seccio.clau === 'resta'" class="mb-4 text-xs text-gray-500 dark:text-gray-400">
+                            No s'ha pogut deduir l'immoble ni de l'arbre de categories ni de les despeses de lloguer.
+                            Sota cada bloc hi ha la categoria completa amb tots els seus pares.
+                        </p>
+
+                    <div v-for="pob in seccio.poblacions" :key="pob.poblacio ?? '—'" class="mt-4 space-y-4">
+                        <h3 class="text-xs font-semibold uppercase tracking-widest" :class="pob.poblacio ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'">
+                            {{ pob.poblacio ?? 'Sense població' }}
+                        </h3>
+
                     <div
-                        v-for="grup in props.perImmoble"
-                        :key="grup.immoble"
+                        v-for="grup in pob.immobles"
+                        :key="grup.immoble + grup.paths[0]"
                         class="overflow-hidden rounded-lg bg-white shadow-sm dark:bg-gray-800"
                     >
                         <div class="flex items-center justify-between border-l-4 border-red-400 bg-gray-50 px-4 py-3 dark:bg-gray-700/50">
-                            <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ grup.immoble }}</h3>
+                            <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                {{ grup.immoble }}
+                                <span v-if="grup.lloguer && grup.lloguer !== grup.immoble" class="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                                    {{ grup.lloguer }}
+                                </span>
+                            </h3>
                             <div class="flex gap-6 text-sm">
                                 <span class="text-gray-500 dark:text-gray-400">
                                     {{ props.anyActual }}: <span class="font-semibold text-gray-900 dark:text-gray-100">{{ formatEur(grup.total_actual) }}</span>
@@ -293,7 +330,16 @@ function desaEdicio() {
                                 </tr>
                             </tbody>
                         </table>
+
+                        <!-- Pista d'on està classificada la despesa -->
+                        <div v-if="seccio.clau === 'resta'" class="border-t border-gray-100 bg-gray-50 px-4 py-2 dark:border-gray-700 dark:bg-gray-900/40">
+                            <p v-for="path in grup.paths" :key="path" class="truncate font-mono text-xs text-gray-500 dark:text-gray-400" :title="path">
+                                {{ path }}
+                            </p>
+                        </div>
                     </div>
+                    </div>
+                    </section>
                 </div>
 
                 <!-- Vista 2 — Tots els moviments -->

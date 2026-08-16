@@ -29,7 +29,7 @@ class ImpostosTaxesController extends Controller
             'compte_corrent_id' => $m->compte_corrent_id,
             'data'              => $m->data_moviment->toDateString(),
             'compte'            => $m->compteCorrent?->nom,
-            'immoble'           => $m->getAttribute('immoble_taxa'),
+            'immoble'           => $m->getAttribute('immoble_taxa') ?? 'No identificat',
             'tipus'             => $m->getAttribute('tipus_taxa'),
             'concepte'          => $m->concepte_original,        // text brut (immutable) — cerca/visualització
             'concepte_editable' => $m->concepte?->concepte,      // text editable (MovimentConcepte)
@@ -53,14 +53,14 @@ class ImpostosTaxesController extends Controller
             ->values();
 
         // Vista 1 — per immoble, comparativa any actual vs anterior.
-        $perImmoble = $this->agrupaPerImmoble(
+        $seccions = $this->agrupaPerImmoble(
             $moviments->filter(fn (MovimentCompteCorrent $m) => in_array((int) $m->data_moviment->format('Y'), [$any, $anyAnterior], true)),
             $any,
             $anyAnterior
         );
 
         return Inertia::render('Impostos/Taxes', [
-            'perImmoble'          => $perImmoble,
+            'seccions'            => $seccions,
             'moviments'           => $llistat,
             'anyActual'           => $any,
             'anyAnterior'         => $anyAnterior,
@@ -114,11 +114,17 @@ class ImpostosTaxesController extends Controller
     /**
      * @param  Collection<int, MovimentCompteCorrent>  $moviments
      */
+    /**
+     * Tres seccions —de lloguer, identificats i la resta—, cadascuna amb els
+     * immobles agrupats per població.
+     */
     private function agrupaPerImmoble(Collection $moviments, int $anyActual, int $anyAnterior): array
     {
-        return $moviments
-            ->groupBy(fn (MovimentCompteCorrent $m) => $m->getAttribute('immoble_taxa'))
-            ->map(function (Collection $movsImmoble, string $immoble) use ($anyActual, $anyAnterior) {
+        $grups = $moviments
+            // Els impostos puntuals que no són de cap immoble no hi pinten res
+            ->reject(fn (MovimentCompteCorrent $m) => $m->getAttribute('ocult_taxa'))
+            ->groupBy(fn (MovimentCompteCorrent $m) => $m->getAttribute('grup_taxa'))
+            ->map(function (Collection $movsImmoble) use ($anyActual, $anyAnterior) {
                 $tipus = $movsImmoble
                     ->groupBy(fn (MovimentCompteCorrent $m) => $m->getAttribute('tipus_taxa'))
                     ->map(function (Collection $movsTipus, string $tipus) use ($anyActual, $anyAnterior) {
@@ -133,16 +139,62 @@ class ImpostosTaxesController extends Controller
                     ->sortBy('tipus')
                     ->values();
 
+                $primer = fn (string $atribut) => $movsImmoble
+                    ->map(fn (MovimentCompteCorrent $m) => $m->getAttribute($atribut))
+                    ->filter()
+                    ->first();
+
+                $etiqueta = $primer('immoble_taxa');
+
                 return [
-                    'immoble'        => $immoble,
+                    'immoble'        => $etiqueta ?? 'No identificat',
+                    'poblacio'       => $primer('poblacio_taxa'),
+                    'lloguer'        => $primer('lloguer_nom_taxa'),
+                    'seccio'         => match (true) {
+                        $primer('immoble_id_taxa') !== null => 'lloguer',
+                        $etiqueta !== null                  => 'identificat',
+                        default                             => 'resta',
+                    },
+                    // Pista per als no identificats: on està classificada la despesa
+                    'paths'          => $movsImmoble
+                        ->map(fn (MovimentCompteCorrent $m) => $m->getAttribute('path_taxa'))
+                        ->unique()->sort()->values()->all(),
                     'tipus'          => $tipus,
                     'total_actual'   => (float) $this->totalAny($movsImmoble, $anyActual),
                     'total_anterior' => (float) $this->totalAny($movsImmoble, $anyAnterior),
                 ];
             })
-            ->sortBy('immoble')
+            ->values();
+
+        $titols = [
+            'lloguer'     => 'Immobles de lloguer',
+            'identificat' => 'Altres immobles identificats',
+            'resta'       => 'Sense immoble identificat',
+        ];
+
+        return collect($titols)
+            ->map(fn (string $titol, string $clau) => [
+                'clau'       => $clau,
+                'titol'      => $titol,
+                'poblacions' => $grups
+                    ->where('seccio', $clau)
+                    ->groupBy(fn (array $g) => $g['poblacio'] ?? '')
+                    ->map(fn (Collection $gs, string $poblacio) => [
+                        'poblacio' => $poblacio !== '' ? $poblacio : null,
+                        'immobles' => $gs->sortBy('immoble')->values()->all(),
+                    ])
+                    // Les que no tenen població, al final
+                    ->sortBy(fn (array $p) => $p['poblacio'] === null ? "\u{FFFF}" : self::normalitzaOrdre($p['poblacio']))
+                    ->values()
+                    ->all(),
+            ])
             ->values()
             ->all();
+    }
+
+    private static function normalitzaOrdre(string $text): string
+    {
+        return \App\Services\TaxesService::normalitza($text);
     }
 
     /**

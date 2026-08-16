@@ -24,6 +24,7 @@ interface Immoble {
     id: number;
     referencia_cadastral: string;
     adreca: string;
+    poblacio: string | null;
     superficie_construida: number | null;
     superficie_parcela: number | null;
     us: string | null;
@@ -61,6 +62,7 @@ const usOptions = [
 const form = useForm({
     referencia_cadastral: '',
     adreca: '',
+    poblacio: '' as string,
     superficie_construida: null as number | null,
     superficie_parcela: null as number | null,
     us: null as string | null,
@@ -123,6 +125,7 @@ const openEditModal = (immoble: Immoble) => {
     editingImmoble.value = immoble;
     form.referencia_cadastral = immoble.referencia_cadastral;
     form.adreca = immoble.adreca;
+    form.poblacio = immoble.poblacio ?? '';
     form.superficie_construida = immoble.superficie_construida;
     form.superficie_parcela = immoble.superficie_parcela;
     form.us = immoble.us;
@@ -419,6 +422,29 @@ const formatNumber = (value: number | null, suffix: string = ''): string => {
                                     />
                                     <p v-if="form.errors.adreca" class="mt-1 text-sm text-red-600 dark:text-red-400">
                                         {{ form.errors.adreca }}
+                                    </p>
+                                </div>
+
+                                <!-- Població -->
+                                <div class="sm:col-span-2">
+                                    <label
+                                        for="poblacio"
+                                        class="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                                    >
+                                        Població
+                                    </label>
+                                    <input
+                                        id="poblacio"
+                                        v-model="form.poblacio"
+                                        type="text"
+                                        placeholder="Girona, Salt, Platja d'Aro…"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                        Serveix per agrupar els immobles a la vista de taxes.
+                                    </p>
+                                    <p v-if="form.errors.poblacio" class="mt-1 text-sm text-red-600 dark:text-red-400">
+                                        {{ form.errors.poblacio }}
                                     </p>
                                 </div>
 

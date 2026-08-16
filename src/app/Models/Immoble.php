@@ -21,6 +21,7 @@ class Immoble extends Model
     protected $fillable = [
         'referencia_cadastral',
         'adreca',
+        'poblacio',
         'superficie_construida',
         'superficie_parcela',
         'us',

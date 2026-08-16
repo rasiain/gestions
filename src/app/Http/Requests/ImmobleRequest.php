@@ -36,6 +36,11 @@ class ImmobleRequest extends FormRequest
                 'string',
                 'max:255',
             ],
+            'poblacio' => [
+                'nullable',
+                'string',
+                'max:100',
+            ],
             'superficie_construida' => [
                 'nullable',
                 'numeric',

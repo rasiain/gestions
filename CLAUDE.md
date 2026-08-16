@@ -82,6 +82,11 @@ Sis passos seqüencials: (1) generar hashes, (2) trobar punt de junció per hash
 
 **Categories de QIF de KMyMoney**: a la secció `!Type:Cat`, KMyMoney escriu els pares amb el nom parcial (només l'últim segment), no el path complet. Com que les declara en ordre depth-first, el pare de cada línia és l'últim path ja declarat que acaba amb aquell segment. Els moviments (`!Type:Bank`), en canvi, sí que porten el path complet a la `L`, cosa que permet validar la reconstrucció.
 
+### Taxes (impostos municipals)
+`TaxesService` detecta les taxes per patró de nom de categoria i en resol l'immoble en dos passos: (1) **l'arbre de categories**, que ja el codifica com a `DESPESES PROPIETATS > <IMMOBLE> > <taxa>` o `IMMOBLES > <POBLACIÓ> > <IMMOBLE> > [TAXES >] <taxa>`; (2) **les despeses de lloguer** dels seus moviments, únic senyal quan la categoria penja d'un organisme (`IMPOSTOS/TAXES > AJUNTAMENT X > IBI`), on dues categories amb el mateix path però de comptes diferents poden ser immobles diferents. L'arbre mana per anomenar el grup; les despeses hi afegeixen el vincle amb l'immoble real i decideixen si el grup és de lloguer. La vista agrupa en tres seccions (lloguer / identificats / la resta) i, dins de cadascuna, per població — la dels immobles ve del camp `g_immobles.poblacio`, la dels altres del node de l'arbre (normalitzat: `VILANOVA DE LA MUGA` → `Vilanova de la Muga`). Una etiqueta amb un únic municipi conegut el presta a les categories germanes que no en tenen, perquè no se separin en dos grups.
+
+**`g_taxes_immobles`** desa les decisions que ni l'arbre ni les despeses poden resoldre, per categoria: `immoble` (nom del grup, i alhora manera d'unificar dues categories: mateix nom + mateix municipi = mateix grup), `poblacio` i `ocult` (impostos puntuals que no són de cap immoble: successions, plusvàlues). L'ajust manual mana sobre l'arbre. No té pantalla de gestió: s'edita per migració o tinker.
+
 ### Components reutilitzables destacats
 - `BulkEditModal.vue`: modal d'edició múltiple (concepte, notes, categoria). Gestiona el formulari internament; emet `@submit(payload)` i `v-model:open`. El pare conserva `saving` i `error` i fa la crida API. Usat a `Moviments/Index.vue` i `Lloguers/Index.vue`.
 
