@@ -4,6 +4,7 @@ import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
 import BulkEditModal from '@/Components/BulkEditModal.vue';
 import FacturesModal from '@/Components/FacturesModal.vue';
 import RevisioIpcModal from '@/Components/RevisioIpcModal.vue';
+import CategoriaCell from '@/Components/CategoriaCell.vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import { ref, computed, watch, Transition } from 'vue';
 
@@ -432,6 +433,26 @@ const movimentsFilterPendents = ref(false);
 const movimentsFilterCerca = ref('');
 const movimentsAnys = ref<number[]>([]);
 const movimentCategories = ref<Categoria[]>([]);
+
+// Path complet (arrel > ... > fulla) de cada categoria del compte del lloguer.
+// L'arbre ja arriba amb els moviments, així que no cal demanar-lo al servidor.
+const categoriaFullPaths = computed(() => {
+    const perId = new Map(movimentCategories.value.map(c => [c.id, c]));
+    const paths = new Map<number, string>();
+    for (const cat of movimentCategories.value) {
+        const segments = [cat.nom];
+        const vistos = new Set<number>([cat.id]);
+        let pareId = cat.categoria_pare_id;
+        while (pareId !== null && perId.has(pareId) && !vistos.has(pareId)) {
+            vistos.add(pareId);
+            const pare = perId.get(pareId)!;
+            segments.push(pare.nom);
+            pareId = pare.categoria_pare_id;
+        }
+        paths.set(cat.id, segments.reverse().join(' > '));
+    }
+    return paths;
+});
 
 interface TipusDespesaFiscal {
     id: number;
@@ -1956,9 +1977,11 @@ const formatCurrency = (value: string | null): string => {
                                         <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 max-w-xs truncate">
                                             {{ moviment.concepte }}
                                         </td>
-                                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                                            {{ moviment.categoria_nom || '-' }}
-                                        </td>
+                                        <CategoriaCell
+                                            class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"
+                                            :nom="moviment.categoria_nom"
+                                            :full-path="moviment.categoria_id ? categoriaFullPaths.get(moviment.categoria_id) : null"
+                                        />
                                         <td
                                             class="whitespace-nowrap px-4 py-3 text-right text-sm font-medium"
                                             :class="parseFloat(moviment.import) >= 0

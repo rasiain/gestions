@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
 import BulkEditModal from '@/Components/BulkEditModal.vue';
+import CategoriaCell from '@/Components/CategoriaCell.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch, onUnmounted } from 'vue';
 
@@ -296,10 +297,6 @@ interface SenseSaldo {
     concepte: string | null;
     import: number;
 }
-const expandedCategoryId = ref<number | null>(null);
-const toggleCategoryPath = (movimentId: number) => {
-    expandedCategoryId.value = expandedCategoryId.value === movimentId ? null : movimentId;
-};
 
 const showVerificaModal = ref(false);
 const showVerificaOpcionsModal = ref(false);
@@ -941,10 +938,11 @@ const conciliarPagina = async (conciliat: boolean) => {
                                         <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                                             {{ moviment.concepte }}
                                         </td>
-                                        <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 cursor-pointer select-none" @click="moviment.categoria?.full_path && toggleCategoryPath(moviment.id)">
-                                            <span v-if="expandedCategoryId === moviment.id && moviment.categoria?.full_path" class="text-xs text-gray-400 dark:text-gray-500">{{ moviment.categoria.full_path }}</span>
-                                            <span v-else>{{ moviment.categoria?.nom || '-' }}</span>
-                                        </td>
+                                        <CategoriaCell
+                                            class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400"
+                                            :nom="moviment.categoria?.nom"
+                                            :full-path="moviment.categoria?.full_path"
+                                        />
                                         <td class="whitespace-nowrap px-6 py-4 text-sm text-right font-semibold" :class="getImportClass(moviment.import)">
                                             {{ formatCurrency(moviment.import) }}
                                         </td>
