@@ -15,7 +15,6 @@ class Contracte extends Model
         'lloguer_id',
         'data_inici',
         'data_fi',
-        'arrendador_id',
     ];
 
     protected $casts = [
@@ -33,8 +32,12 @@ class Contracte extends Model
         return $this->belongsToMany(Llogater::class, 'g_contracte_llogater');
     }
 
-    public function arrendador(): BelongsTo
+    /**
+     * Un contracte pot tenir més d'un arrendador quan els copropietaris
+     * arrenden en proindivís.
+     */
+    public function arrendadors(): BelongsToMany
     {
-        return $this->belongsTo(Arrendador::class);
+        return $this->belongsToMany(Arrendador::class, 'g_arrendador_contracte');
     }
 }

@@ -58,8 +58,8 @@ interface ContracteActiu {
     data_fi: string | null;
     llogater_ids: number[];
     llogaters: LlogaterBasic[];
-    arrendador_id: number | null;
-    arrendador: Arrendador | null;
+    arrendador_ids: number[];
+    arrendadors: Arrendador[];
 }
 
 interface Lloguer {
@@ -234,7 +234,7 @@ const contracteForm = useForm({
     data_inici: '',
     data_fi: '',
     llogater_ids: [] as number[],
-    arrendador_id: null as number | null,
+    arrendador_ids: [] as number[],
     tancar_contracte_anterior_id: null as number | null,
     data_fi_anterior: '',
 });
@@ -250,7 +250,7 @@ const iniciarNouContracte = () => {
     contracteForm.data_inici = '';
     contracteForm.data_fi = '';
     contracteForm.llogater_ids = [];
-    contracteForm.arrendador_id = suggerirArrendadorPerDefecte();
+    contracteForm.arrendador_ids = suggerirArrendadorsPerDefecte();
     contracteForm.clearErrors();
 };
 
@@ -261,7 +261,7 @@ const cancellarNouContracte = () => {
     contracteForm.data_inici = c?.data_inici ?? '';
     contracteForm.data_fi = c?.data_fi ?? '';
     contracteForm.llogater_ids = c?.llogater_ids ? [...c.llogater_ids] : [];
-    contracteForm.arrendador_id = c?.arrendador_id ?? null;
+    contracteForm.arrendador_ids = c?.arrendador_ids ? [...c.arrendador_ids] : [];
     contracteForm.clearErrors();
 };
 
@@ -278,7 +278,9 @@ const selectLloguer = (lloguer: Lloguer) => {
     contracteForm.data_inici = c?.data_inici ?? '';
     contracteForm.data_fi = c?.data_fi ?? '';
     contracteForm.llogater_ids = c?.llogater_ids ? [...c.llogater_ids] : [];
-    contracteForm.arrendador_id = c?.arrendador_id ?? suggerirArrendadorPerDefecte();
+    contracteForm.arrendador_ids = c?.arrendador_ids?.length
+        ? [...c.arrendador_ids]
+        : suggerirArrendadorsPerDefecte();
     contracteForm.clearErrors();
 };
 
@@ -302,6 +304,29 @@ const selectedLlogaters = computed(() =>
 const availableLlogaters = computed(() =>
     props.llogaters.filter(l => !contracteForm.llogater_ids.includes(l.id))
 );
+
+const addArrendador = (event: Event) => {
+    const id = parseInt((event.target as HTMLSelectElement).value);
+    if (id && !contracteForm.arrendador_ids.includes(id)) {
+        contracteForm.arrendador_ids.push(id);
+    }
+    (event.target as HTMLSelectElement).value = '';
+};
+
+const removeArrendador = (id: number) => {
+    const idx = contracteForm.arrendador_ids.indexOf(id);
+    if (idx !== -1) contracteForm.arrendador_ids.splice(idx, 1);
+};
+
+const selectedArrendadors = computed(() =>
+    props.arrendadors.filter(a => contracteForm.arrendador_ids.includes(a.id))
+);
+
+const availableArrendadors = computed(() => {
+    const lloguer = selectedLloguer.value;
+    const valids = lloguer ? arrendadorsValids.value(lloguer) : props.arrendadors;
+    return valids.filter(a => !contracteForm.arrendador_ids.includes(a.id));
+});
 
 const submitContracte = () => {
     const contracte = selectedLloguer.value?.contracte_actiu;
@@ -327,14 +352,11 @@ const deleteContracte = () => {
     }
 };
 
-const deleteArrendador = () => {
-    if (!contracteForm.arrendador_id) return;
-    const arrendador = props.arrendadors.find((a: Arrendador) => a.id === contracteForm.arrendador_id);
-    const nom = arrendador?.arrendadorable?.nom ?? 'aquest arrendador';
-    if (confirm(`Estàs segur que vols eliminar "${nom}"?`)) {
-        const id = contracteForm.arrendador_id;
-        contracteForm.arrendador_id = null;
-        router.delete(route('arrendadors.destroy', id), { preserveScroll: true });
+const deleteArrendador = (arrendador: Arrendador) => {
+    const nom = arrendador.arrendadorable?.nom ?? 'aquest arrendador';
+    if (confirm(`Estàs segur que vols eliminar "${nom}"? S'eliminarà de tots els contractes on consti.`)) {
+        removeArrendador(arrendador.id);
+        router.delete(route('arrendadors.destroy', arrendador.id), { preserveScroll: true });
     }
 };
 
@@ -1095,34 +1117,46 @@ const arrendadorsValids = computed(() => (lloguer: Lloguer) => {
 });
 
 const inconsistenciaArrendador = computed(() => (lloguer: Lloguer): string | null => {
-    const arrendador = lloguer.contracte_actiu?.arrendador;
-    if (!arrendador) return null;
+    const arrendadors = lloguer.contracte_actiu?.arrendadors ?? [];
+    if (arrendadors.length === 0) return null;
     const ids = new Set(lloguer.propietaris.map(p => p.id));
-    if (arrendador.arrendadorable_type === 'persona') {
-        if (!arrendador.arrendadorable) return 'Arrendador sense persona associada.';
-        if (!ids.has(arrendador.arrendadorable.id))
-            return `"${arrendador.arrendadorable.nom}" no és propietari/ària de l'immoble.`;
-    } else {
-        if (!arrendador.arrendadorable) return 'Arrendador sense comunitat de béns associada.';
-        const comuners = arrendador.arrendadorable.comuners ?? [];
-        if (comuners.length === 0)
-            return `La comunitat "${arrendador.arrendadorable.nom}" no té comuners definits.`;
-        if (!comuners.every(id => ids.has(id)))
-            return `No tots els comuners de "${arrendador.arrendadorable.nom}" són propietaris de l'immoble.`;
+
+    const problemes: string[] = [];
+    for (const arrendador of arrendadors) {
+        if (arrendador.arrendadorable_type === 'persona') {
+            if (!arrendador.arrendadorable) {
+                problemes.push('Hi ha un arrendador sense persona associada.');
+            } else if (!ids.has(arrendador.arrendadorable.id)) {
+                problemes.push(`"${arrendador.arrendadorable.nom}" no és propietari/ària de l'immoble.`);
+            }
+        } else {
+            if (!arrendador.arrendadorable) {
+                problemes.push('Hi ha un arrendador sense comunitat de béns associada.');
+            } else {
+                const comuners = arrendador.arrendadorable.comuners ?? [];
+                if (comuners.length === 0) {
+                    problemes.push(`La comunitat "${arrendador.arrendadorable.nom}" no té comuners definits.`);
+                } else if (!comuners.every(id => ids.has(id))) {
+                    problemes.push(`No tots els comuners de "${arrendador.arrendadorable.nom}" són propietaris de l'immoble.`);
+                }
+            }
+        }
     }
-    return null;
+    return problemes.length > 0 ? problemes.join(' ') : null;
 });
 
 // ── Arrendador: suggerir propietaris de l'immoble ───────────────
-const suggerirArrendadorPerDefecte = (): number | null => {
+// Els arrendadors solen ser els propietaris: es proposen tots els que ho siguin,
+// que en proindivís són diversos.
+const suggerirArrendadorsPerDefecte = (): number[] => {
     const lloguer = selectedLloguer.value;
-    if (!lloguer) return null;
-    // Buscar si algun arrendador existent correspon a un propietari de l'immoble
+    if (!lloguer) return [];
     const propietariIds = lloguer.propietaris.map(p => p.id);
-    const arrendadorPropietari = props.arrendadors.find(a =>
-        a.arrendadorable_type === 'persona' && a.arrendadorable && propietariIds.includes(a.arrendadorable.id)
-    );
-    return arrendadorPropietari?.id ?? null;
+    return props.arrendadors
+        .filter(a =>
+            a.arrendadorable_type === 'persona' && a.arrendadorable && propietariIds.includes(a.arrendadorable.id)
+        )
+        .map(a => a.id);
 };
 
 // ── Nou arrendador (mini-formulari inline) ─────────────────────
@@ -1162,6 +1196,10 @@ const submitNouArrendador = async () => {
         if (!res.ok) {
             nouArrendadorErrors.value = json.errors ?? { general: json.message ?? 'Error desconegut' };
             return;
+        }
+        // Afegir-lo al contracte: és el motiu pel qual s'acaba de crear
+        if (json.id && !contracteForm.arrendador_ids.includes(json.id)) {
+            contracteForm.arrendador_ids.push(json.id);
         }
         // Refrescar la pàgina per obtenir el nou arrendador
         router.reload({ only: ['arrendadors', 'lloguers'] });
@@ -1309,7 +1347,7 @@ const formatCurrency = (value: string | null): string => {
                                             <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ lloguer.immoble?.adreca || '-' }}</td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ formatCurrency(lloguer.base_euros) }}</td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                                                <span v-if="lloguer.contracte_actiu?.arrendador">{{ lloguer.contracte_actiu.arrendador.arrendadorable?.nom ?? '—' }}</span>
+                                                <span v-if="lloguer.contracte_actiu?.arrendadors?.length">{{ lloguer.contracte_actiu.arrendadors.map(a => a.arrendadorable?.nom ?? '—').join(', ') }}</span>
                                                 <span v-else class="italic text-gray-400 dark:text-gray-500">—</span>
                                             </td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm">
@@ -1340,7 +1378,7 @@ const formatCurrency = (value: string | null): string => {
                                             <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ lloguer.immoble?.adreca || '-' }}</td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ formatCurrency(lloguer.base_euros) }}</td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                                                <span v-if="lloguer.contracte_actiu?.arrendador">{{ lloguer.contracte_actiu.arrendador.arrendadorable?.nom ?? '—' }}</span>
+                                                <span v-if="lloguer.contracte_actiu?.arrendadors?.length">{{ lloguer.contracte_actiu.arrendadors.map(a => a.arrendadorable?.nom ?? '—').join(', ') }}</span>
                                                 <span v-else class="italic text-gray-400 dark:text-gray-500">—</span>
                                             </td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm">
@@ -1601,21 +1639,56 @@ const formatCurrency = (value: string | null): string => {
                                     </p>
                                 </div>
 
-                                <!-- Arrendador -->
+                                <!-- Arrendadors -->
                                 <div class="sm:col-span-2">
-                                    <label for="contracte_arrendador_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Arrendador (qui rep les rendes)</label>
-                                    <div class="mt-1 flex gap-2">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                        Arrendadors (qui rep les rendes)
+                                    </label>
+
+                                    <!-- Seleccionats -->
+                                    <div v-if="selectedArrendadors.length > 0" class="mb-2 flex flex-wrap gap-2">
+                                        <span
+                                            v-for="a in selectedArrendadors"
+                                            :key="a.id"
+                                            class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-sm text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                                        >
+                                            {{ a.arrendadorable?.nom ?? '—' }}
+                                            <span class="text-xs text-amber-600 dark:text-amber-300">
+                                                ({{ a.arrendadorable_type === 'persona' ? 'Persona' : 'CB' }})
+                                            </span>
+                                            <button
+                                                type="button"
+                                                @click="removeArrendador(a.id)"
+                                                title="Treure del contracte"
+                                                class="ml-1 rounded-full text-amber-600 hover:text-amber-900 dark:text-amber-300 dark:hover:text-amber-100 focus:outline-none"
+                                            >✕</button>
+                                            <button
+                                                type="button"
+                                                @click="deleteArrendador(a)"
+                                                title="Eliminar arrendador"
+                                                class="rounded-full text-red-400 hover:text-red-700 dark:text-red-400 dark:hover:text-red-200 focus:outline-none"
+                                            >
+                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                            </button>
+                                        </span>
+                                    </div>
+
+                                    <!-- Desplegable per afegir + botó Nou -->
+                                    <div class="flex gap-2">
                                         <select
-                                            id="contracte_arrendador_id"
-                                            v-model="contracteForm.arrendador_id"
+                                            v-if="availableArrendadors.length > 0"
+                                            @change="addArrendador"
                                             class="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                         >
-                                            <option :value="null">Sense arrendador</option>
-                                            <option v-for="a in arrendadorsValids(selectedLloguer)" :key="a.id" :value="a.id">
+                                            <option value="">Afegir arrendador…</option>
+                                            <option v-for="a in availableArrendadors" :key="a.id" :value="a.id">
                                                 {{ a.arrendadorable?.nom ?? '—' }}
                                                 ({{ a.arrendadorable_type === 'persona' ? 'Persona' : 'Comunitat de Béns' }})
                                             </option>
                                         </select>
+                                        <p v-else-if="!showNouArrendadorForm" class="flex-1 text-sm italic text-gray-400 self-center">
+                                            {{ selectedArrendadors.length === 0 ? 'No hi ha arrendadors que siguin propietaris.' : 'Tots els arrendadors vàlids ja hi consten.' }}
+                                        </p>
                                         <button
                                             type="button"
                                             @click="openNouArrendadorForm"
@@ -1623,22 +1696,12 @@ const formatCurrency = (value: string | null): string => {
                                         >
                                             + Nou
                                         </button>
-                                        <button
-                                            v-if="contracteForm.arrendador_id"
-                                            type="button"
-                                            @click="deleteArrendador"
-                                            class="shrink-0 rounded-md border border-red-300 px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
-                                            title="Eliminar arrendador"
-                                        >
-                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                            </svg>
-                                        </button>
                                     </div>
+
                                     <p v-if="selectedLloguer?.propietaris.length" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                         Propietaris de l'immoble: {{ selectedLloguer.propietaris.map(p => p.nom).join(', ') }}
                                     </p>
-                                    <p v-if="contracteForm.errors.arrendador_id" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ contracteForm.errors.arrendador_id }}</p>
+                                    <p v-if="contracteForm.errors.arrendador_ids" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ contracteForm.errors.arrendador_ids }}</p>
                                 </div>
 
                                 <!-- Mini-formulari nou arrendador -->

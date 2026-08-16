@@ -22,7 +22,7 @@ class ImpostosIvaController extends Controller
                         $q2->whereNull('data_fi')->orWhere('data_fi', '>', now()->toDateString());
                     })->orderBy('data_inici', 'desc');
                 },
-                'contractes.arrendador.arrendadorable',
+                'contractes.arrendadors.arrendadorable',
             ])
             ->orderBy('nom')
             ->get();
@@ -105,7 +105,8 @@ class ImpostosIvaController extends Controller
             $totals['total_resultat']      += $totalResultat;
 
             $contracteActiu = $lloguer->contractes->first();
-            $arrendador = $contracteActiu?->arrendador;
+            // A efectes d'IVA el subjecte passiu és un de sol (normalment una CB)
+            $arrendador = $contracteActiu?->arrendadors->first();
             $arrendadorable = $arrendador?->arrendadorable;
 
             return [

@@ -58,7 +58,7 @@ class LlibreIvaController extends Controller
     private function buildSpreadsheet(Lloguer $lloguer, int $any): Spreadsheet
     {
         // Carreguem el lloguer amb les relacions necessàries
-        $lloguer->load(['immoble', 'contractes.llogaters.persona', 'contractes.arrendador.arrendadorable']);
+        $lloguer->load(['immoble', 'contractes.llogaters.persona', 'contractes.arrendadors.arrendadorable']);
 
         // Determinem l'inici i fi de l'any
         $iniciAny = "{$any}-01-01";
@@ -74,8 +74,10 @@ class LlibreIvaController extends Controller
         // Nom i NIF de l'arrendador
         $nomEmpresa = '';
         $nifEmpresa = '';
-        if ($contracte && $contracte->arrendador && $contracte->arrendador->arrendadorable) {
-            $arrendadorable = $contracte->arrendador->arrendadorable;
+        // A efectes d'IVA el subjecte passiu és un de sol (normalment una CB)
+        $arrendadorIva = $contracte?->arrendadors->first();
+        if ($arrendadorIva && $arrendadorIva->arrendadorable) {
+            $arrendadorable = $arrendadorIva->arrendadorable;
             if ($arrendadorable instanceof Persona) {
                 $nomEmpresa = trim($arrendadorable->nom . ' ' . $arrendadorable->cognoms);
                 $nifEmpresa = $arrendadorable->nif ?? '';

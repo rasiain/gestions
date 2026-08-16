@@ -70,6 +70,7 @@ src/
 - Deduplicació de moviments bancaris per hash SHA-256: `data|import|compte_id|seqüència` (el concepte s'exclou intencionadament)
 - Categories jeràrquiques (auto-referència `categoria_pare_id`)
 - Pivots amb dates per a propietaris d'immobles
+- **Un contracte pot tenir diversos arrendadors** (`g_arrendador_contracte`): en proindivís cada copropietari hi consta. La copropietat també es pot modelar amb una `ComunitatBens` (NIF propi) com a arrendador únic. A efectes d'IVA es pren el primer arrendador, perquè el subjecte passiu és un de sol. L'arrendador hauria de ser propietari de l'immoble: es proposa automàticament i s'avisa si no ho és, però no es força.
 - **`concepte_original` és immutable**: text brut del banc, mai s'actualitza en editar. Només canvia `concepte_id`. És la clau per al mapeig automàtic d'imports futurs.
 - **`conciliat` (boolean)**: marca un moviment com a revisat/puntejat. S'activa automàticament quan el moviment es classifica als lloguers (despesa o ingrés) o quan es vincula a una factura. Es pot marcar/desmarcar manualment des de la columna ✓ de la taula o en bloc des de la toolbar de selecció. Filtrable (Tots / Revisats / Pendents).
 
@@ -106,11 +107,10 @@ Sis passos seqüencials: (1) generar hashes, (2) trobar punt de junció per hash
               │  │    │                                                │
               │  │    ├── 1:N ──▶ Contracte ──N:M──▶ Llogater          │
               │  │    │           │                                     │
-              │  │    │           └──▶ Arrendador ──morphTo──┐         │
-              │  │    │                (adreça)              │         │
-              │  │    │                                      ▼         │
-              │  │    │                              Persona            │
-              │  │    │                              ComunitatBens      │
+              │  │    │           └── N:M ─▶ Arrendador ─morphTo─┐     │
+              │  │    │                                          ▼     │
+              │  │    │                                    Persona     │
+              │  │    │                                    ComunitatBens│
               │  │    │                                                │
               │  │    └── 1:N ──▶ Factura ── 1:N ──▶ FacturaLinia      │
               │  │                │                                    │

@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class Arrendador extends Model
@@ -20,8 +20,8 @@ class Arrendador extends Model
         return $this->morphTo();
     }
 
-    public function lloguers(): HasMany
+    public function contractes(): BelongsToMany
     {
-        return $this->hasMany(Lloguer::class);
+        return $this->belongsToMany(Contracte::class, 'g_arrendador_contracte');
     }
 }

@@ -16,12 +16,13 @@ class ContracteController extends Controller
         $tancarId     = $validated['tancar_contracte_anterior_id'] ?? null;
         $dataFiAnterior = $validated['data_fi_anterior'] ?? null;
         $llogaterIds  = $validated['llogater_ids'] ?? [];
-        unset($validated['tancar_contracte_anterior_id'], $validated['data_fi_anterior'], $validated['llogater_ids']);
-
-        // Normalitzar arrendador_id: string buida → null
-        if (empty($validated['arrendador_id'])) {
-            $validated['arrendador_id'] = null;
-        }
+        $arrendadorIds = $validated['arrendador_ids'] ?? [];
+        unset(
+            $validated['tancar_contracte_anterior_id'],
+            $validated['data_fi_anterior'],
+            $validated['llogater_ids'],
+            $validated['arrendador_ids'],
+        );
 
         DB::beginTransaction();
         try {
@@ -34,6 +35,7 @@ class ContracteController extends Controller
 
             $contracte = Contracte::create($validated);
             $contracte->llogaters()->sync($llogaterIds);
+            $contracte->arrendadors()->sync($arrendadorIds);
 
             DB::commit();
         } catch (\Exception $e) {
@@ -50,10 +52,12 @@ class ContracteController extends Controller
     {
         $validated = $request->validated();
         $llogaterIds = $validated['llogater_ids'] ?? [];
-        unset($validated['llogater_ids']);
+        $arrendadorIds = $validated['arrendador_ids'] ?? [];
+        unset($validated['llogater_ids'], $validated['arrendador_ids']);
 
         $contracte->update($validated);
         $contracte->llogaters()->sync($llogaterIds);
+        $contracte->arrendadors()->sync($arrendadorIds);
 
         return redirect()->route('lloguers.index')
             ->with('success', 'Contracte actualitzat correctament.');
@@ -62,6 +66,7 @@ class ContracteController extends Controller
     public function destroy(Contracte $contracte)
     {
         $contracte->llogaters()->detach();
+        $contracte->arrendadors()->detach();
         $contracte->delete();
 
         return redirect()->route('lloguers.index')
