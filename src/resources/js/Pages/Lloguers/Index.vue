@@ -2263,8 +2263,8 @@ const formatCurrency = (value: string | null): string => {
                                     />
                                 </div>
 
-                                <div class="sm:col-span-2">
-                                    <label for="ruta_descarrega" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Ruta del llibre d'IVA <span class="font-normal text-gray-400">(només lloguers no habitatge)</span></label>
+                                <div v-if="!lloguerForm.es_habitatge" class="sm:col-span-2">
+                                    <label for="ruta_descarrega" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Ruta del llibre d'IVA</label>
                                     <input
                                         id="ruta_descarrega"
                                         v-model="lloguerForm.ruta_descarrega"
