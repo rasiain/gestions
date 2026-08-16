@@ -130,7 +130,7 @@ function tancaContractes() {
         </template>
 
         <div class="py-12">
-            <div class="mx-auto max-w-screen-2xl sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-full sm:px-6 lg:px-8">
                 <div class="overflow-x-auto rounded-lg bg-white shadow-sm dark:bg-gray-800">
                     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                         <thead class="bg-gray-50 dark:bg-gray-700">

@@ -207,7 +207,7 @@ function desaEdicio() {
         </template>
 
         <div class="py-12">
-            <div class="mx-auto max-w-screen-2xl sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-full sm:px-6 lg:px-8">
                 <!-- Tabs -->
                 <div class="mb-6 flex gap-1 border-b border-gray-200 dark:border-gray-700">
                     <button

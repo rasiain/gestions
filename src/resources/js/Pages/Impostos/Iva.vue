@@ -221,7 +221,7 @@ async function exportarLlibre(lloguer: LloguerIva) {
         </Transition>
 
         <div class="py-12">
-            <div class="mx-auto max-w-screen-2xl sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-full sm:px-6 lg:px-8">
 
                 <div v-if="props.lloguers.length === 0" class="rounded-lg bg-white p-8 text-center shadow-sm dark:bg-gray-800">
                     <p class="text-sm text-gray-500 dark:text-gray-400">

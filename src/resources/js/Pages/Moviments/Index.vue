@@ -581,7 +581,7 @@ const conciliarPagina = async (conciliat: boolean) => {
         </template>
 
         <div class="py-12">
-            <div class="mx-auto max-w-screen-2xl sm:px-6 lg:px-8 space-y-6">
+            <div class="mx-auto max-w-full sm:px-6 lg:px-8 space-y-6">
                 <!-- Compte Corrent Selector & Stats -->
                 <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg dark:bg-gray-800">
                     <div class="p-6">

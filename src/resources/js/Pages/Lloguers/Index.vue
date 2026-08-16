@@ -1288,7 +1288,7 @@ const formatCurrency = (value: string | null): string => {
         </template>
 
         <div class="py-12">
-            <div class="mx-auto max-w-screen-2xl sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-full sm:px-6 lg:px-8">
                 <div class="flex gap-6 items-start">
 
                 <!-- Main content -->
