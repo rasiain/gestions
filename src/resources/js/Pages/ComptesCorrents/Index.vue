@@ -119,6 +119,11 @@ const comptesCorrents = computed(() => props.comptesCorrents.filter(c => !c.llog
 const comptesLloguers = computed(() => props.comptesCorrents.filter(c => !!c.lloguer_nom));
 const comptesFonsInversio = computed(() => props.comptesCorrents.filter(c => c.tipus === 'fons_inversio'));
 
+// Clicar la fila obre els moviments del compte, com a la llista de lloguers
+const obrirMoviments = (compte: CompteCorrent) => {
+    router.visit(route('moviments.index', { compte_corrent_id: compte.id }));
+};
+
 const showBalancModal = ref(false);
 const balancCompteId = ref<number | null>(null);
 const balancCompteNom = ref<string>('');
@@ -201,7 +206,12 @@ const closeBalancModal = () => {
                                         <tr class="bg-gray-50 dark:bg-gray-900/40">
                                             <td colspan="6" class="px-6 py-1.5 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">Corrents</td>
                                         </tr>
-                                        <tr v-for="compte in comptesCorrents" :key="compte.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                        <tr
+                                            v-for="compte in comptesCorrents"
+                                            :key="compte.id"
+                                            @click="obrirMoviments(compte)"
+                                            class="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700"
+                                        >
                                             <td class="px-6 py-4"></td>
                                             <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
                                                 {{ compte.nom || compte.compte_corrent }}
@@ -210,7 +220,7 @@ const closeBalancModal = () => {
                                             <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ compte.entitat }}</td>
                                             <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ getTitularsNames(compte.titulars) }}</td>
                                             <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium" :class="compte.saldo_actual !== null && compte.saldo_actual < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'">{{ formatSaldo(compte.saldo_actual) }}</td>
-                                            <td class="px-6 py-4 text-right text-sm font-medium">
+                                            <td class="px-6 py-4 text-right text-sm font-medium" @click.stop>
                                                 <Link :href="route('moviments.index', { compte_corrent_id: compte.id })" class="mr-3 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">Moviments</Link>
                                                 <Link :href="route('maintenance.movements.import', { compte_corrent_id: compte.id })" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Importar</Link>
                                                 <button @click="openBalancModal(compte)" class="mr-3 text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">Balanc</button>
@@ -225,7 +235,12 @@ const closeBalancModal = () => {
                                         <tr class="bg-amber-50 dark:bg-amber-900/20">
                                             <td colspan="6" class="px-6 py-1.5 text-xs font-semibold uppercase tracking-widest text-amber-500 dark:text-amber-400">Lloguers</td>
                                         </tr>
-                                        <tr v-for="compte in comptesLloguers" :key="compte.id" class="hover:bg-amber-50 dark:hover:bg-amber-900/10">
+                                        <tr
+                                            v-for="compte in comptesLloguers"
+                                            :key="compte.id"
+                                            @click="obrirMoviments(compte)"
+                                            class="cursor-pointer transition-colors hover:bg-amber-50 dark:hover:bg-amber-900/10"
+                                        >
                                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-amber-700 dark:text-amber-300">{{ compte.lloguer_acronim || compte.lloguer_nom }}</td>
                                             <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                                                 {{ compte.nom || compte.compte_corrent }}
@@ -234,7 +249,7 @@ const closeBalancModal = () => {
                                             <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ compte.entitat }}</td>
                                             <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ getTitularsNames(compte.titulars) }}</td>
                                             <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium" :class="compte.saldo_actual !== null && compte.saldo_actual < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'">{{ formatSaldo(compte.saldo_actual) }}</td>
-                                            <td class="px-6 py-4 text-right text-sm font-medium">
+                                            <td class="px-6 py-4 text-right text-sm font-medium" @click.stop>
                                                 <Link :href="route('moviments.index', { compte_corrent_id: compte.id })" class="mr-3 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">Moviments</Link>
                                                 <Link :href="route('maintenance.movements.import', { compte_corrent_id: compte.id })" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Importar</Link>
                                                 <button @click="openBalancModal(compte)" class="mr-3 text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">Balanc</button>
