@@ -77,6 +77,10 @@ src/
 ### Importació de moviments bancaris (`MovementImportService`)
 Sis passos seqüencials: (1) generar hashes, (2) trobar punt de junció per hash, (3) filtrar moviments nous, (4) validar/calcular saldos, (5) mapeig de categories, (6) mapeig de conceptes (`concepte_original` → `concepte_id` de moviment anterior). Cada banc té el seu `*ParserService`; camps mínims: `data_moviment`, `concepte`, `import`, `saldo_posterior`, `notes`, `categoria_path`.
 
+**La categoria del fitxer sempre preval.** Al pas 6, la categoria d'un moviment anterior amb el mateix `concepte_original` només s'aplica com a *fallback*, quan el fitxer no en porta cap (XLS de CaixaBank i Caixa d'Enginyers). Els fitxers amb `categoria_path` explícit (QIF) conserven la seva: diferents categories poden compartir concepte —un mateix rebut de l'ajuntament per a dos immobles— i el concepte no les pot distingir.
+
+**Categories de QIF de KMyMoney**: a la secció `!Type:Cat`, KMyMoney escriu els pares amb el nom parcial (només l'últim segment), no el path complet. Com que les declara en ordre depth-first, el pare de cada línia és l'últim path ja declarat que acaba amb aquell segment. Els moviments (`!Type:Bank`), en canvi, sí que porten el path complet a la `L`, cosa que permet validar la reconstrucció.
+
 ### Components reutilitzables destacats
 - `BulkEditModal.vue`: modal d'edició múltiple (concepte, notes, categoria). Gestiona el formulari internament; emet `@submit(payload)` i `v-model:open`. El pare conserva `saving` i `error` i fa la crida API. Usat a `Moviments/Index.vue` i `Lloguers/Index.vue`.
 

@@ -749,8 +749,11 @@ class MovementImportService
             ->first();
 
         if ($previousMovement) {
-            // Reuse manually assigned category from previous movement
-            $categoriaId = $previousMovement->categoria_id ?? $categoriaId;
+            // Reuse manually assigned category from previous movement, but only when the file
+            // doesn't provide one. Files with explicit category paths (QIF) must keep their own:
+            // diferents categories poden compartir concepte_original (ex. un mateix rebut de
+            // l'ajuntament per a dos immobles), i el concepte no les pot distingir.
+            $categoriaId = $categoriaId ?? $previousMovement->categoria_id;
 
             // Reuse the manually cleaned-up concept from previous movement
             if ($previousMovement->concepte_id) {
