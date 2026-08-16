@@ -28,9 +28,14 @@ class ImpostosIrpfController extends Controller
         ];
 
         $lloguersDades = $lloguers->map(function ($lloguer) use ($any, $categories, &$totals) {
-            $moviments = MovimentCompteCorrent::where('compte_corrent_id', $lloguer->compte_corrent_id)
-                ->whereYear('data_moviment', $any)
+            // Partim dels moviments del lloguer, no dels del seu compte: excepcionalment
+            // una despesa es paga des d'un altre compte i també ha de comptar.
+            $moviments = MovimentCompteCorrent::whereYear('data_moviment', $any)
                 ->where('exclou_lloguer', false)
+                ->where(function ($q) use ($lloguer) {
+                    $q->whereHas('despesa', fn($q2) => $q2->where('lloguer_id', $lloguer->id))
+                      ->orWhereHas('ingressos', fn($q2) => $q2->where('lloguer_id', $lloguer->id));
+                })
                 ->with(['ingressos.linies', 'despesa'])
                 ->get();
 

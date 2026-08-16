@@ -409,6 +409,9 @@ interface MovimentFactura {
 interface Moviment {
     id: number;
     compte_corrent_id: number;
+    /** Només informats quan el moviment és d'un compte diferent del del lloguer. */
+    compte_nom: string | null;
+    compte_digits: string | null;
     data_moviment: string;
     concepte: string;
     notes: string | null;
@@ -431,6 +434,7 @@ const movimentsFilterAny = ref<number | null>(new Date().getFullYear());
 const movimentsFilterClassificats = ref(false);
 const movimentsFilterPendents = ref(false);
 const movimentsFilterCerca = ref('');
+const movimentsFilterTotsComptes = ref(false);
 const movimentsAnys = ref<number[]>([]);
 const movimentCategories = ref<Categoria[]>([]);
 
@@ -475,6 +479,7 @@ const fetchMoviments = async (lloguer: Lloguer, page: number, append = false) =>
         if (movimentsFilterClassificats.value) params.set('classificats', '1');
         if (movimentsFilterPendents.value) params.set('pendents', '1');
         if (movimentsFilterCerca.value.trim()) params.set('cerca', movimentsFilterCerca.value.trim());
+        if (movimentsFilterTotsComptes.value) params.set('tots_comptes', '1');
 
         const res = await fetch(`/lloguers/${lloguer.id}/moviments?${params}`, {
             headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
@@ -1037,7 +1042,7 @@ watch(movimentsFilterClassificats, (val) => {
 watch(movimentsFilterPendents, (val) => {
     if (val) movimentsFilterClassificats.value = false;
 });
-watch([movimentsFilterAny, movimentsFilterClassificats, movimentsFilterPendents, movimentsFilterCerca], () => {
+watch([movimentsFilterAny, movimentsFilterClassificats, movimentsFilterPendents, movimentsFilterCerca, movimentsFilterTotsComptes], () => {
     if (selectedLloguerId.value) {
         const lloguer = props.lloguers.find(l => l.id === selectedLloguerId.value);
         if (lloguer) fetchMoviments(lloguer, 1);
@@ -1053,6 +1058,7 @@ watch(selectedLloguerId, (newId) => {
     movimentsFilterClassificats.value = false;
     movimentsFilterPendents.value = false;
     movimentsFilterCerca.value = '';
+    movimentsFilterTotsComptes.value = false;
     selectedMovimentIds.value = new Set();
     if (newId) {
         const lloguer = props.lloguers.find(l => l.id === newId);
@@ -1848,6 +1854,17 @@ const formatCurrency = (value: string | null): string => {
                                 />
                                 Pendents de classificar
                             </label>
+                            <label
+                                class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer"
+                                title="Per trobar una despesa d'aquest lloguer pagada des d'un altre compte"
+                            >
+                                <input
+                                    type="checkbox"
+                                    v-model="movimentsFilterTotsComptes"
+                                    class="rounded border-gray-300 text-amber-500 focus:ring-amber-400"
+                                />
+                                Cercar a tots els comptes
+                            </label>
                             <div class="relative">
                                 <input
                                     v-model="movimentsFilterCerca"
@@ -1974,8 +1991,15 @@ const formatCurrency = (value: string | null): string => {
                                         <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                                             {{ moviment.data_moviment }}
                                         </td>
-                                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 max-w-xs truncate">
-                                            {{ moviment.concepte }}
+                                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 max-w-xs">
+                                            <div class="flex items-center gap-1.5">
+                                                <span
+                                                    v-if="moviment.compte_nom"
+                                                    :title="`Moviment del compte ${moviment.compte_nom}`"
+                                                    class="shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
+                                                >⇄ {{ moviment.compte_digits }}</span>
+                                                <span class="truncate">{{ moviment.concepte }}</span>
+                                            </div>
                                         </td>
                                         <CategoriaCell
                                             class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"
@@ -2414,13 +2438,23 @@ const formatCurrency = (value: string | null): string => {
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoria (opcional)</label>
-                                    <CategoryTreeSelect
-                                        :categories="movimentCategories"
-                                        v-model="movimentEditForm.categoria_id"
-                                        :allow-none="true"
-                                        placeholder="Selecciona una categoria..."
-                                    />
-                                    <p v-if="movimentEditErrors.categoria_id" class="mt-1 text-sm text-red-600">{{ movimentEditErrors.categoria_id }}</p>
+                                    <!-- L'arbre de categories és el del compte del lloguer: per a un moviment
+                                         d'un altre compte no serveix i s'edita des de Gestió de moviments. -->
+                                    <template v-if="!editingMovimentForEdit?.compte_nom">
+                                        <CategoryTreeSelect
+                                            :categories="movimentCategories"
+                                            v-model="movimentEditForm.categoria_id"
+                                            :allow-none="true"
+                                            placeholder="Selecciona una categoria..."
+                                        />
+                                        <p v-if="movimentEditErrors.categoria_id" class="mt-1 text-sm text-red-600">{{ movimentEditErrors.categoria_id }}</p>
+                                    </template>
+                                    <p v-else class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                        {{ editingMovimentForEdit.categoria_nom || 'Sense categoria' }}
+                                        <span class="block text-xs italic">
+                                            El moviment és del compte {{ editingMovimentForEdit.compte_nom }}; la categoria s'edita des de Gestió de moviments.
+                                        </span>
+                                    </p>
                                 </div>
                                 <p v-if="movimentEditErrors.error" class="text-sm text-red-600">{{ movimentEditErrors.error }}</p>
                             </div>

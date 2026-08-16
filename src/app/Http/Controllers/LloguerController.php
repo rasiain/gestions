@@ -203,8 +203,16 @@ class LloguerController extends Controller
         $page    = max(1, $request->integer('page', 1));
         $perPage = 30;
 
-        $query = MovimentCompteCorrent::with(['concepte', 'categoria', 'despesa', 'ingressos.linies', 'factura:id,moviment_id,numero_factura,total'])
-            ->where('compte_corrent_id', $lloguer->compte_corrent_id);
+        $query = MovimentCompteCorrent::with(['concepte', 'categoria', 'despesa', 'ingressos.linies', 'factura:id,moviment_id,numero_factura,total', 'compteCorrent:id,nom,compte_corrent'])
+            // Excepcionalment una despesa d'un lloguer es paga des d'un altre compte.
+            // Amb `tots_comptes` es poden cercar aquests moviments per classificar-los;
+            // un cop classificats són sempre visibles, vinguin del compte que vinguin.
+            ->when(! $request->boolean('tots_comptes'), fn($q) => $q->where(function ($q2) use ($lloguer) {
+                $q2->where('compte_corrent_id', $lloguer->compte_corrent_id)
+                   ->orWhereHas('despesa', fn($q3) => $q3->where('lloguer_id', $lloguer->id))
+                   ->orWhereHas('ingressos', fn($q3) => $q3->where('lloguer_id', $lloguer->id))
+                   ->orWhereHas('factura', fn($q3) => $q3->where('lloguer_id', $lloguer->id));
+            }));
 
         if ($any = $request->integer('any')) {
             $query->whereYear('data_moviment', $any);
@@ -244,6 +252,13 @@ class LloguerController extends Controller
             ->map(fn($m) => [
                 'id'              => $m->id,
                 'compte_corrent_id' => $m->compte_corrent_id,
+                // Només per als moviments d'un altre compte: identifica'l a la llista
+                'compte_nom'      => $m->compte_corrent_id !== $lloguer->compte_corrent_id
+                    ? ($m->compteCorrent?->nom ?? '')
+                    : null,
+                'compte_digits'   => $m->compte_corrent_id !== $lloguer->compte_corrent_id
+                    ? substr((string) $m->compteCorrent?->compte_corrent, -4)
+                    : null,
                 'data_moviment'   => $m->data_moviment->toDateString(),
                 'concepte'        => $m->concepte?->concepte ?? $m->concepte_original ?? '',
                 'notes'           => $m->notes,
@@ -321,8 +336,9 @@ class LloguerController extends Controller
     {
         $lloguer->load('immoble');
 
-        $moviments = MovimentCompteCorrent::where('compte_corrent_id', $lloguer->compte_corrent_id)
-            ->where('exclou_lloguer', false)
+        // Sense filtre de compte: compten els moviments del lloguer, encara que
+        // excepcionalment una despesa s'hagi pagat des d'un altre compte.
+        $moviments = MovimentCompteCorrent::where('exclou_lloguer', false)
             ->with(['ingressos.linies', 'despesa.proveidor', 'concepte', 'factura'])
             ->when($any, fn($q) => $q->whereYear('data_moviment', $any))
             ->where(function ($q) use ($lloguer) {
