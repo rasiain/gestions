@@ -9,3 +9,6 @@ src/storage/dades-banc-prova/
 
 # Claude Code
 .claude/
+
+# macOS
+.DS_Store
