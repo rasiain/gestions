@@ -99,6 +99,56 @@ const tab = ref<'immoble' | 'moviments'>('immoble');
 const seccionsAmbDades = computed(() => props.seccions.filter(s => s.poblacions.length > 0));
 const capImmoble = computed(() => seccionsAmbDades.value.length === 0);
 
+/**
+ * Identitat visual de cada secció. L'ambre és el color dels lloguers a la resta
+ * de l'aplicació: qui mira la pàgina ha de veure d'un cop d'ull quins immobles
+ * són de lloguer i quins no.
+ */
+const estilSeccio: Record<Seccio['clau'], {
+    vora: string;
+    pastilla: string;
+    titol: string;
+    icona: string;
+    descripcio: string;
+    recompte: (n: number) => string;
+}> = {
+    lloguer: {
+        vora: 'border-amber-400',
+        pastilla: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+        titol: 'text-amber-800 dark:text-amber-300',
+        // Casa
+        icona: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
+        descripcio: 'Lligats a un lloguer per les despeses classificades dels seus moviments.',
+        recompte: (n) => `${n} ${n === 1 ? 'immoble' : 'immobles'}`,
+    },
+    identificat: {
+        vora: 'border-slate-400',
+        pastilla: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
+        titol: 'text-slate-700 dark:text-slate-200',
+        // Edifici
+        icona: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
+        descripcio: "L'immoble surt de l'arbre de categories, però cap despesa de lloguer no l'hi lliga.",
+        recompte: (n) => `${n} ${n === 1 ? 'immoble' : 'immobles'}`,
+    },
+    resta: {
+        vora: 'border-gray-300 dark:border-gray-600',
+        pastilla: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
+        titol: 'text-gray-600 dark:text-gray-300',
+        // Interrogant
+        icona: 'M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+        descripcio: "Ni l'arbre ni les despeses no diuen l'immoble; sota cada bloc hi ha la categoria completa.",
+        recompte: (n) => `${n} ${n === 1 ? 'grup' : 'grups'}`,
+    },
+};
+
+function immoblesDeSeccio(seccio: Seccio): ImmobleGrup[] {
+    return seccio.poblacions.flatMap((p) => p.immobles);
+}
+
+function totalSeccio(seccio: Seccio, camp: 'total_actual' | 'total_anterior'): number {
+    return immoblesDeSeccio(seccio).reduce((acc, g) => acc + g[camp], 0);
+}
+
 // ---- Modal detall ----
 const showDetall = ref(false);
 const detallTitol = ref('');
@@ -260,15 +310,43 @@ function desaEdicio() {
                     </p>
 
                     <section v-for="seccio in seccionsAmbDades" :key="seccio.clau">
-                        <h2 class="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">{{ seccio.titol }}</h2>
-                        <p v-if="seccio.clau === 'resta'" class="mb-4 text-xs text-gray-500 dark:text-gray-400">
-                            No s'ha pogut deduir l'immoble ni de l'arbre de categories ni de les despeses de lloguer.
-                            Sota cada bloc hi ha la categoria completa amb tots els seus pares.
-                        </p>
+                        <!-- Capçalera de secció: el que separa els immobles de lloguer de la resta -->
+                        <div
+                            class="rounded-lg border-l-8 bg-white px-4 py-3 shadow-sm dark:bg-gray-800"
+                            :class="estilSeccio[seccio.clau].vora"
+                        >
+                            <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+                                <div class="flex items-center gap-3">
+                                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" :class="estilSeccio[seccio.clau].pastilla">
+                                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="estilSeccio[seccio.clau].icona" />
+                                        </svg>
+                                    </span>
+                                    <div>
+                                        <h2 class="text-lg font-bold leading-tight" :class="estilSeccio[seccio.clau].titol">
+                                            {{ seccio.titol }}
+                                            <span class="ml-1 align-middle text-xs font-medium text-gray-400 dark:text-gray-500">
+                                                {{ estilSeccio[seccio.clau].recompte(immoblesDeSeccio(seccio).length) }}
+                                            </span>
+                                        </h2>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">{{ estilSeccio[seccio.clau].descripcio }}</p>
+                                    </div>
+                                </div>
+                                <div class="flex gap-6 text-sm">
+                                    <span class="text-gray-500 dark:text-gray-400">
+                                        {{ props.anyActual }}: <span class="font-bold text-gray-900 dark:text-gray-100">{{ formatEur(totalSeccio(seccio, 'total_actual')) }}</span>
+                                    </span>
+                                    <span class="text-gray-500 dark:text-gray-400">
+                                        {{ props.anyAnterior }}: <span class="font-medium text-gray-700 dark:text-gray-300">{{ formatEur(totalSeccio(seccio, 'total_anterior')) }}</span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
 
                     <div v-for="pob in seccio.poblacions" :key="pob.poblacio ?? '—'" class="mt-4 space-y-4">
-                        <h3 class="text-xs font-semibold uppercase tracking-widest" :class="pob.poblacio ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'">
+                        <h3 class="flex items-center gap-3 text-xs font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
                             {{ pob.poblacio ?? 'Sense població' }}
+                            <span class="h-px flex-1 bg-gray-200 dark:bg-gray-700"></span>
                         </h3>
 
                     <div
@@ -276,7 +354,8 @@ function desaEdicio() {
                         :key="grup.immoble + grup.paths[0]"
                         class="overflow-hidden rounded-lg bg-white shadow-sm dark:bg-gray-800"
                     >
-                        <div class="flex items-center justify-between border-l-4 border-red-400 bg-gray-50 px-4 py-3 dark:bg-gray-700/50">
+                        <!-- La vora repeteix el color de la secció: cada targeta es reconeix fora de context -->
+                        <div class="flex items-center justify-between border-l-4 bg-gray-50 px-4 py-3 dark:bg-gray-700/50" :class="estilSeccio[seccio.clau].vora">
                             <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">
                                 {{ grup.immoble }}
                                 <span v-if="grup.lloguer && grup.lloguer !== grup.immoble" class="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
