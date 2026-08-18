@@ -208,16 +208,23 @@ class ImpostosTaxesController extends Controller
     }
 
     /**
+     * El compte hi va perquè un mateix grup pot rebre taxes de comptes diferents,
+     * i sense població ni immoble el compte és sovint l'única pista de qui paga.
+     *
      * @param  Collection<int, MovimentCompteCorrent>  $moviments
-     * @return array<int, array{data: string, import: float}>
+     * @return array<int, array{data: string, import: float, compte: ?string, compte_digits: ?string}>
      */
     private function movimentsAny(Collection $moviments, int $any): array
     {
         return $moviments
             ->filter(fn (MovimentCompteCorrent $m) => (int) $m->data_moviment->format('Y') === $any)
             ->map(fn (MovimentCompteCorrent $m) => [
-                'data'   => $m->data_moviment->toDateString(),
-                'import' => (float) $m->import,
+                'data'          => $m->data_moviment->toDateString(),
+                'import'        => (float) $m->import,
+                'compte'        => $m->compteCorrent?->nom,
+                'compte_digits' => $m->compteCorrent
+                    ? substr((string) $m->compteCorrent->compte_corrent, -4)
+                    : null,
             ])
             ->sortBy('data')
             ->values()

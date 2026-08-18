@@ -8,6 +8,9 @@ import { computed, ref } from 'vue';
 interface MovimentDetall {
     data: string;
     import: number;
+    compte: string | null;
+    /** Darrers 4 dígits de l'IBAN: identifica el compte quan el nom no hi cap. */
+    compte_digits: string | null;
 }
 
 interface TipusImmoble {
@@ -417,25 +420,31 @@ function desaEdicio() {
         </div>
 
         <!-- Modal detall moviments -->
-        <Modal :show="showDetall" max-width="md" @close="showDetall = false">
+        <Modal :show="showDetall" max-width="lg" @close="showDetall = false">
             <div class="p-6">
                 <h3 class="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">{{ detallTitol }}</h3>
                 <table class="w-full divide-y divide-gray-200 dark:divide-gray-700">
                     <thead>
                         <tr>
                             <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Data</th>
+                            <th class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Compte</th>
                             <th class="px-3 py-2 text-right text-xs font-medium uppercase text-gray-500 dark:text-gray-400">Import</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                         <tr v-for="(mov, idx) in detallMoviments" :key="idx">
-                            <td class="px-3 py-2 text-sm text-gray-700 dark:text-gray-300">{{ mov.data }}</td>
-                            <td class="px-3 py-2 text-right text-sm text-gray-700 dark:text-gray-300">{{ formatEur(mov.import) }}</td>
+                            <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-700 dark:text-gray-300">{{ mov.data }}</td>
+                            <td class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+                                <span v-if="mov.compte_digits" class="font-mono tracking-widest text-gray-400 dark:text-gray-500">···· {{ mov.compte_digits }}</span>
+                                <span v-if="mov.compte" class="ml-2 text-xs">{{ mov.compte }}</span>
+                                <span v-if="!mov.compte && !mov.compte_digits" class="text-gray-300 dark:text-gray-600">—</span>
+                            </td>
+                            <td class="whitespace-nowrap px-3 py-2 text-right text-sm text-gray-700 dark:text-gray-300">{{ formatEur(mov.import) }}</td>
                         </tr>
                     </tbody>
                     <tfoot class="bg-gray-50 dark:bg-gray-700">
                         <tr class="font-bold">
-                            <td class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">Total</td>
+                            <td colspan="2" class="px-3 py-2 text-sm text-gray-900 dark:text-gray-100">Total</td>
                             <td class="px-3 py-2 text-right text-sm text-gray-900 dark:text-gray-100">{{ formatEur(detallTotal) }}</td>
                         </tr>
                     </tfoot>
