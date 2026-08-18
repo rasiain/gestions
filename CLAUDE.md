@@ -87,6 +87,8 @@ Sis passos seqüencials: (1) generar hashes, (2) trobar punt de junció per hash
 
 **`g_taxes_immobles`** desa les decisions que ni l'arbre ni les despeses poden resoldre, per categoria: `immoble` (nom del grup, i alhora manera d'unificar dues categories: mateix nom + mateix municipi = mateix grup), `poblacio` i `ocult` (impostos puntuals que no són de cap immoble: successions, plusvàlues). L'ajust manual mana sobre l'arbre. No té pantalla de gestió: s'edita per migració o tinker.
 
+**Nuclis de població ≠ municipi**: l'agrupació és per **municipi**, perquè és qui recapta. L'arbre, però, de vegades usa el nucli com a node de població. Cas resolt: `VILANOVA DE LA MUGA` és un nucli de **Peralada** (migració `2026_08_17_000003`), i les seves taxes van amb les de `CARRER MAJOR` i `CAMPS`. Pedret i Marzà, en canvi, sí que és municipi propi. Si apareix un nucli nou, la correcció és un ajust de `poblacio` a `g_taxes_immobles` (i, si escau, al camp `g_immobles.poblacio`).
+
 ### Components reutilitzables destacats
 - `BulkEditModal.vue`: modal d'edició múltiple (concepte, notes, categoria). Gestiona el formulari internament; emet `@submit(payload)` i `v-model:open`. El pare conserva `saving` i `error` i fa la crida API. Usat a `Moviments/Index.vue` i `Lloguers/Index.vue`.
 
