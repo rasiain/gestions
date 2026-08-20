@@ -134,6 +134,10 @@ class TaxesService
             return null;
         }
 
+        // L'apòstrof tipogràfic ve de les adreces cadastrals ("PLATJA D’ARO"):
+        // sense unificar-lo faria grup a part del "Platja d'Aro" escrit a mà.
+        $poblacio = str_replace(['’', '‘', 'ʼ', '´'], "'", $poblacio);
+
         $paraules = preg_split('/\s+/', trim(mb_strtolower($poblacio)));
 
         $canonic = array_map(function (string $paraula, int $i) {
