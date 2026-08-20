@@ -280,7 +280,13 @@ class TaxesService
 
             $resolucio[$categoriaId] = [
                 'etiqueta'    => $info['immoble'] ?? $lloguer['lloguer_nom'] ?? null,
-                'poblacio'    => $info['poblacio_ajust'] ?? $immoble?->poblacio ?? $info['poblacio'],
+                // Les tres fonts es canonitzen igual: "SALT" a g_immobles i "Salt"
+                // vingut de l'arbre són el mateix municipi i han de fer un sol grup.
+                // (canonitzaPoblacio() torna null si el valor és buit, de manera que
+                // una població en blanc segueix caient a la font següent.)
+                'poblacio'    => self::canonitzaPoblacio($info['poblacio_ajust'])
+                    ?? self::canonitzaPoblacio($immoble?->poblacio)
+                    ?? $info['poblacio'],
                 'immoble'     => $immoble,
                 'lloguer_id'  => $lloguer['lloguer_id'] ?? null,
                 'lloguer_nom' => $lloguer['lloguer_nom'] ?? null,
