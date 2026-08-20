@@ -28,7 +28,9 @@ class MovimentClassificacioController extends Controller
             'iva_import'             => ['nullable', 'numeric'],
             'base_lloguer'           => ['nullable', 'numeric'],
             'linies'                 => ['nullable', 'array'],
-            'linies.*.tipus'         => ['required', 'in:comunitat,taxes,assegurança,compres,reparacions,gestoria,comissions,altres'],
+            'linies.*.tipus'         => ['required', 'in:comunitat,taxes,assegurança,compres,reparacions,gestoria,comissions,altres,escombraries'],
+            // Les repercussions ja són dins de base_lloguer: la desglossen, no la redueixen
+            'linies.*.naturalesa'    => ['nullable', 'in:deduccio,repercussio'],
             'linies.*.descripcio'    => ['required', 'string', 'max:200'],
             'linies.*.import'        => ['required', 'numeric'],
             'linies.*.proveidor_id'  => ['nullable', 'integer', 'exists:g_proveidors,id'],
@@ -216,6 +218,7 @@ class MovimentClassificacioController extends Controller
                     MovimentLloguerIngresLinia::create([
                         'ingres_id'    => $ingres->id,
                         'tipus'        => $linia['tipus'],
+                        'naturalesa'   => $linia['naturalesa'] ?? MovimentLloguerIngresLinia::DEDUCCIO,
                         'descripcio'   => $linia['descripcio'],
                         'import'       => $linia['import'],
                         'proveidor_id' => $linia['proveidor_id'] ?? null,
@@ -257,6 +260,7 @@ class MovimentClassificacioController extends Controller
                 'linies'       => $ingres->linies->map(fn($l) => [
                     'id'           => $l->id,
                     'tipus'        => $l->tipus,
+                    'naturalesa'   => $l->naturalesa,
                     'descripcio'   => $l->descripcio,
                     'import'       => $l->import,
                     'proveidor_id' => $l->proveidor_id,

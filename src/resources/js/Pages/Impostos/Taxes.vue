@@ -13,18 +13,44 @@ interface MovimentDetall {
     compte_digits: string | null;
 }
 
+/** Estat d'una taxa quan se n'ha definit el total del rebut. */
+interface EstatTaxa {
+    /** Null quan encara no s'ha definit el total del rebut. */
+    rebut_id: number | null;
+    total: number | null;
+    pagat: number;
+    pendent: number | null;
+    percentatge: number | null;
+    terminis_fets: number;
+    terminis_previstos: number | null;
+    sobrepagat: boolean;
+    notes: string | null;
+    repercutible: boolean;
+    repercutit?: number;
+    pendent_llogater?: number | null;
+    percentatge_llogater?: number | null;
+    /** Positiu: el llogater ha avançat. Negatiu: el propietari finança. */
+    saldo?: number;
+    /** Cap import repercutit registrat: als lloguers sense factura encara no és dada estructurada. */
+    repercussio_parcial?: boolean;
+}
+
 interface TipusImmoble {
     tipus: string;
     actual: number;
     anterior: number;
     moviments_actual: MovimentDetall[];
     moviments_anterior: MovimentDetall[];
+    estat: EstatTaxa | null;
 }
 
 interface ImmobleGrup {
     immoble: string;
     poblacio: string | null;
     lloguer: string | null;
+    /** Clau d'agrupació i immoble real: identifiquen el rebut. */
+    grup: string;
+    immoble_id: number | null;
     seccio: 'lloguer' | 'identificat' | 'resta';
     /** Path complet de les categories: pista per als no identificats. */
     paths: string[];
@@ -161,6 +187,77 @@ function obreDetall(titol: string, moviments: MovimentDetall[], total: number) {
     detallMoviments.value = moviments;
     detallTotal.value = total;
     showDetall.value = true;
+}
+
+// ---- Rebut: total anual d'una taxa ----
+const showRebut = ref(false);
+const rebutContext = ref<{ grup: ImmobleGrup; tipus: TipusImmoble } | null>(null);
+
+const rebutForm = useForm({
+    grup: '',
+    immoble_id: null as number | null,
+    tipus: '',
+    any: props.anyActual,
+    import_total: null as number | null,
+    terminis_previstos: null as number | null,
+    repercutible: false,
+    concepte_repercussio: 'escombraries',
+    notes: '' as string | null,
+});
+
+function obreRebut(grup: ImmobleGrup, tipus: TipusImmoble) {
+    rebutContext.value = { grup, tipus };
+    rebutForm.clearErrors();
+    rebutForm.grup = grup.grup;
+    rebutForm.immoble_id = grup.immoble_id;
+    rebutForm.tipus = tipus.tipus;
+    rebutForm.any = props.anyActual;
+
+    const estat = tipus.estat;
+    rebutForm.import_total = estat?.total ?? null;
+    rebutForm.terminis_previstos = estat?.terminis_previstos ?? null;
+    // L'escombraries d'un immoble de lloguer és, per defecte, cosa del llogater
+    rebutForm.repercutible = estat?.repercutible ?? (tipus.tipus === 'Escombraries' && grup.immoble_id !== null);
+    rebutForm.concepte_repercussio = 'escombraries';
+    rebutForm.notes = estat?.notes ?? '';
+
+    showRebut.value = true;
+}
+
+/** Els rebuts es repeteixen gairebé iguals: l'any passat és la millor proposta. */
+function proposaDeLAnyAnterior() {
+    const tipus = rebutContext.value?.tipus;
+    if (!tipus) return;
+    rebutForm.import_total = Math.abs(tipus.anterior);
+    rebutForm.terminis_previstos = tipus.moviments_anterior.length || null;
+}
+
+function desaRebut() {
+    const rebutId = rebutContext.value?.tipus.estat?.rebut_id;
+    const opcions = { preserveScroll: true, onSuccess: () => (showRebut.value = false) };
+
+    // Sense rebut previ (una fila que només mostrava el retorn del llogater) es crea
+    if (rebutId == null) {
+        rebutForm.post(route('impostos.taxes.rebuts.store'), opcions);
+        return;
+    }
+
+    rebutForm.put(route('impostos.taxes.rebuts.update', rebutId), opcions);
+}
+
+function esborraRebut() {
+    const rebutId = rebutContext.value?.tipus.estat?.rebut_id;
+    if (rebutId == null || !confirm('Vols esborrar el total definit per a aquesta taxa?')) return;
+
+    rebutForm.delete(route('impostos.taxes.rebuts.destroy', rebutId), {
+        preserveScroll: true,
+        onSuccess: () => (showRebut.value = false),
+    });
+}
+
+/** Amplada de barra, acotada al 100 % perquè un sobrepagament no la desbordi. */
+function ampladaBarra(percentatge: number | null | undefined): string {
+    return `${Math.min(Math.max(percentatge ?? 0, 0), 100)}%`;
 }
 
 // ---- Filtres Vista 2 ----
@@ -375,10 +472,11 @@ function desaEdicio() {
                         <table class="min-w-full table-fixed divide-y divide-gray-200 dark:divide-gray-700">
                             <thead class="bg-gray-50 dark:bg-gray-700">
                                 <tr>
-                                    <th class="w-2/5 px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Tipus</th>
-                                    <th class="w-1/5 px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-900 dark:text-gray-100">{{ props.anyActual }}</th>
-                                    <th class="w-1/5 px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">{{ props.anyAnterior }}</th>
-                                    <th class="w-1/5 px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Variació</th>
+                                    <th class="w-1/5 px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Tipus</th>
+                                    <th class="w-[13%] px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-900 dark:text-gray-100">{{ props.anyActual }}</th>
+                                    <th class="w-[13%] px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">{{ props.anyAnterior }}</th>
+                                    <th class="w-[10%] px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Variació</th>
+                                    <th class="w-1/3 px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Estat {{ props.anyActual }}</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
@@ -408,6 +506,63 @@ function desaEdicio() {
                                             {{ variacio(t.actual, t.anterior)! > 0 ? '+' : '' }}{{ variacio(t.actual, t.anterior)!.toFixed(1) }}%
                                         </span>
                                         <span v-else class="text-gray-300 dark:text-gray-600">—</span>
+                                    </td>
+                                    <!-- Estat: quant del rebut s'ha pagat i, si és de lloguer, quant n'ha retornat el llogater -->
+                                    <td class="px-4 py-2">
+                                        <button
+                                            v-if="!t.estat"
+                                            @click="obreRebut(grup, t)"
+                                            class="text-xs text-gray-400 hover:text-red-600 dark:text-gray-500 dark:hover:text-red-400"
+                                        >
+                                            ─ definir total
+                                        </button>
+                                        <button v-else @click="obreRebut(grup, t)" class="block w-full text-left" title="Edita el total del rebut">
+                                            <!-- Amb rebut definit: quant se n'ha pagat -->
+                                            <template v-if="t.estat.total !== null">
+                                                <div class="flex items-center gap-2">
+                                                    <div class="h-2 flex-1 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-600">
+                                                        <div
+                                                            class="h-full rounded-full"
+                                                            :class="t.estat.sobrepagat ? 'bg-red-500' : (t.estat.percentatge !== null && t.estat.percentatge >= 99.5 ? 'bg-green-500' : 'bg-blue-500')"
+                                                            :style="{ width: ampladaBarra(t.estat.percentatge) }"
+                                                        ></div>
+                                                    </div>
+                                                    <span class="whitespace-nowrap text-xs text-gray-600 dark:text-gray-300">
+                                                        <span v-if="t.estat.terminis_previstos">{{ t.estat.terminis_fets }}/{{ t.estat.terminis_previstos }} · </span>{{ t.estat.percentatge }} %
+                                                    </span>
+                                                </div>
+                                                <div class="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+                                                    de {{ formatEur(t.estat.total) }}
+                                                    <span v-if="t.estat.sobrepagat" class="ml-1 text-red-600 dark:text-red-400">· pagat de més, revisa el total</span>
+                                                    <span v-else-if="t.estat.pendent !== null && t.estat.pendent > 0">· en queden {{ formatEur(t.estat.pendent) }}</span>
+                                                </div>
+                                            </template>
+                                            <span v-else class="text-xs text-gray-400 hover:text-red-600 dark:text-gray-500 dark:hover:text-red-400">─ definir total</span>
+
+                                            <!-- Part del llogater: l'import retornat és cert encara que no hi hagi total definit -->
+                                            <template v-if="t.estat.repercutible">
+                                                <div class="mt-1 flex items-center gap-2">
+                                                    <div v-if="t.estat.total !== null" class="h-2 flex-1 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-600">
+                                                        <div class="h-full rounded-full bg-amber-400" :style="{ width: ampladaBarra(t.estat.percentatge_llogater) }"></div>
+                                                    </div>
+                                                    <span class="whitespace-nowrap text-xs text-amber-700 dark:text-amber-400">
+                                                        llogater {{ formatEur(t.estat.repercutit ?? 0) }}<span v-if="t.estat.percentatge_llogater !== null"> · {{ t.estat.percentatge_llogater }} %</span>
+                                                    </span>
+                                                </div>
+                                                <div class="mt-0.5 text-xs">
+                                                    <span v-if="t.estat.repercussio_parcial" class="text-gray-400 dark:text-gray-500">
+                                                        cap import repercutit registrat
+                                                    </span>
+                                                    <span v-else-if="t.estat.saldo! > 0" class="text-green-600 dark:text-green-400">
+                                                        ↑ ha avançat {{ formatEur(t.estat.saldo!) }}
+                                                    </span>
+                                                    <span v-else-if="t.estat.saldo! < 0" class="text-amber-700 dark:text-amber-400">
+                                                        ↓ li queden {{ formatEur(-t.estat.saldo!) }} per retornar
+                                                    </span>
+                                                    <span v-else class="text-gray-400 dark:text-gray-500">al dia</span>
+                                                </div>
+                                            </template>
+                                        </button>
                                     </td>
                                 </tr>
                             </tbody>
@@ -532,6 +687,81 @@ function desaEdicio() {
                     <button @click="showDetall = false" class="rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">
                         Tancar
                     </button>
+                </div>
+            </div>
+        </Modal>
+
+        <!-- Modal: total anual del rebut -->
+        <Modal :show="showRebut" max-width="lg" @close="showRebut = false">
+            <div class="p-6">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    Total a pagar {{ rebutForm.any }}
+                </h3>
+                <p v-if="rebutContext" class="mb-4 text-sm text-gray-500 dark:text-gray-400">
+                    {{ rebutContext.grup.immoble }} — {{ rebutContext.tipus.tipus }}
+                </p>
+
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Import total del rebut</label>
+                            <input v-model.number="rebutForm.import_total" type="number" step="0.01"
+                                class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-red-500 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                            <p v-if="rebutForm.errors.import_total" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ rebutForm.errors.import_total }}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Terminis previstos</label>
+                            <input v-model.number="rebutForm.terminis_previstos" type="number" min="1" max="12" placeholder="opcional"
+                                class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-red-500 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                            <p v-if="rebutForm.errors.terminis_previstos" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ rebutForm.errors.terminis_previstos }}</p>
+                        </div>
+                    </div>
+
+                    <button
+                        v-if="rebutContext && rebutContext.tipus.anterior !== 0"
+                        @click="proposaDeLAnyAnterior"
+                        class="text-xs text-red-600 hover:underline dark:text-red-400"
+                    >
+                        Proposa des del {{ props.anyAnterior }}: {{ formatEur(Math.abs(rebutContext.tipus.anterior)) }}
+                        ({{ rebutContext.tipus.moviments_anterior.length }} pagaments)
+                    </button>
+
+                    <label class="flex items-start gap-2">
+                        <input v-model="rebutForm.repercutible" type="checkbox" class="mt-0.5 rounded border-gray-300 text-red-600 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-700" />
+                        <span class="text-sm text-gray-700 dark:text-gray-300">
+                            El llogater el retorna
+                            <span class="block text-xs text-gray-400 dark:text-gray-500">
+                                Es compta amb les línies «escombraries» de les factures del lloguer.
+                            </span>
+                        </span>
+                    </label>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
+                        <textarea v-model="rebutForm.notes" rows="2"
+                            class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-red-500 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"></textarea>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-between gap-2">
+                    <button
+                        v-if="rebutContext?.tipus.estat?.rebut_id"
+                        @click="esborraRebut"
+                        :disabled="rebutForm.processing"
+                        class="rounded-md px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30"
+                    >
+                        Esborra el total
+                    </button>
+                    <div class="ml-auto flex gap-2">
+                        <button @click="showRebut = false" :disabled="rebutForm.processing"
+                            class="rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">
+                            Cancel·la
+                        </button>
+                        <button @click="desaRebut" :disabled="rebutForm.processing"
+                            class="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-40">
+                            Desa
+                        </button>
+                    </div>
                 </div>
             </div>
         </Modal>

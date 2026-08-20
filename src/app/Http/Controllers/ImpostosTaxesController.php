@@ -3,8 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\TaxaPatroRequest;
+use App\Http\Requests\TaxaRebutRequest;
 use App\Models\MovimentCompteCorrent;
 use App\Models\TaxaPatro;
+use App\Models\TaxaRebut;
+use App\Services\TaxesEstatService;
 use App\Services\TaxesService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -12,8 +15,10 @@ use Inertia\Inertia;
 
 class ImpostosTaxesController extends Controller
 {
-    public function __construct(private readonly TaxesService $taxes)
-    {
+    public function __construct(
+        private readonly TaxesService $taxes,
+        private readonly TaxesEstatService $estats,
+    ) {
     }
 
     public function index(Request $request)
@@ -56,7 +61,8 @@ class ImpostosTaxesController extends Controller
         $seccions = $this->agrupaPerImmoble(
             $moviments->filter(fn (MovimentCompteCorrent $m) => in_array((int) $m->data_moviment->format('Y'), [$any, $anyAnterior], true)),
             $any,
-            $anyAnterior
+            $anyAnterior,
+            $this->estats->estats($moviments, $any)
         );
 
         return Inertia::render('Impostos/Taxes', [
@@ -118,22 +124,24 @@ class ImpostosTaxesController extends Controller
      * Tres seccions —de lloguer, identificats i la resta—, cadascuna amb els
      * immobles agrupats per població.
      */
-    private function agrupaPerImmoble(Collection $moviments, int $anyActual, int $anyAnterior): array
+    private function agrupaPerImmoble(Collection $moviments, int $anyActual, int $anyAnterior, array $estats): array
     {
         $grups = $moviments
             // Els impostos puntuals que no són de cap immoble no hi pinten res
             ->reject(fn (MovimentCompteCorrent $m) => $m->getAttribute('ocult_taxa'))
             ->groupBy(fn (MovimentCompteCorrent $m) => $m->getAttribute('grup_taxa'))
-            ->map(function (Collection $movsImmoble) use ($anyActual, $anyAnterior) {
+            ->map(function (Collection $movsImmoble, string $grup) use ($anyActual, $anyAnterior, $estats) {
                 $tipus = $movsImmoble
                     ->groupBy(fn (MovimentCompteCorrent $m) => $m->getAttribute('tipus_taxa'))
-                    ->map(function (Collection $movsTipus, string $tipus) use ($anyActual, $anyAnterior) {
+                    ->map(function (Collection $movsTipus, string $tipus) use ($anyActual, $anyAnterior, $estats, $grup) {
                         return [
                             'tipus'             => $tipus,
                             'actual'            => (float) $this->totalAny($movsTipus, $anyActual),
                             'anterior'          => (float) $this->totalAny($movsTipus, $anyAnterior),
                             'moviments_actual'  => $this->movimentsAny($movsTipus, $anyActual),
                             'moviments_anterior' => $this->movimentsAny($movsTipus, $anyAnterior),
+                            // Null quan no s'ha definit el total del rebut
+                            'estat'             => $estats[\App\Models\TaxaRebut::clauDe($grup, $tipus)] ?? null,
                         ];
                     })
                     ->sortBy('tipus')
@@ -150,6 +158,9 @@ class ImpostosTaxesController extends Controller
                     'immoble'        => $etiqueta ?? 'No identificat',
                     'poblacio'       => $primer('poblacio_taxa'),
                     'lloguer'        => $primer('lloguer_nom_taxa'),
+                    // Identifiquen la fila per poder-hi desar el total del rebut
+                    'grup'           => $grup,
+                    'immoble_id'     => $primer('immoble_id_taxa'),
                     'seccio'         => match (true) {
                         $primer('immoble_id_taxa') !== null => 'lloguer',
                         $etiqueta !== null                  => 'identificat',
@@ -229,6 +240,59 @@ class ImpostosTaxesController extends Controller
             ->sortBy('data')
             ->values()
             ->all();
+    }
+
+    // ---- Rebuts (total anual d'una taxa) ----
+
+    public function storeRebut(TaxaRebutRequest $request)
+    {
+        $dades = $this->dadesRebut($request);
+
+        // Un rebut per grup, tipus, any i referència: si ja hi és, s'actualitza
+        TaxaRebut::updateOrCreate(
+            $request->only(['grup', 'tipus', 'any']) + ['referencia' => $dades['referencia']],
+            $dades
+        );
+
+        return back();
+    }
+
+    public function updateRebut(TaxaRebutRequest $request, TaxaRebut $rebut)
+    {
+        $rebut->update($this->dadesRebut($request));
+
+        return back();
+    }
+
+    public function destroyRebut(TaxaRebut $rebut)
+    {
+        $rebut->delete();
+
+        return back();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function dadesRebut(TaxaRebutRequest $request): array
+    {
+        $repercutible = $request->boolean('repercutible');
+
+        return [
+            'grup'                 => $request->input('grup'),
+            'immoble_id'           => $request->input('immoble_id'),
+            'tipus'                => $request->input('tipus'),
+            'any'                  => $request->integer('any'),
+            'referencia'           => (string) $request->input('referencia', ''),
+            'import_total'         => $request->input('import_total'),
+            'terminis_previstos'   => $request->input('terminis_previstos'),
+            'repercutible'         => $repercutible,
+            // Sense concepte no hi ha res amb què casar la repercussió
+            'concepte_repercussio' => $repercutible
+                ? ($request->input('concepte_repercussio') ?: 'escombraries')
+                : null,
+            'notes'                => $request->input('notes'),
+        ];
     }
 
     // ---- Configuració de patrons ----

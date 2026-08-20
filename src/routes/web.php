@@ -149,6 +149,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/impostos/tipus-despesa-fiscal', [TipusDespesaFiscalController::class, 'index'])->name('impostos.tipus-despesa-fiscal');
     Route::put('/impostos/tipus-despesa-fiscal', [TipusDespesaFiscalController::class, 'updateMapping'])->name('impostos.tipus-despesa-fiscal.update');
     Route::get('/impostos/taxes', [ImpostosTaxesController::class, 'index'])->name('impostos.taxes');
+    Route::post('/impostos/taxes/rebuts', [ImpostosTaxesController::class, 'storeRebut'])->name('impostos.taxes.rebuts.store');
+    Route::put('/impostos/taxes/rebuts/{rebut}', [ImpostosTaxesController::class, 'updateRebut'])->name('impostos.taxes.rebuts.update');
+    Route::delete('/impostos/taxes/rebuts/{rebut}', [ImpostosTaxesController::class, 'destroyRebut'])->name('impostos.taxes.rebuts.destroy');
     Route::get('/impostos/taxes/patrons', [ImpostosTaxesController::class, 'patrons'])->name('impostos.taxes.patrons');
     Route::post('/impostos/taxes/patrons', [ImpostosTaxesController::class, 'storePatro'])->name('impostos.taxes.patrons.store');
     Route::put('/impostos/taxes/patrons/{patro}', [ImpostosTaxesController::class, 'updatePatro'])->name('impostos.taxes.patrons.update');

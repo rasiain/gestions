@@ -288,6 +288,7 @@ class LloguerController extends Controller
                     'linies'       => $ingres->linies->map(fn($l) => [
                         'id'           => $l->id,
                         'tipus'        => $l->tipus,
+                        'naturalesa'   => $l->naturalesa,
                         'descripcio'   => $l->descripcio,
                         'import'       => $l->import,
                         'proveidor_id' => $l->proveidor_id,
@@ -365,16 +366,18 @@ class LloguerController extends Controller
                 $totalBase += $base;
 
                 $concepte = $moviment->concepte?->concepte ?? $moviment->concepte_original ?? '';
-                $totalLinies = 0;
-                foreach ($ingresLloguer->linies as $linia) {
-                    $totalLinies += (float) $linia->import;
-                }
+                // Les repercussions ja són dins de la base: només la desglossen
+                $deduccions = $ingresLloguer->linies
+                    ->where('naturalesa', '!=', \App\Models\MovimentLloguerIngresLinia::REPERCUSSIO);
+                $totalLinies = (float) $deduccions->sum(fn($l) => (float) $l->import);
                 $netCalculat = $base - $totalLinies;
                 $importBanc = (float) $moviment->import;
 
                 $altresIngressosNet = $moviment->ingressos
                     ->filter(fn($i) => $i->lloguer_id !== $lloguer->id)
-                    ->sum(fn($i) => (float) $i->base_lloguer - $i->linies->sum(fn($l) => (float) $l->import));
+                    ->sum(fn($i) => (float) $i->base_lloguer - $i->linies
+                        ->where('naturalesa', '!=', \App\Models\MovimentLloguerIngresLinia::REPERCUSSIO)
+                        ->sum(fn($l) => (float) $l->import));
                 $importBancAjustat = round($importBanc - $altresIngressosNet, 2);
 
                 $ingressos[] = [
@@ -388,7 +391,7 @@ class LloguerController extends Controller
                     'notes' => $ingresLloguer->notes ?? '',
                 ];
 
-                foreach ($ingresLloguer->linies as $linia) {
+                foreach ($deduccions as $linia) {
                     $importLinia = (float) $linia->import;
                     $despeses[] = [
                         'data' => $moviment->data_moviment->toDateString(),

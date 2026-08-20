@@ -387,6 +387,8 @@ interface MovimentDespesa {
 interface MovimentIngresLinia {
     id: number;
     tipus: string;
+    /** `deduccio` es resta de la base; `repercussio` només la desglossa. */
+    naturalesa: 'deduccio' | 'repercussio';
     descripcio: string;
     import: string;
     proveidor_id: number | null;
@@ -740,10 +742,18 @@ const classificacioDespesa = ref({
 });
 
 const classificacioIngres = ref({
-    base_lloguer: null as number | null,
+    // La base que es desa és la suma: renda + escombraries repercutides. Es
+    // desglossen perquè es pugui seguir què retorna el llogater de la taxa.
+    renda: null as number | null,
+    escombraries: null as number | null,
     notes: '',
     linies: [] as { tipus: string; descripcio: string; import: number | null; proveidor_id: number | null }[],
 });
+
+/** El que es desa a `base_lloguer`: el total cobrat al llogater. */
+const ingresBaseTotal = computed(() =>
+    parseFloat(((classificacioIngres.value.renda ?? 0) + (classificacioIngres.value.escombraries ?? 0)).toFixed(2))
+);
 
 
 const categoriesDespesa = [
@@ -785,7 +795,10 @@ const categoriesIngresLinia = [
 const sumaIngressosNet = (moviment: Moviment): number =>
     moviment.ingressos.reduce((s, ingres) => {
         const base = parseFloat(ingres.base_lloguer) || 0;
-        const linies = ingres.linies.reduce((ls, l) => ls + (parseFloat(l.import) || 0), 0);
+        // Les repercussions ja són dins de la base: no es resten
+        const linies = ingres.linies
+            .filter(l => l.naturalesa !== 'repercussio')
+            .reduce((ls, l) => ls + (parseFloat(l.import) || 0), 0);
         return s + (base - linies);
     }, 0);
 
@@ -861,7 +874,7 @@ const IVA_RATE = 0.21;
 
 // Reconciliació: base − línies = net calculat vs. import al banc
 const ingresNetCalculat = computed(() => {
-    const base = classificacioIngres.value.base_lloguer ?? 0;
+    const base = ingresBaseTotal.value;
     const linies = classificacioIngres.value.linies.reduce((s, l) => s + (l.import ?? 0), 0);
     return parseFloat((base - linies).toFixed(2));
 });
@@ -874,7 +887,10 @@ const altresIngressosImport = computed(() => {
         .filter(i => i.lloguer_id !== selectedLloguerId.value)
         .reduce((s, ingres) => {
             const base = parseFloat(ingres.base_lloguer) || 0;
-            const linies = ingres.linies.reduce((ls, l) => ls + (parseFloat(l.import) || 0), 0);
+            // Les repercussions ja són dins de la base: no es resten
+            const linies = ingres.linies
+                .filter(l => l.naturalesa !== 'repercussio')
+                .reduce((ls, l) => ls + (parseFloat(l.import) || 0), 0);
             return s + (base - linies);
         }, 0);
 });
@@ -913,15 +929,21 @@ const openClassificacioModal = (moviment: Moviment) => {
     } else if (cls?.tipus === 'ingres') {
         classificacioTipus.value = 'ingres';
         const ingresExistent = moviment.ingressos.find(i => i.lloguer_id === selectedLloguerId.value) ?? cls.data;
+        const baseDesada = parseFloat(ingresExistent.base_lloguer);
+        const repercussio = ingresExistent.linies.find(l => l.naturalesa === 'repercussio');
+        const escombraries = repercussio ? parseFloat(repercussio.import) : null;
         classificacioIngres.value = {
-            base_lloguer: parseFloat(ingresExistent.base_lloguer),
+            renda: parseFloat((baseDesada - (escombraries ?? 0)).toFixed(2)),
+            escombraries,
             notes: ingresExistent.notes ?? '',
-            linies: ingresExistent.linies.map(l => ({
-                tipus: l.tipus,
-                descripcio: l.descripcio,
-                import: parseFloat(l.import),
-                proveidor_id: l.proveidor_id,
-            })),
+            linies: ingresExistent.linies
+                .filter(l => l.naturalesa !== 'repercussio')
+                .map(l => ({
+                    tipus: l.tipus,
+                    descripcio: l.descripcio,
+                    import: parseFloat(l.import),
+                    proveidor_id: l.proveidor_id,
+                })),
         };
     } else {
         classificacioTipus.value = parseFloat(moviment.import) >= 0 ? 'ingres' : 'despesa';
@@ -936,7 +958,8 @@ const openClassificacioModal = (moviment: Moviment) => {
             });
         }
         classificacioIngres.value = {
-            base_lloguer: selectedLloguer.value?.base_euros ? parseFloat(selectedLloguer.value.base_euros) : null,
+            renda: selectedLloguer.value?.base_euros ? parseFloat(selectedLloguer.value.base_euros) : null,
+            escombraries: null,
             notes: '',
             linies: liniesInicials,
         };
@@ -975,9 +998,21 @@ const submitClassificacio = async () => {
         body.iva_percentatge = classificacioDespesa.value.iva_percentatge ?? null;
         body.iva_import = classificacioDespesa.value.iva_import ?? null;
     } else {
-        body.base_lloguer = classificacioIngres.value.base_lloguer;
+        const escombraries = classificacioIngres.value.escombraries ?? 0;
+        body.base_lloguer = ingresBaseTotal.value;
         body.notes = classificacioIngres.value.notes || null;
-        body.linies = classificacioIngres.value.linies;
+        body.linies = [
+            ...classificacioIngres.value.linies.map(l => ({ ...l, naturalesa: 'deduccio' })),
+            ...(escombraries !== 0
+                ? [{
+                    tipus: 'escombraries',
+                    naturalesa: 'repercussio',
+                    descripcio: 'Escombraries retornades pel llogater',
+                    import: escombraries,
+                    proveidor_id: null,
+                }]
+                : []),
+        ];
     }
 
     try {
@@ -2649,16 +2684,39 @@ const formatCurrency = (value: string | null): string => {
 
                             <!-- Ingrés fields -->
                             <div v-else class="space-y-4">
-                                <div class="grid grid-cols-2 gap-4">
+                                <div class="grid grid-cols-3 gap-4">
                                     <div>
-                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Base lloguer (€) *</label>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Renda (€) *</label>
                                         <input
-                                            v-model="classificacioIngres.base_lloguer"
+                                            v-model.number="classificacioIngres.renda"
                                             type="number"
                                             step="0.01"
                                             required
                                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                         />
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Escombraries (€)</label>
+                                        <input
+                                            v-model.number="classificacioIngres.escombraries"
+                                            type="number"
+                                            step="0.01"
+                                            placeholder="0,00"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        />
+                                        <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">Taxa retornada pel llogater</p>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Base lloguer (€)</label>
+                                        <input
+                                            :value="ingresBaseTotal"
+                                            type="number"
+                                            step="0.01"
+                                            readonly
+                                            tabindex="-1"
+                                            class="mt-1 block w-full cursor-not-allowed rounded-md border-gray-300 bg-gray-50 shadow-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 sm:text-sm"
+                                        />
+                                        <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">Renda + escombraries</p>
                                     </div>
                                 </div>
 
@@ -2735,8 +2793,16 @@ const formatCurrency = (value: string | null): string => {
                                 <div class="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm dark:border-gray-700 dark:bg-gray-900/40">
                                     <div class="space-y-1">
                                         <div class="flex justify-between text-gray-600 dark:text-gray-400">
-                                            <span>Base lloguer</span>
-                                            <span>{{ formatCurrency((classificacioIngres.base_lloguer ?? 0).toString()) }}</span>
+                                            <span>Renda</span>
+                                            <span>{{ formatCurrency((classificacioIngres.renda ?? 0).toString()) }}</span>
+                                        </div>
+                                        <div v-if="classificacioIngres.escombraries" class="flex justify-between text-gray-600 dark:text-gray-400">
+                                            <span>+ Escombraries retornades</span>
+                                            <span class="text-amber-700 dark:text-amber-400">{{ formatCurrency((classificacioIngres.escombraries ?? 0).toString()) }}</span>
+                                        </div>
+                                        <div v-if="classificacioIngres.escombraries" class="flex justify-between text-gray-600 dark:text-gray-400">
+                                            <span>= Base lloguer</span>
+                                            <span>{{ formatCurrency(ingresBaseTotal.toString()) }}</span>
                                         </div>
                                         <div
                                             v-for="(linia, idx) in classificacioIngres.linies.filter(l => (l.import ?? 0) !== 0)"

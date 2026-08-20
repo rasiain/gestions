@@ -56,8 +56,10 @@ class ImpostosIrpfController extends Controller
                         'import' => $baseLloguer,
                     ];
 
-                    // Les línies d'ingrés es comptabilitzen com a despeses per categoria
-                    foreach ($ingresLloguer->linies as $linia) {
+                    // Les línies d'ingrés es comptabilitzen com a despeses per categoria.
+                    // Les repercussions no: només desglossen la base, que ja s'ha comptat
+                    // sencera com a ingrés íntegre (la taxa es dedueix pel seu pagament).
+                    foreach ($ingresLloguer->linies->where('naturalesa', '!=', \App\Models\MovimentLloguerIngresLinia::REPERCUSSIO) as $linia) {
                         $cat = $linia->tipus ?? 'altres';
                         if (!isset($despesesPerCategoria[$cat])) {
                             $cat = 'altres';

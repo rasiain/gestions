@@ -221,6 +221,32 @@ const recalculateEdit = () => {
     });
 };
 
+/**
+ * L'import d'una factura surt de les línies: si va a parar a un altre camp
+ * —la descripció, posem— la factura es desa a zero sense dir res. Aquests
+ * avisos ho fan visible mentre s'edita i demanen confirmació abans de desar.
+ */
+const avisosFactura = computed<string[]>(() => {
+    const avisos: string[] = [];
+
+    const senseImport = editForm.value.linies.filter((l) => !l.base).length;
+    if (senseImport > 0) {
+        avisos.push(
+            senseImport === 1
+                ? "Hi ha una línia sense import: l'import va al camp «Base» de la línia."
+                : `Hi ha ${senseImport} línies sense import: l'import va al camp «Base» de la línia.`
+        );
+    }
+
+    if (editForm.value.linies.length === 0) {
+        avisos.push('La factura no té cap línia.');
+    } else if (editForm.value.base === 0) {
+        avisos.push('La base total és 0.');
+    }
+
+    return avisos;
+});
+
 const addLinia = () => {
     editForm.value.linies.push({ concepte: 'altres', descripcio: '', base: 0, iva_import: 0, irpf_import: 0 });
 };
@@ -231,6 +257,10 @@ const removeLinia = (index: number) => {
 };
 
 const submitEditFactura = async () => {
+    if (avisosFactura.value.length > 0 && !confirm(`${avisosFactura.value.join('\n')}\n\nVols desar-la igualment?`)) {
+        return;
+    }
+
     editSaving.value = true;
     editErrors.value = {};
     try {
@@ -531,6 +561,13 @@ const anys = computed(() => {
                                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Línies</label>
                                         <button type="button" @click="addLinia" class="text-xs text-amber-600 hover:text-amber-800 dark:text-amber-400">+ Afegir línia</button>
                                     </div>
+                                    <!-- Capçaleres: sense elles, l'import acaba fàcilment a la descripció -->
+                                    <div v-if="editForm.linies.length > 0" class="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                                        <span class="w-36">Concepte</span>
+                                        <span class="flex-1">Descripció</span>
+                                        <span class="w-24 text-right">Base €</span>
+                                        <span v-if="editForm.linies.length > 1" class="w-3"></span>
+                                    </div>
                                     <div v-for="(linia, idx) in editForm.linies" :key="idx" class="flex items-center gap-2 mb-2">
                                         <select v-model="linia.concepte" class="w-36 rounded-md border-gray-300 text-xs shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
                                             <option value="lloguer_base">Lloguer base</option>
@@ -538,16 +575,32 @@ const anys = computed(() => {
                                             <option value="regularitzacio_ipc">Regularització IPC</option>
                                             <option value="altres">Altres</option>
                                         </select>
-                                        <input v-model="linia.descripcio" type="text" placeholder="Descripció" class="flex-1 rounded-md border-gray-300 text-xs shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
-                                        <input v-model.number="linia.base" @input="recalculateEdit" type="number" step="0.01" placeholder="Base" class="w-24 rounded-md border-gray-300 text-xs shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-right" />
+                                        <input v-model="linia.descripcio" type="text" placeholder="Text lliure, sense import" class="flex-1 rounded-md border-gray-300 text-xs shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                                        <input
+                                            v-model.number="linia.base"
+                                            @input="recalculateEdit"
+                                            type="number"
+                                            step="0.01"
+                                            placeholder="0,00"
+                                            class="w-24 rounded-md text-xs shadow-sm text-right dark:bg-gray-700 dark:text-gray-100"
+                                            :class="linia.base ? 'border-gray-300 dark:border-gray-600' : 'border-amber-400 dark:border-amber-500'"
+                                        />
                                         <button v-if="editForm.linies.length > 1" type="button" @click="removeLinia(idx)" class="text-red-500 hover:text-red-700 text-xs">✕</button>
                                     </div>
                                 </div>
-                                <!-- Totals -->
+                                <!-- Avisos: la factura es pot desar igualment, però no en silenci -->
+                                <div v-if="avisosFactura.length > 0" class="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 dark:border-amber-700 dark:bg-amber-900/30">
+                                    <p v-for="avis in avisosFactura" :key="avis" class="text-xs text-amber-800 dark:text-amber-200">{{ avis }}</p>
+                                </div>
+
+                                <!-- Totals (tots calculats a partir de les línies i els percentatges) -->
                                 <div class="grid grid-cols-2 gap-4 border-t border-gray-200 dark:border-gray-600 pt-3">
                                     <div>
-                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Base total</label>
-                                        <input :value="editForm.base" type="number" step="0.01" readonly class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100" />
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            Base total
+                                            <span class="font-normal text-xs text-gray-400 dark:text-gray-500">— suma de les línies</span>
+                                        </label>
+                                        <input :value="editForm.base" type="number" step="0.01" readonly tabindex="-1" class="mt-1 block w-full cursor-not-allowed rounded-md border-gray-300 text-sm shadow-sm bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100" />
                                     </div>
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">IVA %</label>
@@ -555,7 +608,7 @@ const anys = computed(() => {
                                     </div>
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">IVA import</label>
-                                        <input :value="editForm.iva_import" type="number" step="0.01" readonly class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100" />
+                                        <input :value="editForm.iva_import" type="number" step="0.01" readonly tabindex="-1" class="mt-1 block w-full cursor-not-allowed rounded-md border-gray-300 text-sm shadow-sm bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100" />
                                     </div>
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">IRPF %</label>
@@ -563,11 +616,11 @@ const anys = computed(() => {
                                     </div>
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">IRPF import</label>
-                                        <input :value="editForm.irpf_import" type="number" step="0.01" readonly class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100" />
+                                        <input :value="editForm.irpf_import" type="number" step="0.01" readonly tabindex="-1" class="mt-1 block w-full cursor-not-allowed rounded-md border-gray-300 text-sm shadow-sm bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100" />
                                     </div>
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 font-semibold">Total</label>
-                                        <input :value="editForm.total" type="number" step="0.01" readonly class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 font-semibold" />
+                                        <input :value="editForm.total" type="number" step="0.01" readonly tabindex="-1" class="mt-1 block w-full cursor-not-allowed rounded-md border-gray-300 text-sm shadow-sm bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 font-semibold" />
                                     </div>
                                 </div>
                                 <div class="grid grid-cols-2 gap-4">

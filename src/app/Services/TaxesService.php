@@ -245,6 +245,7 @@ class TaxesService
             $m->setAttribute('immoble_taxa', $etiqueta);
             $m->setAttribute('poblacio_taxa', $poblacio);
             $m->setAttribute('immoble_id_taxa', $immoble?->id);
+            $m->setAttribute('lloguer_id_taxa', $resolucio[$m->categoria_id]['lloguer_id']);
             $m->setAttribute('lloguer_nom_taxa', $resolucio[$m->categoria_id]['lloguer_nom']);
             $m->setAttribute('path_taxa', $info['path']);
             $m->setAttribute('ocult_taxa', $info['ocult']);
@@ -281,6 +282,7 @@ class TaxesService
                 'etiqueta'    => $info['immoble'] ?? $lloguer['lloguer_nom'] ?? null,
                 'poblacio'    => $info['poblacio_ajust'] ?? $immoble?->poblacio ?? $info['poblacio'],
                 'immoble'     => $immoble,
+                'lloguer_id'  => $lloguer['lloguer_id'] ?? null,
                 'lloguer_nom' => $lloguer['lloguer_nom'] ?? null,
             ];
         }
@@ -330,6 +332,7 @@ class TaxesService
             if ($lloguers->count() === 1) {
                 $resultat[(int) $categoriaId] = [
                     'immoble'     => $lloguers->first()->immoble,
+                    'lloguer_id'  => $lloguers->first()->id,
                     'lloguer_nom' => $lloguers->first()->nom,
                 ];
             }
