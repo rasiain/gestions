@@ -22,6 +22,7 @@ class ImmobleController extends Controller
                     'id' => $immoble->id,
                     'referencia_cadastral' => $immoble->referencia_cadastral,
                     'adreca' => $immoble->adreca,
+                    'poblacio' => $immoble->poblacio,
                     'superficie_construida' => $immoble->superficie_construida,
                     'superficie_parcela' => $immoble->superficie_parcela,
                     'us' => $immoble->us,
