@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Models\AssegurancaPatro;
+use App\Models\AssegurancaPolissa;
 use App\Models\Categoria;
 use App\Services\AssegurancesService;
 use Tests\TestCase;
@@ -37,21 +38,39 @@ class AssegurancesServiceTest extends TestCase
     }
 
     /**
+     * Cada categoria té l'id de la seva posició a la cadena, per poder-hi
+     * enganxar ajustos.
+     *
      * @param  array<int, string>  $noms
      * @return array<int, Categoria>
      */
     private function cadena(array $noms): array
     {
-        return array_map(fn (string $nom) => new Categoria(['nom' => $nom]), $noms);
+        return array_map(function (string $nom, int $i) {
+            $categoria = new Categoria(['nom' => $nom]);
+            $categoria->id = $i;
+
+            return $categoria;
+        }, $noms, array_keys($noms));
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $ajustos  per posició a la cadena
+     * @return array<int, AssegurancaPolissa>
+     */
+    private function ajustos(array $ajustos): array
+    {
+        return array_map(fn (array $camps) => new AssegurancaPolissa($camps), $ajustos);
     }
 
     /**
      * @param  array<int, string>  $noms
+     * @param  array<int, array<string, mixed>>  $ajustos  per posició a la cadena
      * @return array<string, mixed>|null
      */
-    private function resol(array $noms): ?array
+    private function resol(array $noms, array $ajustos = []): ?array
     {
-        return $this->servei->resolCadena($this->cadena($noms), $this->patrons());
+        return $this->servei->resolCadena($this->cadena($noms), $this->patrons(), $this->ajustos($ajustos));
     }
 
     public function test_el_patro_ha_de_comencar_una_paraula(): void
@@ -135,5 +154,58 @@ class AssegurancesServiceTest extends TestCase
 
         $this->assertNull($polissa['immoble']);
         $this->assertSame('Girona', $polissa['poblacio']);
+    }
+
+    public function test_lajust_manual_mana_sobre_el_nom_de_larbre(): void
+    {
+        $noms = ['DESPESES', 'FILLS', 'LAIA', 'DESPESES BARCELONA', 'PIS', 'ASSEGURANÇA PIS', 'BILBAO'];
+
+        // Sense ajust, el grup es diu "PIS" i no diu de quin pis és
+        $this->assertSame('PIS', $this->resol($noms)['objecte']);
+
+        $polissa = $this->resol($noms, [5 => ['objecte' => 'PIS LAIA', 'poblacio' => 'Barcelona']]);
+
+        $this->assertSame('PIS LAIA', $polissa['objecte']);
+        $this->assertSame('PIS LAIA', $polissa['objecte_ajust']);
+        $this->assertSame('Barcelona', $polissa['poblacio_ajust']);
+    }
+
+    public function test_lajust_del_node_i_el_de_la_fulla_es_combinen(): void
+    {
+        // El municipi es desa al node de la pòlissa i la companyia unificada a
+        // la fulla: la categoria del moviment és la fulla, i han de valer tots dos.
+        $polissa = $this->resol(
+            ['DESPESES', 'DESPESES PROPIETATS', 'ST.ANTONI MN 16, BAIXOS', 'ASSEGURANÇA', 'CATALANA OCCIDENTE'],
+            [
+                3 => ['poblacio' => 'Sant Antoni de Calonge'],
+                4 => ['companyia' => 'OCCIDENT'],
+            ]
+        );
+
+        $this->assertSame('Sant Antoni de Calonge', $polissa['poblacio_ajust']);
+        $this->assertSame('OCCIDENT', $polissa['companyia']);
+        $this->assertSame('ST.ANTONI MN 16, BAIXOS', $polissa['immoble']);
+    }
+
+    public function test_inclou_una_polissa_que_cap_patro_no_enganxa(): void
+    {
+        $noms = ['DESPESES', 'SERVEIS', 'MUTUALITAT DELS ENGINYERS', 'SERPRECO'];
+
+        $this->assertNull($this->resol($noms));
+
+        $polissa = $this->resol($noms, [2 => ['inclou' => true, 'tipus' => 'Mutualitat']]);
+
+        $this->assertNotNull($polissa);
+        $this->assertSame('Mutualitat', $polissa['tipus']);
+        $this->assertSame('MUTUALITAT DELS ENGINYERS', $polissa['objecte']);
+        $this->assertSame('SERPRECO', $polissa['companyia']);
+    }
+
+    public function test_ocult_marca_el_que_no_es_cap_polissa(): void
+    {
+        $noms = ['DESPESES', 'IMMOBLES', 'GIRONA', 'FRANCESC CIURANA 6', 'ASSEGURANÇA'];
+
+        $this->assertFalse($this->resol($noms)['ocult']);
+        $this->assertTrue($this->resol($noms, [4 => ['ocult' => true]])['ocult']);
     }
 }

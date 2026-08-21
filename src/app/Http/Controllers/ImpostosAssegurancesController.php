@@ -98,6 +98,8 @@ class ImpostosAssegurancesController extends Controller
     private function agrupaPerObjecte(Collection $moviments, int $anyActual, int $anyAnterior, array $estats): array
     {
         $grups = $moviments
+            // El que un ajust manual marca com a no-pòlissa no hi pinta res
+            ->reject(fn (MovimentCompteCorrent $m) => $m->getAttribute('ocult_asseguranca'))
             ->groupBy(fn (MovimentCompteCorrent $m) => $m->getAttribute('grup_asseguranca'))
             ->map(function (Collection $movsGrup, string $grup) use ($anyActual, $anyAnterior, $estats) {
                 $polisses = $movsGrup

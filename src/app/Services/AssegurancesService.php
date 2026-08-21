@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AssegurancaPatro;
+use App\Models\AssegurancaPolissa;
 use App\Models\Categoria;
 use App\Models\MovimentCompteCorrent;
 use App\Services\Concerns\ResolPerArbre;
@@ -30,6 +31,11 @@ use Illuminate\Support\Collection;
  *      l'arbre penja d'un node genèric (DESPESES > ASSEGURANCES > SEGURCAIXA).
  *   3. El PARE del node de la pòlissa, que és el que dona nom a les que no són
  *      d'immobles: MOTOR > MOTO > ASSEGURANÇA MOTO.
+ *
+ * El que no resol cap dels tres camins es desa a `g_assegurances_polisses`, que
+ * mana per damunt de l'arbre: hi ha decisions que només l'usuari sap prendre
+ * (de quin pis és un node que només diu "PIS") i pòlisses que cap patró no pot
+ * enganxar pel nom (MUTUALITAT DELS ENGINYERS).
  */
 class AssegurancesService
 {
@@ -46,8 +52,14 @@ class AssegurancesService
         'IMMOBLES', 'DESPESES PROPIETATS',
     ];
 
+    /** Etiqueta de la fila quan un ajust inclou una categoria sense dir-ne el tipus. */
+    private const TIPUS_PER_DEFECTE = 'Assegurança';
+
     /** @var Collection<int, AssegurancaPatro>|null */
     private ?Collection $patronsCache = null;
+
+    /** @var array<int, AssegurancaPolissa>|null */
+    private ?array $ajustosCache = null;
 
     /** @var array<int, array<string, mixed>>|null */
     private ?array $categoriesCache = null;
@@ -79,19 +91,38 @@ class AssegurancesService
     }
 
     /**
+     * Ajustos manuals, indexats per categoria.
+     *
+     * @return array<int, AssegurancaPolissa>
+     */
+    public function ajustos(): array
+    {
+        return $this->ajustosCache ??= AssegurancaPolissa::all()->keyBy('categoria_id')->all();
+    }
+
+    /**
      * Pòlissa que correspon a una cadena de categories, o null si no n'és cap.
      *
      * @param  array<int, Categoria>  $cadena  de l'arrel a la categoria
      * @param  Collection<int, AssegurancaPatro>  $patrons
-     * @return array{tipus: string, immoble: ?string, poblacio: ?string, objecte: string, companyia: ?string}|null
+     * @param  array<int, AssegurancaPolissa>  $ajustos
+     * @return array<string, mixed>|null
      */
-    public function resolCadena(array $cadena, Collection $patrons): ?array
+    public function resolCadena(array $cadena, Collection $patrons, array $ajustos = []): ?array
     {
         $indexNode = null;
-        $patro     = null;
+        $tipus     = null;
 
         // El node més alt que encaixa: a sota hi pengen les companyies.
         foreach ($cadena as $i => $categoria) {
+            $inclosa = $ajustos[$categoria->id ?? -1] ?? null;
+
+            if ($inclosa?->inclou) {
+                $indexNode = $i;
+                $tipus     = $inclosa->tipus ?: self::TIPUS_PER_DEFECTE;
+                break;
+            }
+
             $nomNorm = self::normalitza($categoria->nom);
 
             $coincident = $patrons->first(
@@ -100,7 +131,7 @@ class AssegurancesService
 
             if ($coincident !== null) {
                 $indexNode = $i;
-                $patro     = $coincident;
+                $tipus     = $coincident->etiqueta;
                 break;
             }
         }
@@ -109,17 +140,28 @@ class AssegurancesService
             return null;
         }
 
+        // L'ajust pot estar tant a la categoria del moviment (la companyia) com
+        // al node de la pòlissa (l'immoble o el municipi): valen tots dos.
+        $propi    = $ajustos[end($cadena)->id ?? -1] ?? null;
+        $del_node = $ajustos[$cadena[$indexNode]->id ?? -1] ?? null;
+        $ajust    = fn (string $camp) => $propi?->{$camp} ?? $del_node?->{$camp};
+
         // L'immoble ha de ser per damunt del node de la pòlissa: el que hi ha a
         // sota (la companyia) no ho és mai.
         [$immoble, $poblacio] = $this->immobleDeLArbre($cadena, $indexNode - 1);
 
         return [
-            'tipus'     => $patro->etiqueta,
-            'immoble'   => $immoble,
-            'poblacio'  => self::canonitzaPoblacio($poblacio),
-            'objecte'   => $immoble ?? $this->objecteDelNode($cadena, $indexNode),
+            'tipus'          => $ajust('tipus') ?? $tipus,
+            'immoble'        => $immoble,
+            'poblacio'       => self::canonitzaPoblacio($poblacio),
+            'poblacio_ajust' => $ajust('poblacio'),
+            // L'ajust mana sobre l'arbre: és una decisió explícita
+            'objecte'        => $ajust('objecte') ?? $immoble ?? $this->objecteDelNode($cadena, $indexNode),
+            'objecte_ajust'  => $ajust('objecte'),
             // El fill immediat del node de la pòlissa: qui la té contractada
-            'companyia' => isset($cadena[$indexNode + 1]) ? $cadena[$indexNode + 1]->nom : null,
+            'companyia'      => $ajust('companyia')
+                ?? (isset($cadena[$indexNode + 1]) ? $cadena[$indexNode + 1]->nom : null),
+            'ocult'          => (bool) ($propi?->ocult || $del_node?->ocult),
         ];
     }
 
@@ -135,13 +177,14 @@ class AssegurancesService
         }
 
         $patrons    = $this->patronsActius();
+        $ajustos    = $this->ajustos();
         $categories = Categoria::all();
         $perId      = $categories->keyBy('id');
 
         $resultat = [];
         foreach ($categories as $categoria) {
             $cadena  = $this->cadena($categoria, $perId);
-            $polissa = $this->resolCadena($cadena, $patrons);
+            $polissa = $this->resolCadena($cadena, $patrons, $ajustos);
 
             if ($polissa === null) {
                 continue;
@@ -198,6 +241,7 @@ class AssegurancesService
             $m->setAttribute('lloguer_nom_asseguranca', $res['lloguer_nom']);
             $m->setAttribute('companyia_asseguranca', $info['companyia']);
             $m->setAttribute('path_asseguranca', $info['path']);
+            $m->setAttribute('ocult_asseguranca', $info['ocult']);
             // La població forma part de la clau, com a les taxes: dos immobles
             // amb el mateix nom en municipis diferents no s'han de barrejar.
             $m->setAttribute('grup_asseguranca', 'nom:' . self::normalitza($res['etiqueta'])
@@ -244,10 +288,12 @@ class AssegurancesService
             $immoble = $lloguer['immoble'] ?? null;
 
             $resolucio[$categoriaId] = [
-                // L'arbre mana; després el lloguer, que és qui sap de qui és una
-                // pòlissa penjada d'un node genèric; l'objecte del node, l'últim.
-                'etiqueta'    => $info['immoble'] ?? $lloguer['lloguer_nom'] ?? $info['objecte'],
-                'poblacio'    => self::canonitzaPoblacio($immoble?->poblacio) ?? $info['poblacio'],
+                // L'ajust manual mana; després l'arbre; després el lloguer, que
+                // és qui sap de qui és una pòlissa penjada d'un node genèric.
+                'etiqueta'    => $info['objecte_ajust'] ?? $info['immoble'] ?? $lloguer['lloguer_nom'] ?? $info['objecte'],
+                'poblacio'    => self::canonitzaPoblacio($info['poblacio_ajust'])
+                    ?? self::canonitzaPoblacio($immoble?->poblacio)
+                    ?? $info['poblacio'],
                 'immoble'     => $immoble,
                 'lloguer_id'  => $lloguer['lloguer_id'] ?? null,
                 'lloguer_nom' => $lloguer['lloguer_nom'] ?? null,
