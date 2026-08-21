@@ -93,7 +93,21 @@ Sis passos seqüencials: (1) generar hashes, (2) trobar punt de junció per hash
 
 **Nuclis de població ≠ municipi**: l'agrupació és per **municipi**, perquè és qui recapta. L'arbre, però, de vegades usa el nucli com a node de població. Cas resolt: `VILANOVA DE LA MUGA` és un nucli de **Peralada** (migració `2026_08_17_000003`), i les seves taxes van amb les de `CARRER MAJOR` i `CAMPS`. Pedret i Marzà, en canvi, sí que és municipi propi. Si apareix un nucli nou, la correcció és un ajust de `poblacio` a `g_taxes_immobles` (i, si escau, al camp `g_immobles.poblacio`).
 
+### Assegurances
+
+`AssegurancesService` detecta les pòlisses pagades des de qualsevol compte amb la mateixa idea que les taxes —patró sobre l'arbre de categories, mai sobre el concepte bancari (un patró «GENERALI» enganxa les nòmines de la GENERALITAT)— amb dues diferències que imposen les dades:
+
+- **El patró es busca a tot el camí, no només a la fulla.** A les taxes la fulla és la taxa (`… > IBI`); a les assegurances acostuma a ser la **companyia** (`… > BONASTRUCH DE PORTA 35 > ASSEGURANÇA > SEGURCAIXA`). Val el **node coincident més alt**: és el de la pòlissa i no canvia quan es canvia d'asseguradora. Mirant només la fulla es detecten 64 moviments; mirant el camí, 230.
+- **La coincidència és per inici de paraula** (`\bASSEGURAN`), no `str_contains`: «CAN MASSEGUR» (complements de casa) i «L'ENSEGUR» (un restaurant) contenen «ASSEGUR» i no són cap pòlissa.
+
+L'objecte assegurat es resol en tres passos: (1) l'**immoble de l'arbre**, igual que a les taxes; (2) el **lloguer** de les despeses classificades dels seus moviments, únic senyal quan la categoria penja d'un node genèric (`DESPESES > ASSEGURANCES > SEGURCAIXA NEGOCI`); (3) el **pare del node** de la pòlissa (`MOTOR > MOTO > ASSEGURANÇA MOTO` → `MOTO`) i, si el pare és genèric, el node mateix. La vista agrupa en tres seccions —immobles de lloguer / altres immobles / vehicles, persones i altres— i, dins de les d'immoble, per població. La **fila** és l'etiqueta del patró (Assegurança, Comunitat, Vehicle, Decessos), no la companyia: així un canvi d'asseguradora no parteix la sèrie en dues, i la comunitat d'un immoble queda com a pòlissa a part de la seva.
+
+**Comparació amb l'any anterior**: aquí no cal declarar cap total a mà (a diferència de `g_taxes_rebuts`), perquè el de l'any passat ja és a les dades. `AssegurancesEstatService` compara amb l'any anterior **retallat al mateix dia** —vuit mesos de 2026 no es comparen amb dotze de 2025—, i l'any anterior sencer hi és a part com a referència. Hi afegeix la **periodicitat**, deduïda del nombre de càrrecs dels últims dotze mesos, i la **prima**, que és el **càrrec més gran** d'aquesta finestra i no l'últim: en una categoria que barreja el rebut anual amb comissions de 30 €, l'últim càrrec compararia el rebut d'enguany amb una comissió de l'any passat. Els imports positius (indemnitzacions, extorns de prima) es mostren a part i **no es resten mai** del pagat. A les pòlisses d'immobles de lloguer s'hi avisa dels càrrecs no classificats com a despesa: són deduccions d'IRPF que s'escapen.
+
+`g_assegurances_patrons` desa els patrons. Encara no hi ha ni pantalla de configuració ni taula d'ajustos manuals (l'equivalent de `g_taxes_immobles`): per això els immobles de Sant Antoni surten sense municipi i `SERVEIS > MUTUALITAT DELS ENGINYERS` no es detecta.
+
 ### Components reutilitzables destacats
+- `Services\Concerns\ResolPerArbre`: resolució d'immoble i municipi des de l'arbre de categories, compartida per `TaxesService` i `AssegurancesService` (si divergissin, el mateix immoble sortiria amb dos noms segons la vista). `Http\Controllers\Concerns\CategoriesPerCompte` fa el mateix amb el selector de categories de les dues vistes.
 - `BulkEditModal.vue`: modal d'edició múltiple (concepte, notes, categoria). Gestiona el formulari internament; emet `@submit(payload)` i `v-model:open`. El pare conserva `saving` i `error` i fa la crida API. Usat a `Moviments/Index.vue` i `Lloguers/Index.vue`.
 
 ## Mapa de relacions del domini
@@ -138,6 +152,7 @@ Sis passos seqüencials: (1) generar hashes, (2) trobar punt de junció per hash
               │                                                        │
               │  Impostos: IVA, IRPF (calculats des de factures);      │
               │            Taxes (impostos municipals, vista derivada) │
+              │            Assegurances (pòlisses, vista derivada)     │
               └────────────────────────────────────────────────────────┘
 ```
 

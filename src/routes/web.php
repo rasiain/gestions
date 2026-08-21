@@ -17,6 +17,7 @@ use App\Http\Controllers\LloguerController;
 use App\Http\Controllers\LloguerRevisioIpcController;
 use App\Http\Controllers\MovementImportController;
 use App\Http\Controllers\ImpostosIrpfController;
+use App\Http\Controllers\ImpostosAssegurancesController;
 use App\Http\Controllers\ImpostosIvaController;
 use App\Http\Controllers\ImpostosTaxesController;
 use App\Http\Controllers\TipusDespesaFiscalController;
@@ -156,6 +157,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/impostos/taxes/patrons', [ImpostosTaxesController::class, 'storePatro'])->name('impostos.taxes.patrons.store');
     Route::put('/impostos/taxes/patrons/{patro}', [ImpostosTaxesController::class, 'updatePatro'])->name('impostos.taxes.patrons.update');
     Route::delete('/impostos/taxes/patrons/{patro}', [ImpostosTaxesController::class, 'destroyPatro'])->name('impostos.taxes.patrons.destroy');
+    Route::get('/impostos/assegurances', [ImpostosAssegurancesController::class, 'index'])->name('impostos.assegurances');
 
     // Fons d'inversió
     Route::resource('fons-inversio', FonsInversioController::class)->only([

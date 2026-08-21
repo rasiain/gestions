@@ -188,10 +188,10 @@ import { Head, Link } from '@inertiajs/vue3';
                             </div>
                             <div class="ml-4">
                                 <h4 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                                    Impostos
+                                    Impostos i assegurances
                                 </h4>
                                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                                    Declaracions i càlculs fiscals
+                                    Declaracions, càlculs fiscals i pòlisses
                                 </p>
                             </div>
                         </div>
@@ -215,6 +215,12 @@ import { Head, Link } from '@inertiajs/vue3';
                                 class="block text-sm text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors"
                             >
                                 → Taxes
+                            </Link>
+                            <Link
+                                :href="route('impostos.assegurances')"
+                                class="block text-sm text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors"
+                            >
+                                → Assegurances
                             </Link>
                         </div>
                     </div>
