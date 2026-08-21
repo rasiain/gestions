@@ -158,6 +158,11 @@ Route::middleware('auth')->group(function () {
     Route::put('/impostos/taxes/patrons/{patro}', [ImpostosTaxesController::class, 'updatePatro'])->name('impostos.taxes.patrons.update');
     Route::delete('/impostos/taxes/patrons/{patro}', [ImpostosTaxesController::class, 'destroyPatro'])->name('impostos.taxes.patrons.destroy');
     Route::get('/impostos/assegurances', [ImpostosAssegurancesController::class, 'index'])->name('impostos.assegurances');
+    Route::get('/impostos/assegurances/config', [ImpostosAssegurancesController::class, 'config'])->name('impostos.assegurances.config');
+    Route::post('/impostos/assegurances/patrons', [ImpostosAssegurancesController::class, 'storePatro'])->name('impostos.assegurances.patrons.store');
+    Route::put('/impostos/assegurances/patrons/{patro}', [ImpostosAssegurancesController::class, 'updatePatro'])->name('impostos.assegurances.patrons.update');
+    Route::delete('/impostos/assegurances/patrons/{patro}', [ImpostosAssegurancesController::class, 'destroyPatro'])->name('impostos.assegurances.patrons.destroy');
+    Route::put('/impostos/assegurances/ajustos', [ImpostosAssegurancesController::class, 'updateAjust'])->name('impostos.assegurances.ajustos.update');
 
     // Fons d'inversió
     Route::resource('fons-inversio', FonsInversioController::class)->only([

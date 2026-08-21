@@ -119,6 +119,47 @@ class AssegurancesEstatServiceTest extends TestCase
         $this->assertSame(4.8, $estat['prima_variacio_pct']);
     }
 
+    public function test_la_previsio_compta_els_carrecs_que_falten_a_la_prima_dara(): void
+    {
+        $linies = [];
+        foreach (range(1, 12) as $mes) {
+            $linies[] = [sprintf('2025-%02d-04', $mes), -10.0];
+        }
+        foreach (range(1, 8) as $mes) {
+            $linies[] = [sprintf('2026-%02d-04', $mes), -12.0];
+        }
+
+        $estat = $this->estat($linies);
+
+        $this->assertSame(4, $estat['carrecs_pendents']);   // 12 mensuals − 8 fets
+        $this->assertSame(144.0, $estat['previsio']);       // 96 pagats + 4 × 12
+        $this->assertSame('2026-09-04', $estat['proper_carrec']);
+    }
+
+    public function test_una_polissa_anual_ja_pagada_no_espera_res_mes(): void
+    {
+        $estat = $this->estat([
+            ['2025-04-10', -100.0],
+            ['2026-04-10', -110.0],
+        ]);
+
+        $this->assertSame(0, $estat['carrecs_pendents']);
+        $this->assertSame(110.0, $estat['previsio']);
+        $this->assertNull($estat['proper_carrec']);
+    }
+
+    public function test_un_any_tancat_no_te_previsio(): void
+    {
+        $estat = $this->estat([
+            ['2024-04-10', -100.0],
+            ['2025-04-10', -110.0],
+        ], any: 2025, referencia: '2025-12-31');
+
+        $this->assertNull($estat['carrecs_pendents']);
+        $this->assertNull($estat['previsio']);
+        $this->assertNull($estat['proper_carrec']);
+    }
+
     public function test_una_polissa_sense_carrecs_recents_es_marca_inactiva(): void
     {
         $estat = $this->estat([['2021-12-07', -373.99]]);

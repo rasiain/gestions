@@ -2,7 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 interface MovimentDetall {
@@ -25,6 +25,11 @@ interface EstatPolissa {
     variacio_pct: number | null;
     periodicitat: string;
     carrecs_any: number | null;
+    /** Càrrecs que falten per tancar l'any. Null si l'any ja és tancat o la periodicitat no és regular. */
+    carrecs_pendents: number | null;
+    /** Pagat + els càrrecs que falten a la prima d'ara. */
+    previsio: number | null;
+    proper_carrec: string | null;
     /** Càrrec més gran dels últims dotze mesos: el rebut de la pòlissa. */
     prima: number | null;
     data_prima: string | null;
@@ -57,6 +62,7 @@ interface ObjecteGrup {
     total_actual: number;
     total_anterior: number;
     total_a_data: number;
+    total_previsio: number;
 }
 
 interface PoblacioGrup {
@@ -162,7 +168,7 @@ function objectesDeSeccio(seccio: Seccio): ObjecteGrup[] {
     return seccio.poblacions.flatMap((p) => p.objectes);
 }
 
-function totalSeccio(seccio: Seccio, camp: 'total_actual' | 'total_anterior' | 'total_a_data'): number {
+function totalSeccio(seccio: Seccio, camp: 'total_actual' | 'total_anterior' | 'total_a_data' | 'total_previsio'): number {
     return objectesDeSeccio(seccio).reduce((acc, g) => acc + g[camp], 0);
 }
 
@@ -187,6 +193,16 @@ function colorVariacio(pct: number | null): string {
 
 function signe(valor: number): string {
     return valor > 0 ? '+' : '';
+}
+
+/** "2026-09-04" → "4 set." */
+function formatDiaMesCurt(iso: string): string {
+    return new Intl.DateTimeFormat('ca-ES', { day: 'numeric', month: 'short' }).format(new Date(iso));
+}
+
+/** Un càrrec que ja hauria d'haver arribat vol dir que alguna cosa ha canviat. */
+function esPassat(iso: string): boolean {
+    return iso < props.dataReferencia;
 }
 
 // ---- Modal detall ----
@@ -296,14 +312,22 @@ function desaEdicio() {
                 <h2 class="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200">
                     Assegurances — pòlisses de tots els comptes
                 </h2>
-                <select
-                    v-if="tab === 'polissa'"
-                    :value="props.anyActual"
-                    @change="canviarAny"
-                    class="rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
-                >
-                    <option v-for="a in anyOpcions" :key="a" :value="a">{{ a }}</option>
-                </select>
+                <div class="flex items-center gap-3">
+                    <select
+                        v-if="tab === 'polissa'"
+                        :value="props.anyActual"
+                        @change="canviarAny"
+                        class="rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+                    >
+                        <option v-for="a in anyOpcions" :key="a" :value="a">{{ a }}</option>
+                    </select>
+                    <Link
+                        :href="route('impostos.assegurances.config')"
+                        class="text-sm text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
+                    >
+                        Configura →
+                    </Link>
+                </div>
             </div>
         </template>
 
@@ -371,6 +395,10 @@ function desaEdicio() {
                                         {{ props.anyActual }}:
                                         <span class="font-bold text-gray-900 dark:text-gray-100">{{ formatEur(totalSeccio(seccio, 'total_actual')) }}</span>
                                     </span>
+                                    <span v-if="anyEnCurs" class="text-gray-500 dark:text-gray-400" title="Previsió de tancament de l'any">
+                                        previsió:
+                                        <span class="font-medium text-gray-700 dark:text-gray-300">{{ formatEur(totalSeccio(seccio, 'total_previsio')) }}</span>
+                                    </span>
                                     <span class="text-gray-500 dark:text-gray-400">
                                         {{ props.anyAnterior }}:
                                         <span class="font-medium text-gray-700 dark:text-gray-300">{{ formatEur(totalSeccio(seccio, 'total_anterior')) }}</span>
@@ -419,16 +447,19 @@ function desaEdicio() {
                                     <table class="min-w-full table-fixed divide-y divide-gray-200 dark:divide-gray-700">
                                         <thead class="bg-gray-50 dark:bg-gray-700">
                                             <tr>
-                                                <th class="w-[14%] px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Pòlissa</th>
-                                                <th class="w-[18%] px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Companyia</th>
+                                                <th class="w-[12%] px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Pòlissa</th>
+                                                <th class="w-[13%] px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Companyia</th>
                                                 <th class="w-[11%] px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Periodicitat</th>
-                                                <th class="w-[13%] px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-900 dark:text-gray-100">Pagat {{ props.anyActual }}</th>
-                                                <th class="w-[13%] px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">
+                                                <th class="w-[12%] px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-900 dark:text-gray-100">Pagat {{ props.anyActual }}</th>
+                                                <th v-if="anyEnCurs" class="w-[11%] px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300" title="Pagat + els càrrecs que falten a la prima d'ara">
+                                                    Previsió
+                                                </th>
+                                                <th class="w-[12%] px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">
                                                     {{ props.anyAnterior }}<span v-if="anyEnCurs"> a data</span>
                                                 </th>
                                                 <th class="w-[10%] px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Variació</th>
-                                                <th class="w-[10%] px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500">{{ props.anyAnterior }} sencer</th>
-                                                <th class="w-[11%] px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Prima</th>
+                                                <th class="w-[9%] px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500">{{ props.anyAnterior }} sencer</th>
+                                                <th class="w-[10%] px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Prima</th>
                                             </tr>
                                         </thead>
                                         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
@@ -454,6 +485,19 @@ function desaEdicio() {
                                                     >
                                                         {{ etiquetaPeriodicitat[p.estat.periodicitat] ?? p.estat.periodicitat }}
                                                     </span>
+                                                    <span
+                                                        v-if="p.estat?.proper_carrec"
+                                                        class="mt-0.5 block text-xs"
+                                                        :class="esPassat(p.estat.proper_carrec)
+                                                            ? 'text-amber-700 dark:text-amber-400'
+                                                            : 'text-gray-400 dark:text-gray-500'"
+                                                        :title="esPassat(p.estat.proper_carrec)
+                                                            ? 'Aquest càrrec ja hauria d\'haver arribat'
+                                                            : 'Proper càrrec previst'"
+                                                    >
+                                                        {{ esPassat(p.estat.proper_carrec) ? '⚠ esperat el' : 'proper' }}
+                                                        {{ formatDiaMesCurt(p.estat.proper_carrec) }}
+                                                    </span>
                                                 </td>
                                                 <td
                                                     class="whitespace-nowrap px-4 py-2 text-right text-sm font-medium text-gray-900 dark:text-gray-100"
@@ -467,6 +511,15 @@ function desaEdicio() {
                                                     <span v-if="p.estat && p.estat.retornat > 0" class="block text-xs font-normal text-green-600 dark:text-green-400">
                                                         ↩ {{ formatEur(p.estat.retornat) }} retornats
                                                     </span>
+                                                </td>
+                                                <td v-if="anyEnCurs" class="whitespace-nowrap px-4 py-2 text-right text-sm">
+                                                    <template v-if="p.estat?.previsio !== null && p.estat">
+                                                        <span class="font-medium text-gray-700 dark:text-gray-300">{{ formatEur(p.estat.previsio!) }}</span>
+                                                        <span v-if="p.estat.carrecs_pendents" class="block text-xs font-normal text-gray-400 dark:text-gray-500">
+                                                            +{{ p.estat.carrecs_pendents }} × {{ formatEur(p.estat.prima ?? 0) }}
+                                                        </span>
+                                                    </template>
+                                                    <span v-else class="text-gray-300 dark:text-gray-600">—</span>
                                                 </td>
                                                 <td
                                                     class="whitespace-nowrap px-4 py-2 text-right text-sm text-gray-600 dark:text-gray-400"

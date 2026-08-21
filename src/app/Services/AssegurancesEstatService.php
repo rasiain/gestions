@@ -19,7 +19,9 @@ use Illuminate\Support\Collection;
  *   - la PERIODICITAT (mensual, semestral, anual…), deduïda dels càrrecs dels
  *     últims dotze mesos;
  *   - la PRIMA actual i la seva variació respecte de fa un any, que és el que
- *     avisa d'una pujada molt abans que el total de l'any.
+ *     avisa d'una pujada molt abans que el total de l'any;
+ *   - la PREVISIÓ de tancament i el PROPER CÀRREC, que surten de les dues
+ *     anteriors: què falta per pagar de l'any i quan hauria d'arribar.
  *
  * Els imports positius (indemnitzacions, retorns de prima) no es resten mai del
  * pagat: es compten a part.
@@ -96,9 +98,26 @@ class AssegurancesEstatService
 
         [$periodicitat, $carrecsAny] = $this->periodicitat($ultimAny);
 
+        $pagaments = $this->compta($carrecs, $any);
+
+        // Mentre l'any corre es pot dir què hi falta; un any tancat ja no espera
+        // res i la previsió no vol dir res.
+        $anyObert = $referencia->format('m-d') !== '12-31';
+        $pendents = $anyObert && $carrecsAny !== null ? max(0, $carrecsAny - $pagaments) : null;
+        $ultim    = $carrecs->last(fn (MovimentCompteCorrent $m) => $m->data_moviment->lte($referencia));
+
         return [
             'pagat'             => $pagat,
-            'pagaments'         => $this->compta($carrecs, $any),
+            'pagaments'         => $pagaments,
+            // Els càrrecs que falten es compten a la prima d'ara: és el que
+            // costaria l'any si no canviés res més.
+            'carrecs_pendents'  => $pendents,
+            'previsio'          => $pendents !== null && $prima !== null
+                ? round($pagat + $pendents * $prima, 2)
+                : null,
+            'proper_carrec'     => $pendents > 0 && $carrecsAny !== null && $ultim !== null
+                ? $ultim->data_moviment->copy()->addMonths(intdiv(12, $carrecsAny))->toDateString()
+                : null,
             // Any anterior retallat al mateix dia: l'única comparació honesta
             // mentre l'any en curs no ha acabat.
             'anterior_a_data'   => $anteriorAData,

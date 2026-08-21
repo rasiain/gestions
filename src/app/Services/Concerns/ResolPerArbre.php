@@ -89,6 +89,28 @@ trait ResolPerArbre
     }
 
     /**
+     * Path complet (arrel > ... > fulla) de cada categoria.
+     *
+     * @param  Collection<int, Categoria>|null  $categories
+     * @return array<int, string>
+     */
+    public function pathsPerCategoria(?Collection $categories = null): array
+    {
+        $categories ??= Categoria::all();
+        $perId = $categories->keyBy('id');
+
+        $paths = [];
+        foreach ($categories as $categoria) {
+            $paths[$categoria->id] = implode(' > ', array_map(
+                fn (Categoria $c) => $c->nom,
+                $this->cadena($categoria, $perId)
+            ));
+        }
+
+        return $paths;
+    }
+
+    /**
      * Immoble i població segons la posició dins de l'arbre.
      *
      * @param  array<int, Categoria>  $cadena  de l'arrel a la categoria de la despesa

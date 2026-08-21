@@ -3,6 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\CategoriesPerCompte;
+use App\Http\Requests\AssegurancaPatroRequest;
+use App\Http\Requests\AssegurancaPolissaRequest;
+use App\Models\AssegurancaPatro;
+use App\Models\AssegurancaPolissa;
+use App\Models\Categoria;
 use App\Models\MovimentCompteCorrent;
 use App\Services\AssegurancesEstatService;
 use App\Services\AssegurancesService;
@@ -75,6 +80,228 @@ class ImpostosAssegurancesController extends Controller
         ]);
     }
 
+    // ---- Configuració: patrons de detecció i ajustos manuals ----
+
+    public function config(Request $request)
+    {
+        $cerca = trim((string) $request->input('cerca', ''));
+        // Els moviments que es compten són els de l'any en curs, que és el que
+        // s'està classificant; «tots» hi és per als camins que fa temps que no
+        // es fan servir.
+        $any = $request->input('any', (string) date('Y')) === 'tots'
+            ? null
+            : (int) $request->input('any', date('Y'));
+
+        return Inertia::render('Impostos/AssegurancesConfig', [
+            'patrons'   => AssegurancaPatro::orderBy('ordre')->orderBy('etiqueta')->get(),
+            'camins'    => $this->caminsDetectats($any),
+            'any'       => $any,
+            'cerca'     => $cerca,
+            'candidats' => $this->candidats($cerca),
+        ]);
+    }
+
+    /**
+     * Un registre per CAMÍ de categoria: què n'ha resolt el detector i quin
+     * ajust hi ha, si n'hi ha. El mateix camí existeix a cada compte que
+     * l'hagi importat i totes aquelles categories volen dir el mateix, de
+     * manera que s'editen juntes.
+     *
+     * Cada camí porta els comptes on és, amb els moviments de l'any demanat:
+     * és el que permet anar de la categoria al moviment i comprovar-lo.
+     *
+     * @param  int|null  $any  null per comptar-los tots
+     * @return array<int, array<string, mixed>>
+     */
+    private function caminsDetectats(?int $any): array
+    {
+        $categories = Categoria::with('compteCorrent')->get()->keyBy('id');
+        $paths      = $this->assegurances->pathsPerCategoria($categories);
+        $detectades = $this->assegurances->categoriesAsseguranca();
+        $ajustos    = AssegurancaPolissa::all()->keyBy('categoria_id');
+
+        // Les que tenen ajust però ja no es detecten també hi han de sortir:
+        // si no, no hi hauria manera de treure'l.
+        $ids = array_unique(array_merge(array_keys($detectades), $ajustos->keys()->all()));
+
+        $consulta = MovimentCompteCorrent::whereIn('categoria_id', $ids)
+            ->selectRaw('categoria_id, count(*) as total')
+            ->groupBy('categoria_id');
+
+        if ($any !== null) {
+            $consulta->whereYear('data_moviment', $any);
+        }
+
+        $moviments = $consulta->pluck('total', 'categoria_id');
+
+        $camins = [];
+        foreach ($ids as $id) {
+            $cami      = $paths[$id] ?? null;
+            $categoria = $categories->get($id);
+            if ($cami === null || $categoria === null) {
+                continue;
+            }
+
+            $info  = $detectades[$id] ?? null;
+            $ajust = $ajustos->get($id);
+            $actual = $camins[$cami] ?? [
+                'cami'       => $cami,
+                'categories' => 0,
+                'moviments'  => 0,
+                'comptes'    => [],
+                'detectada'  => false,
+                'tipus'      => null,
+                'objecte'    => null,
+                'poblacio'   => null,
+                'companyia'  => null,
+                'ajust'      => null,
+            ];
+
+            $compte = $categoria->compteCorrent;
+
+            $camins[$cami] = [
+                'cami'       => $cami,
+                'categories' => $actual['categories'] + 1,
+                'moviments'  => $actual['moviments'] + (int) ($moviments[$id] ?? 0),
+                'comptes'    => array_merge($actual['comptes'], [[
+                    'categoria_id'      => $id,
+                    'compte_corrent_id' => $categoria->compte_corrent_id,
+                    'compte'            => $compte?->nom,
+                    'digits'            => $compte ? substr((string) $compte->compte_corrent, -4) : null,
+                    'moviments'         => (int) ($moviments[$id] ?? 0),
+                ]]),
+                'detectada'  => $actual['detectada'] || $info !== null,
+                // El resultat d'ara: el que es corregeix editant l'ajust
+                'tipus'      => $actual['tipus'] ?? $info['tipus'] ?? null,
+                'objecte'    => $actual['objecte'] ?? $info['objecte'] ?? null,
+                'poblacio'   => $actual['poblacio'] ?? $info['poblacio_ajust'] ?? $info['poblacio'] ?? null,
+                'companyia'  => $actual['companyia'] ?? $info['companyia'] ?? null,
+                'ajust'      => $actual['ajust'] ?? ($ajust === null ? null : [
+                    'objecte'   => $ajust->objecte,
+                    'poblacio'  => $ajust->poblacio,
+                    'companyia' => $ajust->companyia,
+                    'tipus'     => $ajust->tipus,
+                    'inclou'    => $ajust->inclou,
+                    'ocult'     => $ajust->ocult,
+                ]),
+            ];
+        }
+
+        ksort($camins);
+
+        return array_values(array_map(function (array $cami) {
+            usort($cami['comptes'], fn (array $a, array $b) => strcmp((string) $a['compte'], (string) $b['compte']));
+
+            return $cami;
+        }, $camins));
+    }
+
+    /**
+     * Camins que NO es detecten i que encaixen amb la cerca, per poder-hi
+     * afegir una inclusió manual. Es cerca al servidor: l'arbre té milers de
+     * categories i no val la pena enviar-lo sencer.
+     *
+     * @return array<int, array{cami: string, categories: int}>
+     */
+    private function candidats(string $cerca): array
+    {
+        if (mb_strlen($cerca) < 3) {
+            return [];
+        }
+
+        $terme      = AssegurancesService::normalitza($cerca);
+        $detectades = $this->assegurances->categoriesAsseguranca();
+
+        $camins = [];
+        foreach ($this->assegurances->pathsPerCategoria() as $id => $cami) {
+            if (isset($detectades[$id]) || ! str_contains(AssegurancesService::normalitza($cami), $terme)) {
+                continue;
+            }
+
+            $camins[$cami] = ($camins[$cami] ?? 0) + 1;
+        }
+
+        ksort($camins);
+
+        return array_slice(
+            array_map(fn (string $cami, int $n) => ['cami' => $cami, 'categories' => $n], array_keys($camins), $camins),
+            0,
+            30
+        );
+    }
+
+    public function storePatro(AssegurancaPatroRequest $request)
+    {
+        AssegurancaPatro::create($this->dadesPatro($request));
+
+        return back();
+    }
+
+    public function updatePatro(AssegurancaPatroRequest $request, AssegurancaPatro $patro)
+    {
+        $patro->update($this->dadesPatro($request));
+
+        return back();
+    }
+
+    public function destroyPatro(AssegurancaPatro $patro)
+    {
+        $patro->delete();
+
+        return back();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function dadesPatro(AssegurancaPatroRequest $request): array
+    {
+        return [
+            'etiqueta' => $request->input('etiqueta'),
+            'patro'    => $request->input('patro'),
+            'actiu'    => $request->boolean('actiu', true),
+            'ordre'    => $request->integer('ordre', 0),
+        ];
+    }
+
+    /**
+     * Desa l'ajust de totes les categories d'un camí. Un ajust sense cap valor
+     * no és cap decisió: s'esborra.
+     */
+    public function updateAjust(AssegurancaPolissaRequest $request)
+    {
+        $cami = (string) $request->input('cami');
+        $ids  = array_keys(array_filter(
+            $this->assegurances->pathsPerCategoria(),
+            fn (string $path) => $path === $cami
+        ));
+
+        if ($ids === []) {
+            return back()->withErrors(['cami' => 'Ja no hi ha cap categoria amb aquest camí.']);
+        }
+
+        $dades = [
+            'objecte'   => $request->input('objecte') ?: null,
+            'poblacio'  => $request->input('poblacio') ?: null,
+            'companyia' => $request->input('companyia') ?: null,
+            'tipus'     => $request->input('tipus') ?: null,
+            'inclou'    => $request->boolean('inclou'),
+            'ocult'     => $request->boolean('ocult'),
+        ];
+
+        if (collect($dades)->every(fn ($valor) => $valor === null || $valor === false)) {
+            AssegurancaPolissa::whereIn('categoria_id', $ids)->delete();
+
+            return back();
+        }
+
+        foreach ($ids as $id) {
+            AssegurancaPolissa::updateOrCreate(['categoria_id' => $id], $dades);
+        }
+
+        return back();
+    }
+
     /**
      * Fins on ha arribat l'any demanat: avui si encara corre, el 31 de desembre
      * si ja s'ha acabat.
@@ -143,6 +370,7 @@ class ImpostosAssegurancesController extends Controller
                     'total_actual'    => $suma('pagat'),
                     'total_anterior'  => $suma('anterior_total'),
                     'total_a_data'    => $suma('anterior_a_data'),
+                    'total_previsio'  => $suma('previsio'),
                 ];
             })
             ->values();
