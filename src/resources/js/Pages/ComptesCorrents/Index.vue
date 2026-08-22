@@ -24,6 +24,8 @@ interface CompteCorrent {
     lloguer_acronim: string | null;
     /** Només per als comptes de fons d'inversió amb contracte. */
     fons_nom: string | null;
+    /** Només per als comptes de pla de pensions amb contracte. */
+    pla_nom: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -117,19 +119,29 @@ const formatSaldo = (saldo: number | null): string => {
     }).format(saldo);
 };
 
-const comptesCorrents = computed(() => props.comptesCorrents.filter(c => !c.lloguer_nom && c.tipus !== 'fons_inversio'));
+/** Fons d'inversió i plans de pensions: dues coses diferents, un sol grup. */
+const esInversio = (c: CompteCorrent) => c.tipus === 'fons_inversio' || c.tipus === 'pla_pensions';
+
+const comptesCorrents = computed(() => props.comptesCorrents.filter(c => !c.lloguer_nom && !esInversio(c)));
 const comptesLloguers = computed(() => props.comptesCorrents.filter(c => !!c.lloguer_nom));
-const comptesFonsInversio = computed(() => props.comptesCorrents.filter(c => c.tipus === 'fons_inversio'));
+const comptesInversions = computed(() => props.comptesCorrents.filter(esInversio));
 
 // Clicar la fila obre els moviments del compte, com a la llista de lloguers
 const obrirMoviments = (compte: CompteCorrent) => {
     router.visit(route('moviments.index', { compte_corrent_id: compte.id }));
 };
 
-// Els comptes de fons no tenen moviments bancaris: van a les aportacions del fons
-const obrirFons = (compte: CompteCorrent) => {
-    if (!compte.fons_nom) return;
-    router.visit(route('fons-inversio.index', { compte_corrent_id: compte.id }));
+// Els comptes d'inversió no tenen moviments bancaris: van a les aportacions
+// del fons o del pla, segons què hi hagi contractat
+const obrirInversio = (compte: CompteCorrent) => {
+    if (compte.fons_nom) {
+        router.visit(route('fons-inversio.index', { compte_corrent_id: compte.id }));
+        return;
+    }
+
+    if (compte.pla_nom) {
+        router.visit(route('plans-pensions.index', { compte_corrent_id: compte.id }));
+    }
 };
 
 const showBalancModal = ref(false);
@@ -265,17 +277,17 @@ const closeBalancModal = () => {
                                         </tr>
                                     </template>
 
-                                    <!-- Grup: Fons d'Inversió -->
-                                    <template v-if="comptesFonsInversio.length">
+                                    <!-- Grup: Inversions (fons d'inversió i plans de pensions) -->
+                                    <template v-if="comptesInversions.length">
                                         <tr class="bg-emerald-50 dark:bg-emerald-900/20">
-                                            <td colspan="6" class="px-6 py-1.5 text-xs font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Fons d'Inversió</td>
+                                            <td colspan="6" class="px-6 py-1.5 text-xs font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Inversions</td>
                                         </tr>
                                         <tr
-                                            v-for="compte in comptesFonsInversio"
+                                            v-for="compte in comptesInversions"
                                             :key="compte.id"
-                                            @click="obrirFons(compte)"
+                                            @click="obrirInversio(compte)"
                                             class="transition-colors hover:bg-emerald-50 dark:hover:bg-emerald-900/10"
-                                            :class="compte.fons_nom ? 'cursor-pointer' : ''"
+                                            :class="compte.fons_nom || compte.pla_nom ? 'cursor-pointer' : ''"
                                         >
                                             <td class="px-6 py-4 text-sm" @click.stop>
                                                 <Link
@@ -283,7 +295,17 @@ const closeBalancModal = () => {
                                                     :href="route('fons-inversio.index', { compte_corrent_id: compte.id })"
                                                     class="text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-300"
                                                 >{{ compte.fons_nom }}</Link>
-                                                <span v-else class="text-xs italic text-gray-400 dark:text-gray-500">Sense fons</span>
+                                                <Link
+                                                    v-else-if="compte.pla_nom"
+                                                    :href="route('plans-pensions.index', { compte_corrent_id: compte.id })"
+                                                    class="text-emerald-700 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-300"
+                                                >
+                                                    {{ compte.pla_nom }}
+                                                    <span class="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">pla</span>
+                                                </Link>
+                                                <span v-else class="text-xs italic text-gray-400 dark:text-gray-500">
+                                                    {{ compte.tipus === 'pla_pensions' ? 'Sense pla' : 'Sense fons' }}
+                                                </span>
                                             </td>
                                             <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
                                                 {{ compte.nom || compte.compte_corrent }}
@@ -463,6 +485,7 @@ const closeBalancModal = () => {
                                     <select id="tipus" v-model="form.tipus" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm">
                                         <option value="corrent">Corrent</option>
                                         <option value="fons_inversio">Fons d'inversió</option>
+                                        <option value="pla_pensions">Pla de pensions</option>
                                     </select>
                                     <p v-if="form.errors.tipus" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.tipus }}</p>
                                 </div>

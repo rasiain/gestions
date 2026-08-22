@@ -211,11 +211,13 @@ const selectedCompte = computed(() => {
     return props.comptesCorrents.find(c => c.id === props.selectedCompteCorrentId);
 });
 
-// Els mateixos tres grups que la llista de comptes corrents: barrejar els fons
-// amb els comptes del dia a dia obliga a llegir-se la llista sencera.
-const comptesCorrents = computed(() => props.comptesCorrents.filter(c => !c.lloguer_nom && c.tipus !== 'fons_inversio'));
+// Els mateixos tres grups que la llista de comptes corrents: barrejar les
+// inversions amb els comptes del dia a dia obliga a llegir-se la llista sencera.
+const esInversio = (c: CompteCorrent) => c.tipus === 'fons_inversio' || c.tipus === 'pla_pensions';
+
+const comptesCorrents = computed(() => props.comptesCorrents.filter(c => !c.lloguer_nom && !esInversio(c)));
 const comptesLloguers = computed(() => props.comptesCorrents.filter(c => !!c.lloguer_nom));
-const comptesFonsInversio = computed(() => props.comptesCorrents.filter(c => c.tipus === 'fons_inversio'));
+const comptesInversions = computed(() => props.comptesCorrents.filter(esInversio));
 
 const onCompteCorrentChange = () => {
     router.get('/moviments', {
@@ -616,9 +618,9 @@ const conciliarPagina = async (conciliat: boolean) => {
                                         {{ compte.nom || compte.compte_corrent }}
                                     </option>
                                 </optgroup>
-                                <optgroup v-if="comptesFonsInversio.length" label="Fons d'Inversió">
+                                <optgroup v-if="comptesInversions.length" label="Inversions">
                                     <option
-                                        v-for="compte in comptesFonsInversio"
+                                        v-for="compte in comptesInversions"
                                         :key="compte.id"
                                         :value="compte.id"
                                     >

@@ -31,7 +31,7 @@ class PlaPensionsController extends Controller
             ->get()
             ->map(fn($p) => $this->formatPla($p));
 
-        $comptesPlaPensions = CompteCorrent::where('tipus', 'fons_inversio')
+        $comptesPlaPensions = CompteCorrent::where('tipus', 'pla_pensions')
             ->with(['titulars', 'entitatRelacio'])
             ->orderBy('nom')
             ->get()
@@ -89,7 +89,7 @@ class PlaPensionsController extends Controller
                 'compte_corrent' => $data['compte_referencia'],
                 'nom'            => $data['compte_nom'] ?? null,
                 'entitat_id'     => $entitat->id,
-                'tipus'          => 'fons_inversio',
+                'tipus'          => 'pla_pensions',
                 'ordre'          => 0,
             ]);
             $compte->titulars()->sync($data['titular_ids'] ?? []);

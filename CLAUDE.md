@@ -67,6 +67,7 @@ src/
 - Colors per mòdul: blau → comptes bancaris, ambre → lloguers
 
 ### Base de dades
+- **`g_comptes_corrents.tipus`**: `corrent`, `fons_inversio` o `pla_pensions`. Els dos últims no tenen moviments bancaris —el seu detall són les aportacions, a les pantalles de Fons d'Inversió i de Plans de Pensions— i a les llistes van junts sota el grup **Inversions**, que és com se'n diu al Dashboard. Fins a la migració `2026_08_22_000001` els plans de pensions també eren `fons_inversio`: com que el tipus no els distingia, les dues pantalles oferien els mateixos comptes en crear un contracte i res no impedia penjar un contracte de pensions d'un compte de fons.
 - Deduplicació de moviments bancaris per hash SHA-256: `data|import|compte_id|seqüència` (el concepte s'exclou intencionadament)
 - Categories jeràrquiques (auto-referència `categoria_pare_id`)
 - Pivots amb dates per a propietaris d'immobles
