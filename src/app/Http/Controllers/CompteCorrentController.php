@@ -105,6 +105,12 @@ class CompteCorrentController extends Controller
             ->with('success', 'Compte corrent eliminat correctament.');
     }
 
+    /** Mesos com a màxim a la vista mensual (25 anys). */
+    private const MAX_MESOS = 300;
+
+    /** Anys com a màxim a la vista anual. */
+    private const MAX_ANYS = 60;
+
     /**
      * Retorna el balanc (ingressos, despeses, net) per periodes i categories.
      */
@@ -113,6 +119,8 @@ class CompteCorrentController extends Controller
         $vista = $request->input('vista', 'mensual');
         $dataInici = $request->input('data_inici', date('Y-01-01'));
         $dataFi = $request->input('data_fi', date('Y-m-d'));
+
+        [$dataInici, $dataFi] = $this->rangAcotat($dataInici, $dataFi, $vista);
 
         $etiquetesMesos = ['Gen', 'Feb', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Des'];
 
@@ -147,6 +155,7 @@ class CompteCorrentController extends Controller
                     $etiqueta .= ' ' . substr((string) $y, 2);
                 }
                 $periodes[] = [
+                    'clau'      => $clau,
                     'etiqueta' => $etiqueta,
                     'ingressos' => $fila ? (float) $fila->ingressos : 0.0,
                     'despeses'  => $fila ? (float) $fila->despeses  : 0.0,
@@ -179,6 +188,7 @@ class CompteCorrentController extends Controller
             for ($y = $startY; $y <= $endY; $y++) {
                 $fila = $resultats->get((string) $y);
                 $periodes[] = [
+                    'clau'      => (string) $y,
                     'etiqueta' => (string) $y,
                     'ingressos' => $fila ? (float) $fila->ingressos : 0.0,
                     'despeses'  => $fila ? (float) $fila->despeses  : 0.0,
@@ -186,6 +196,8 @@ class CompteCorrentController extends Controller
                 ];
             }
         }
+
+        $periodes = $this->ambSaldo($periodes, $compteCorrent->id, $vista, $dataInici, $dataFi);
 
         $totals = [
             'ingressos' => array_sum(array_column($periodes, 'ingressos')),
@@ -219,6 +231,94 @@ class CompteCorrentController extends Controller
             'totals'     => $totals,
             'categories' => $categories,
         ]);
+    }
+
+    /**
+     * Rang de dates acotat a un nombre raonable de períodes.
+     *
+     * Les dates vénen d'un <input type="date">, que emet un valor a cada tecla:
+     * mentre s'escriu l'any 2023 el camp passa per 0002, 0020 i 0202. Sense
+     * acotar-ho, la vista anual construiria un període per any des de l'any 2 i
+     * la gràfica sortiria amb dues mil categories.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function rangAcotat(string $dataInici, string $dataFi, string $vista): array
+    {
+        $inici = $this->dataValida($dataInici) ?? date('Y-01-01');
+        $fi    = $this->dataValida($dataFi) ?? date('Y-m-d');
+
+        if ($inici > $fi) {
+            $inici = $fi;
+        }
+
+        $mesos = ((int) substr($fi, 0, 4) - (int) substr($inici, 0, 4)) * 12
+            + ((int) substr($fi, 5, 2) - (int) substr($inici, 5, 2));
+
+        $maxim = $vista === 'mensual' ? self::MAX_MESOS : self::MAX_ANYS * 12;
+
+        if ($mesos >= $maxim) {
+            $inici = date('Y-m-01', strtotime($fi . ' -' . ($maxim - 1) . ' months'));
+        }
+
+        return [$inici, $fi];
+    }
+
+    /**
+     * Data en format Y-m-d i d'un any plausible, o null.
+     */
+    private function dataValida(?string $data): ?string
+    {
+        if (! is_string($data) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $data)) {
+            return null;
+        }
+
+        $any = (int) substr($data, 0, 4);
+
+        return $any >= 1900 && $any <= 2999 ? $data : null;
+    }
+
+    /**
+     * Afegeix a cada període el saldo del compte al seu final.
+     *
+     * El saldo no es calcula sumant els nets: es pren el `saldo_posterior` del
+     * darrer moviment del període, que és el que diu el banc i ja s'ha validat
+     * en importar. Un període sense moviments no canvia el saldo i arrossega el
+     * de l'anterior; abans del primer moviment conegut, el saldo és null i la
+     * gràfica hi deixa un buit en lloc d'inventar-se un zero.
+     *
+     * @param  array<int, array<string, mixed>>  $periodes
+     * @return array<int, array<string, mixed>>
+     */
+    private function ambSaldo(array $periodes, int $compteCorrentId, string $vista, string $dataInici, string $dataFi): array
+    {
+        $format = $vista === 'mensual' ? 'Y-m' : 'Y';
+
+        $saldos = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)
+            ->whereBetween('data_moviment', [$dataInici, $dataFi])
+            ->whereNotNull('saldo_posterior')
+            ->orderBy('data_moviment')
+            ->orderBy('id')
+            ->get(['data_moviment', 'saldo_posterior'])
+            ->groupBy(fn (MovimentCompteCorrent $m) => $m->data_moviment->format($format))
+            ->map(fn ($grup) => (float) $grup->last()->saldo_posterior);
+
+        // El saldo amb què s'arriba al rang: si no, els primers mesos sense
+        // moviments no en tindrien cap i la línia començaria tard.
+        $anterior = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)
+            ->where('data_moviment', '<', $dataInici)
+            ->whereNotNull('saldo_posterior')
+            ->orderByDesc('data_moviment')
+            ->orderByDesc('id')
+            ->value('saldo_posterior');
+
+        $ultim = $anterior !== null ? (float) $anterior : null;
+
+        return array_map(function (array $periode) use ($saldos, &$ultim) {
+            $ultim = $saldos->get($periode['clau'], $ultim);
+
+            return $periode + ['saldo' => $ultim];
+        }, $periodes);
     }
 
     /**

@@ -2,12 +2,15 @@
 import Modal from '@/Components/Modal.vue';
 import BalancCategoriaFila from '@/Components/BalancCategoriaFila.vue';
 import { ref, watch, computed } from 'vue';
-import { Bar } from 'vue-chartjs';
+import { Bar, Line } from 'vue-chartjs';
 import {
     Chart as ChartJS,
     CategoryScale,
     LinearScale,
     BarElement,
+    LineElement,
+    PointElement,
+    Filler,
     Tooltip,
     Legend,
 } from 'chart.js';
@@ -17,6 +20,9 @@ ChartJS.register(
     CategoryScale,
     LinearScale,
     BarElement,
+    LineElement,
+    PointElement,
+    Filler,
     Tooltip,
     Legend,
 );
@@ -35,6 +41,8 @@ interface Periode {
     ingressos: number;
     despeses: number;
     net: number;
+    /** Saldo del compte al final del període. Null abans del primer moviment conegut. */
+    saldo: number | null;
 }
 
 interface BalancData {
@@ -73,9 +81,27 @@ const xsrfToken = () => {
     return m ? decodeURIComponent(m[1]) : '';
 };
 
+/**
+ * Un <input type="date"> emet un valor a cada tecla: mentre s'escriu l'any 2023
+ * el camp passa per 0002, 0020 i 0202. Demanar el balanç d'aquests rangs no té
+ * cap sentit i omplia la gràfica de centenars de períodes.
+ */
+const rangValid = (): boolean => {
+    if (!dataInici.value || !dataFi.value) return false;
+
+    const anyInici = Number(dataInici.value.slice(0, 4));
+    if (anyInici < 1900 || anyInici > 2999) return false;
+
+    return dataInici.value <= dataFi.value;
+};
+
+/** Les peticions poden tornar desordenades: només val la darrera demanada. */
+let peticio = 0;
+
 const carregarDades = async () => {
     if (!props.compteCorrentId) return;
-    if (!dataInici.value || !dataFi.value) return;
+    if (!rangValid()) return;
+    const meva = ++peticio;
     loading.value = true;
     error.value = null;
     try {
@@ -92,12 +118,22 @@ const carregarDades = async () => {
             },
         });
         if (!res.ok) throw new Error('Error en la resposta del servidor');
-        dades.value = await res.json();
+        const rebudes = await res.json();
+        if (meva !== peticio) return;
+        dades.value = rebudes;
     } catch {
-        error.value = 'Error en obtenir les dades del balanc.';
+        if (meva === peticio) error.value = 'Error en obtenir les dades del balanç.';
     } finally {
-        loading.value = false;
+        if (meva === peticio) loading.value = false;
     }
+};
+
+/** Mentre s'escriu una data no es demana res: s'espera que s'acabi de teclejar. */
+let temporitzador: ReturnType<typeof setTimeout> | undefined;
+
+const carregarAmbPausa = () => {
+    clearTimeout(temporitzador);
+    temporitzador = setTimeout(carregarDades, 400);
 };
 
 watch(
@@ -115,8 +151,8 @@ watch(
 );
 
 watch(vista, () => carregarDades());
-watch(dataInici, () => carregarDades());
-watch(dataFi, () => carregarDades());
+watch(dataInici, carregarAmbPausa);
+watch(dataFi, carregarAmbPausa);
 
 const formatEur = (val: number): string =>
     new Intl.NumberFormat('ca-ES', { style: 'currency', currency: 'EUR' }).format(val);
@@ -164,6 +200,59 @@ const chartBalancData = computed(() => {
             },
         ],
     };
+});
+
+/**
+ * Evolució del saldo: no és la suma dels nets, sinó el saldo que diu el banc al
+ * final de cada període. És l'única línia que respon «com va el compte».
+ */
+const chartSaldoData = computed(() => {
+    if (!dades.value) return { labels: [], datasets: [] };
+    const periodes = dades.value.periodes;
+    return {
+        labels: periodes.map(p => p.etiqueta),
+        datasets: [
+            {
+                label: 'Saldo',
+                data: periodes.map(p => p.saldo),
+                borderColor: 'rgba(37, 99, 235, 1)',
+                backgroundColor: 'rgba(37, 99, 235, 0.12)',
+                borderWidth: 2,
+                pointRadius: 3,
+                pointBackgroundColor: 'rgba(37, 99, 235, 1)',
+                tension: 0.25,
+                fill: true,
+                // Els períodes anteriors al primer moviment conegut no tenen
+                // saldo: hi ha de quedar el buit, no una línia inventada.
+                spanGaps: false,
+            },
+        ],
+    };
+});
+
+const chartSaldoOptions = computed(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+        legend: { display: false },
+        tooltip: {
+            callbacks: {
+                label: (ctx: TooltipItem<'line'>) => `Saldo: ${formatEur(Number(ctx.parsed.y))}`,
+            },
+        },
+    },
+    scales: {
+        y: {
+            ticks: {
+                callback: (value: number | string) => formatEur(Number(value)),
+            },
+        },
+    },
+}));
+
+const saldoFinal = computed<number | null>(() => {
+    const ambSaldo = dades.value?.periodes.filter(p => p.saldo !== null) ?? [];
+    return ambSaldo.length ? ambSaldo[ambSaldo.length - 1].saldo : null;
 });
 
 const chartOptions = computed(() => ({
@@ -285,14 +374,34 @@ const chartOptions = computed(() => ({
                     </div>
                 </div>
 
+                <!-- Evolució del saldo: el que diu el banc al final de cada període -->
+                <div class="mb-6">
+                    <div class="mb-1 flex items-baseline justify-between">
+                        <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">Evolució del saldo</h4>
+                        <span v-if="saldoFinal !== null" class="text-sm text-gray-500 dark:text-gray-400">
+                            al final del període:
+                            <span class="font-semibold text-gray-900 dark:text-gray-100">{{ formatEur(saldoFinal) }}</span>
+                        </span>
+                    </div>
+                    <div class="h-56">
+                        <Line :data="chartSaldoData" :options="chartSaldoOptions" />
+                    </div>
+                </div>
+
                 <!-- Grafica ingressos / despeses -->
-                <div class="mb-4 h-64">
-                    <Bar :data="chartData" :options="chartOptions" />
+                <div class="mb-6">
+                    <h4 class="mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">Ingressos i despeses</h4>
+                    <div class="h-64">
+                        <Bar :data="chartData" :options="chartOptions" />
+                    </div>
                 </div>
 
                 <!-- Grafica balanç net -->
-                <div class="mb-6 h-48">
-                    <Bar :data="chartBalancData" :options="chartOptions" />
+                <div class="mb-6">
+                    <h4 class="mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">Balanç net del període</h4>
+                    <div class="h-48">
+                        <Bar :data="chartBalancData" :options="chartOptions" />
+                    </div>
                 </div>
 
                 <!-- Toggle categories -->

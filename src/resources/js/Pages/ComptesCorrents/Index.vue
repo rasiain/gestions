@@ -230,7 +230,7 @@ const closeBalancModal = () => {
                                             <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium" :class="compte.saldo_actual !== null && compte.saldo_actual < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'">{{ formatSaldo(compte.saldo_actual) }}</td>
                                             <td class="px-6 py-4 text-right text-sm font-medium" @click.stop>
                                                 <Link :href="route('maintenance.movements.import', { compte_corrent_id: compte.id })" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Importar</Link>
-                                                <button @click="openBalancModal(compte)" class="mr-3 text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">Balanc</button>
+                                                <button @click="openBalancModal(compte)" class="mr-3 text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">Balanç</button>
                                                 <button @click="openEditModal(compte)" class="mr-3 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">Editar</button>
                                                 <button @click="deleteCompteCorrent(compte)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
                                             </td>
@@ -258,7 +258,7 @@ const closeBalancModal = () => {
                                             <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium" :class="compte.saldo_actual !== null && compte.saldo_actual < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'">{{ formatSaldo(compte.saldo_actual) }}</td>
                                             <td class="px-6 py-4 text-right text-sm font-medium" @click.stop>
                                                 <Link :href="route('maintenance.movements.import', { compte_corrent_id: compte.id })" class="mr-3 text-amber-600 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300">Importar</Link>
-                                                <button @click="openBalancModal(compte)" class="mr-3 text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">Balanc</button>
+                                                <button @click="openBalancModal(compte)" class="mr-3 text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300">Balanç</button>
                                                 <button @click="openEditModal(compte)" class="mr-3 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">Editar</button>
                                                 <button @click="deleteCompteCorrent(compte)" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">Eliminar</button>
                                             </td>
@@ -351,7 +351,7 @@ const closeBalancModal = () => {
             </div>
         </div>
 
-        <!-- Modal Balanc -->
+        <!-- Modal Balanç -->
         <BalancCompteModal
             :show="showBalancModal"
             :compte-corrent-id="balancCompteId"
