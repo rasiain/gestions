@@ -100,6 +100,8 @@ function normalitza(text: string): string {
 
 const filtre = ref('');
 const nomesAmbAjust = ref(false);
+/** Un camí sense cap moviment de l'any no és el que s'està classificant: per defecte, fora. */
+const amagaSenseMoviments = ref(true);
 
 const anyOpcions = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - i);
 
@@ -127,11 +129,17 @@ function enllacMoviments(c: CompteDelCami) {
 const caminsFiltrats = computed(() => {
     const cerca = normalitza(filtre.value.trim());
     return props.camins.filter((c) => {
+        if (amagaSenseMoviments.value && c.moviments === 0) return false;
         if (nomesAmbAjust.value && !c.ajust) return false;
         if (cerca && !normalitza(c.cami).includes(cerca)) return false;
         return true;
     });
 });
+
+/** Quants queden fora només per no tenir cap moviment de l'any. */
+const amagatsSenseMoviments = computed(() =>
+    amagaSenseMoviments.value ? props.camins.filter((c) => c.moviments === 0).length : 0
+);
 
 const ajustForm = useForm({
     cami: '',
@@ -329,6 +337,11 @@ function cerca_amb_pausa() {
                             <input v-model="filtre" type="search" placeholder="Filtra pel camí…"
                                 class="w-72 rounded-md border-gray-300 text-sm shadow-sm focus:border-red-500 focus:ring-red-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300" />
                             <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                                <input v-model="amagaSenseMoviments" type="checkbox"
+                                    class="rounded border-gray-300 text-red-600 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-700" />
+                                Amaga els que no tenen cap moviment
+                            </label>
+                            <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                                 <input v-model="nomesAmbAjust" type="checkbox"
                                     class="rounded border-gray-300 text-red-600 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-700" />
                                 Només els que tenen ajust
@@ -341,7 +354,12 @@ function cerca_amb_pausa() {
                                     <option value="tots">tots els anys</option>
                                 </select>
                             </label>
-                            <span class="ml-auto text-sm text-gray-500 dark:text-gray-400">{{ caminsFiltrats.length }} camins</span>
+                            <span class="ml-auto text-sm text-gray-500 dark:text-gray-400">
+                                {{ caminsFiltrats.length }} camins
+                                <span v-if="amagatsSenseMoviments" class="text-gray-400 dark:text-gray-500">
+                                    · {{ amagatsSenseMoviments }} amagats sense moviments
+                                </span>
+                            </span>
                         </div>
 
                         <div class="overflow-x-auto">
