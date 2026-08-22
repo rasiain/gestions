@@ -8,6 +8,12 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // La migració de creació ja porta la columna: en una base de dades nova
+        // no s'hi ha d'afegir res.
+        if (Schema::hasColumn('g_contractes', 'lloguer_id')) {
+            return;
+        }
+
         Schema::table('g_contractes', function (Blueprint $table) {
             $table->foreignId('lloguer_id')->after('id')->constrained('g_lloguers')->cascadeOnDelete();
         });
