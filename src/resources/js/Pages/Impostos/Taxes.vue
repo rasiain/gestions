@@ -519,7 +519,10 @@ function desaEdicio() {
                                         <button v-else @click="obreRebut(grup, t)" class="block w-full text-left" title="Edita el total del rebut">
                                             <!-- Amb rebut definit: quant se n'ha pagat -->
                                             <template v-if="t.estat.total !== null">
+                                                <!-- Etiqueta i xifra d'amplada fixa: les dues barres han de començar i
+                                                     acabar al mateix lloc, o comparar-les d'un cop d'ull no vol dir res. -->
                                                 <div class="flex items-center gap-2">
+                                                    <span class="w-20 shrink-0 text-xs text-gray-400 dark:text-gray-500">propietari</span>
                                                     <div class="h-2 flex-1 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-600">
                                                         <div
                                                             class="h-full rounded-full"
@@ -527,7 +530,7 @@ function desaEdicio() {
                                                             :style="{ width: ampladaBarra(t.estat.percentatge) }"
                                                         ></div>
                                                     </div>
-                                                    <span class="whitespace-nowrap text-xs text-gray-600 dark:text-gray-300">
+                                                    <span class="w-24 shrink-0 whitespace-nowrap text-right text-xs tabular-nums text-gray-600 dark:text-gray-300">
                                                         <span v-if="t.estat.terminis_previstos">{{ t.estat.terminis_fets }}/{{ t.estat.terminis_previstos }} · </span>{{ t.estat.percentatge }} %
                                                     </span>
                                                 </div>
@@ -542,24 +545,34 @@ function desaEdicio() {
                                             <!-- Part del llogater: l'import retornat és cert encara que no hi hagi total definit -->
                                             <template v-if="t.estat.repercutible">
                                                 <div class="mt-1 flex items-center gap-2">
+                                                    <span class="w-20 shrink-0 text-xs text-amber-700 dark:text-amber-400">llogater</span>
                                                     <div v-if="t.estat.total !== null" class="h-2 flex-1 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-600">
                                                         <div class="h-full rounded-full bg-amber-400" :style="{ width: ampladaBarra(t.estat.percentatge_llogater) }"></div>
                                                     </div>
-                                                    <span class="whitespace-nowrap text-xs text-amber-700 dark:text-amber-400">
-                                                        llogater {{ formatEur(t.estat.repercutit ?? 0) }}<span v-if="t.estat.percentatge_llogater !== null"> · {{ t.estat.percentatge_llogater }} %</span>
+                                                    <!-- Sense total del rebut no hi ha percentatge, però la xifra s'ha
+                                                         de quedar a la seva columna -->
+                                                    <div v-else class="flex-1"></div>
+                                                    <span class="w-24 shrink-0 whitespace-nowrap text-right text-xs tabular-nums text-amber-700 dark:text-amber-400">
+                                                        <template v-if="t.estat.percentatge_llogater !== null">{{ t.estat.percentatge_llogater }} %</template>
+                                                        <template v-else>—</template>
                                                     </span>
                                                 </div>
                                                 <div class="mt-0.5 text-xs">
                                                     <span v-if="t.estat.repercussio_parcial" class="text-gray-400 dark:text-gray-500">
                                                         cap import repercutit registrat
                                                     </span>
-                                                    <span v-else-if="t.estat.saldo! > 0" class="text-green-600 dark:text-green-400">
-                                                        ↑ ha avançat {{ formatEur(t.estat.saldo!) }}
-                                                    </span>
-                                                    <span v-else-if="t.estat.saldo! < 0" class="text-amber-700 dark:text-amber-400">
-                                                        ↓ li queden {{ formatEur(-t.estat.saldo!) }} per retornar
-                                                    </span>
-                                                    <span v-else class="text-gray-400 dark:text-gray-500">al dia</span>
+                                                    <template v-else>
+                                                        <span class="text-gray-400 dark:text-gray-500">
+                                                            n'ha retornat {{ formatEur(t.estat.repercutit ?? 0) }}
+                                                        </span>
+                                                        <span v-if="t.estat.saldo! > 0" class="ml-1 text-green-600 dark:text-green-400">
+                                                            · ↑ ha avançat {{ formatEur(t.estat.saldo!) }}
+                                                        </span>
+                                                        <span v-else-if="t.estat.saldo! < 0" class="ml-1 text-amber-700 dark:text-amber-400">
+                                                            · ↓ li queden {{ formatEur(-t.estat.saldo!) }} per retornar
+                                                        </span>
+                                                        <span v-else class="ml-1 text-gray-400 dark:text-gray-500">· al dia</span>
+                                                    </template>
                                                 </div>
                                             </template>
                                         </button>
