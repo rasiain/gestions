@@ -111,6 +111,26 @@ D'aquestes dues en surt la **previsió de tancament** —pagat + els càrrecs qu
 
 `g_assegurances_patrons` desa els patrons. Totes dues taules s'editen des de **`/impostos/assegurances/config`**, que llista els patrons i, sota, **un registre per camí de categoria** amb el que n'ha resolt el detector. Els ajustos s'editen **per camí i no per categoria**: el mateix camí existeix a cada compte que l'hagi importat i vol dir el mateix a tots, de manera que desar-ne un escriu una fila per cada categoria del camí i buidar-lo les esborra totes. Qui necessiti distingir dues categories del mateix camí ho ha de fer per tinker. La inclusió manual es fa cercant el camí al servidor (l'arbre té milers de categories i no s'envia sencer).
 
+### Model 184 (comunitats de béns)
+
+`Model184Service` munta la declaració d'atribució de rendes d'una comunitat de béns: un registre per immoble llogat (clau C, per referència cadastral) i el repartiment entre comuners. Afecta només els lloguers els contractes dels quals tenen una `ComunitatBens` com a arrendadora.
+
+**El 184 fa dues reparticions que no coincideixen**: el **rendiment** va per **percentatge de participació** i les **retencions** per **quota de titularitat**. La diferència és l'amortització, que cada comuner es dedueix de la seva:
+
+```
+base repartible   = ingressos íntegres − (despeses − amortització)
+rendiment comuner = quota × base repartible − amortització pròpia
+% participació    = rendiment comuner / suma dels rendiments
+```
+
+L'**amortització de cada comuner no és derivable** de les dades del projecte: depèn del valor i la data d'adquisició de la seva quota (compra, herència…) i `g_immobles` només desa un joc de valors per immoble. És una dada d'entrada, al pivot **`g_propietaris_immobles`** (`quota`, `amortitzacio_anual`), que ja porta `data_inici`/`data_fi` i per tant ja modela els canvis de comuner.
+
+**Els ingressos i les retencions surten de les factures**, no dels moviments classificats: les factures són la sèrie completa de l'any i porten la retenció calculada, mentre que la classificació dels cobraments pot anar endarrerida. Les despeses, en canvi, sí que surten de la classificació — i de les línies d'ingrés que no són repercussió, com a l'IRPF.
+
+**La casella del 184 no és una classificació nova.** Es dedueix de la categoria de la despesa amb la mateixa taula que ja la tradueix al compte del PGC (`g_categoria_lloguer_fiscal.casella_184`). A `g_moviment_lloguer_despesa.casella_184` només s'hi desa l'excepció: `null` = la del mapatge, `0` = fora de la declaració. Comprovat contra una declaració real: les caselles surten soles de la classificació existent, i les que no quadraven era per una despesa classificada amb el criteri del llibre d'IVA (una prima d'assegurança com a `comissions`).
+
+Fet: pantalla de lectura amb els avisos previs (quotes que no sumen 100, comuners sense amortització, exercici sense factures). Pendent: **materialitzar la declaració presentada**, que és el que evita que un recàlcul anys després doni un número diferent del que es va declarar. Especificació completa a `.claude/specs/model-184-comunitats-bens.md` (no versionat).
+
 ### Components reutilitzables destacats
 - `Services\Concerns\ResolPerArbre`: resolució d'immoble i municipi des de l'arbre de categories, compartida per `TaxesService` i `AssegurancesService` (si divergissin, el mateix immoble sortiria amb dos noms segons la vista). `Http\Controllers\Concerns\CategoriesPerCompte` fa el mateix amb el selector de categories de les dues vistes.
 - `BulkEditModal.vue`: modal d'edició múltiple (concepte, notes, categoria). Gestiona el formulari internament; emet `@submit(payload)` i `v-model:open`. El pare conserva `saving` i `error` i fa la crida API. Usat a `Moviments/Index.vue` i `Lloguers/Index.vue`.
@@ -158,6 +178,7 @@ D'aquestes dues en surt la **previsió de tancament** —pagat + els càrrecs qu
               │  Impostos: IVA, IRPF (calculats des de factures);      │
               │            Taxes (impostos municipals, vista derivada) │
               │            Assegurances (pòlisses, vista derivada)     │
+              │            Model 184 (comunitats de béns)              │
               └────────────────────────────────────────────────────────┘
 ```
 

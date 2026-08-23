@@ -21,6 +21,8 @@ class MovimentLloguerDespesa extends Model
         'iva_percentatge',
         'iva_import',
         'tipus_despesa_fiscal_id',
+        // Excepció al 184: null = la casella que digui la categoria; 0 = fora de la declaració
+        'casella_184',
     ];
 
     protected $casts = [

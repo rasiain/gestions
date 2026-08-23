@@ -51,7 +51,7 @@ class Immoble extends Model
     public function propietaris()
     {
         return $this->belongsToMany(Persona::class, 'g_propietaris_immobles', 'immoble_id', 'persona_id')
-            ->withPivot('data_inici', 'data_fi')
+            ->withPivot('data_inici', 'data_fi', 'quota', 'amortitzacio_anual')
             ->withTimestamps();
     }
 

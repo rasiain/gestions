@@ -80,6 +80,8 @@ interface PropietariLocal {
     persona_id: number;
     nom: string;
     data_inici: string;
+    /** Buida mentre la titularitat és vigent. */
+    data_fi: string | null;
 }
 
 const localPropietaris = ref<PropietariLocal[]>([]);
@@ -97,6 +99,7 @@ const addPropietari = () => {
         persona_id: persona.id,
         nom: persona.nom + ' ' + persona.cognoms,
         data_inici: new Date().toISOString().split('T')[0],
+        data_fi: null,
     });
     nouPropietariId.value = null;
 };
@@ -138,6 +141,7 @@ const openEditModal = (immoble: Immoble) => {
         persona_id: p.id,
         nom: p.nom + ' ' + p.cognoms,
         data_inici: p.pivot.data_inici,
+        data_fi: p.pivot.data_fi,
     }));
     nouPropietariId.value = null;
     showModal.value = true;
@@ -154,7 +158,8 @@ const closeModal = () => {
 const submit = () => {
     form.propietari_ids = localPropietaris.value.map(p => p.persona_id);
     form.propietari_data_inici = localPropietaris.value.map(p => p.data_inici);
-    form.propietari_data_fi = localPropietaris.value.map(() => null);
+    // La data de fi que hi hagi: enviar-hi null sempre esborrava les titularitats tancades
+    form.propietari_data_fi = localPropietaris.value.map(p => p.data_fi || null);
     if (isEditing.value && editingImmoble.value) {
         form.put(route('immobles.update', editingImmoble.value.id), {
             onSuccess: () => closeModal(),
@@ -624,7 +629,27 @@ const formatNumber = (value: number | null, suffix: string = ''): string => {
                                         :key="p.persona_id"
                                         class="flex items-center justify-between px-3 py-2 text-sm text-gray-800 dark:text-gray-200"
                                     >
-                                        <span>{{ p.nom }}</span>
+                                        <span class="min-w-0 flex-1 truncate">{{ p.nom }}</span>
+                                        <!-- La data d'adquisició de la quota, no la d'alta del
+                                             registre: el model 184 hi filtra per exercici. -->
+                                        <label class="ml-3 flex shrink-0 items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                                            des de
+                                            <input
+                                                v-model="p.data_inici"
+                                                type="date"
+                                                class="rounded-md border-gray-300 py-1 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                                            />
+                                        </label>
+                                        <label class="ml-2 flex shrink-0 items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                                            fins a
+                                            <input
+                                                v-model="p.data_fi"
+                                                type="date"
+                                                :min="p.data_inici"
+                                                title="Deixa-ho buit mentre la titularitat sigui vigent"
+                                                class="rounded-md border-gray-300 py-1 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                                            />
+                                        </label>
                                         <button
                                             type="button"
                                             @click="removePropietari(i)"
