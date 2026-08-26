@@ -5,6 +5,7 @@ import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
 import NavLink from '@/Components/NavLink.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
+import { grups } from '@/navegacio';
 import { Link } from '@inertiajs/vue3';
 
 const showingNavigationDropdown = ref(false);
@@ -177,20 +178,56 @@ const showingNavigationDropdown = ref(false);
                 </div>
             </nav>
 
-            <!-- Page Heading -->
-            <header
-                class="bg-white shadow dark:bg-gray-800"
-                v-if="$slots.header"
-            >
-                <div class="mx-auto max-w-full px-4 py-6 sm:px-6 lg:px-8">
-                    <slot name="header" />
-                </div>
-            </header>
+            <div class="flex">
+                <!-- Barra lateral: tots els grups i les seves accions, per no haver de
+                     tornar al tauler per anar d'una acció a una altra. -->
+                <aside class="hidden w-60 shrink-0 border-r border-gray-200 bg-white lg:block dark:border-gray-700 dark:bg-gray-800">
+                    <nav class="sticky top-0 max-h-screen space-y-5 overflow-y-auto px-3 py-6">
+                        <div v-for="grup in grups" :key="grup.clau">
+                            <div class="mb-1 flex items-center gap-2 px-2">
+                                <svg class="h-4 w-4 shrink-0" :class="grup.color.icona" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="grup.icona" />
+                                </svg>
+                                <span class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    {{ grup.titol }}
+                                </span>
+                            </div>
+                            <!-- Les accions, sagnades i amb el fil del color del grup,
+                                 com les targetes del tauler -->
+                            <div class="ms-4 border-l-2 ps-2" :class="grup.color.vora">
+                                <Link
+                                    v-for="accio in grup.accions"
+                                    :key="accio.ruta"
+                                    :href="route(accio.ruta)"
+                                    class="block rounded-md px-2 py-1.5 text-sm transition-colors"
+                                    :class="route().current(accio.ruta)
+                                        ? grup.color.actiu + ' font-medium'
+                                        : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-700/50 ' + grup.color.enllac"
+                                >
+                                    {{ accio.titol }}
+                                </Link>
+                            </div>
+                        </div>
+                    </nav>
+                </aside>
 
-            <!-- Page Content -->
-            <main>
-                <slot />
-            </main>
+                <div class="min-w-0 flex-1">
+                    <!-- Page Heading -->
+                    <header
+                        class="bg-white shadow dark:bg-gray-800"
+                        v-if="$slots.header"
+                    >
+                        <div class="mx-auto max-w-full px-4 py-6 sm:px-6 lg:px-8">
+                            <slot name="header" />
+                        </div>
+                    </header>
+
+                    <!-- Page Content -->
+                    <main>
+                        <slot />
+                    </main>
+                </div>
+            </div>
         </div>
     </div>
 </template>

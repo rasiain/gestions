@@ -27,6 +27,7 @@ use App\Http\Controllers\MovimentCompteCorrentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PersonaController;
 use App\Http\Controllers\ProveidorController;
+use App\Http\Controllers\VehicleController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -96,6 +97,13 @@ Route::middleware('auth')->group(function () {
     Route::resource('proveidors', ProveidorController::class)->only([
         'index', 'store', 'update', 'destroy'
     ]);
+
+    // Vehicles: dues llistes (cotxes i motos, bicis) sobre el mateix catàleg
+    Route::get('/cotxes', [VehicleController::class, 'cotxes'])->name('cotxes.index');
+    Route::get('/bicis', [VehicleController::class, 'bicis'])->name('bicis.index');
+    Route::post('/vehicles', [VehicleController::class, 'store'])->name('vehicles.store');
+    Route::put('/vehicles/{vehicle}', [VehicleController::class, 'update'])->name('vehicles.update');
+    Route::delete('/vehicles/{vehicle}', [VehicleController::class, 'destroy'])->name('vehicles.destroy');
 
     // Comunitats de Béns management
     Route::resource('comunitats-bens', ComunitatBensController::class)->only([
