@@ -275,6 +275,7 @@ class LloguerController extends Controller
                     'categoria'               => $m->despesa->categoria,
                     'proveidor_id'            => $m->despesa->proveidor_id,
                     'tipus_despesa_fiscal_id' => $m->despesa->tipus_despesa_fiscal_id,
+                    'casella_184'             => $m->despesa->casella_184,
                     'notes'                   => $m->despesa->notes,
                     'base_imposable'          => $m->despesa->base_imposable,
                     'iva_percentatge'         => $m->despesa->iva_percentatge,
@@ -311,6 +312,16 @@ class LloguerController extends Controller
             ->pluck('tipus_despesa_fiscal_id', 'categoria')
             ->toArray();
 
+        // La casella del 184 només té sentit als lloguers d'una comunitat de béns:
+        // a la resta no s'ensenya, que ja hi ha prou camps a omplir.
+        $esComunitatBens = $lloguer->contractes()
+            ->whereHas('arrendadors', fn ($q) => $q->where('arrendadorable_type', \App\Models\ComunitatBens::class))
+            ->exists();
+
+        $casellaMapping = \App\Models\CategoriaLloguerFiscal::whereNotNull('casella_184')
+            ->pluck('casella_184', 'categoria')
+            ->toArray();
+
         $response = [
             'data'                  => $moviments,
             'total'                 => $total,
@@ -320,6 +331,9 @@ class LloguerController extends Controller
             'categories'            => $categories,
             'tipusDespesaFiscal'    => $tipusDespesaFiscal,
             'categoriaMapping'      => $categoriaMapping,
+            'esComunitatBens'       => $esComunitatBens,
+            'casellaMapping'        => $esComunitatBens ? $casellaMapping : [],
+            'caselles184'           => $esComunitatBens ? \App\Services\Model184Service::CASELLES : [],
         ];
 
         if ($page === 1) {

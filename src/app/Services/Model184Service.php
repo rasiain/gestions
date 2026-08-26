@@ -4,6 +4,10 @@ namespace App\Services;
 
 use App\Models\ComunitatBens;
 use App\Models\Factura;
+use App\Models\Model184Casella;
+use App\Models\Model184Comuner;
+use App\Models\Model184Declaracio;
+use App\Models\Model184Immoble;
 use App\Models\Immoble;
 use App\Models\Lloguer;
 use App\Models\MovimentLloguerDespesa;
@@ -80,6 +84,149 @@ class Model184Service
             'retencions' => round(array_sum(array_column($immobles, 'retencions')), 2),
             'avisos'    => $this->avisos($immobles),
         ];
+    }
+
+    /**
+     * Congela la declaració d'un exercici tal com la calcula avui.
+     *
+     * Recalcular-la anys després no dona el mateix —una despesa canvia de categoria, una
+     * factura es corregeix— i el que s'ha de poder consultar és el que va anar a Hisenda.
+     */
+    public function materialitza(ComunitatBens $comunitat, int $any): Model184Declaracio
+    {
+        $calcul = $this->declaracio($comunitat, $any);
+
+        return DB::transaction(function () use ($comunitat, $any, $calcul) {
+            // Tornar a materialitzar substitueix: la declaració bona és una de sola
+            Model184Declaracio::where('comunitat_bens_id', $comunitat->id)->where('any', $any)->delete();
+
+            $declaracio = Model184Declaracio::create([
+                'comunitat_bens_id' => $comunitat->id,
+                'any'               => $any,
+                'comunitat_nom'     => $comunitat->nom,
+                'comunitat_nif'     => $comunitat->nif,
+                'retencions'        => $calcul['retencions'],
+                'materialitzada_el' => now(),
+            ]);
+
+            foreach ($calcul['immobles'] as $immoble) {
+                $fila = Model184Immoble::create([
+                    'declaracio_id'        => $declaracio->id,
+                    'immoble_id'           => $immoble['immoble_id'],
+                    'referencia_cadastral' => $immoble['referencia_cadastral'],
+                    'lloguer_nom'          => $immoble['lloguer'],
+                    'ingressos'            => $immoble['ingressos'],
+                    'despeses'             => $immoble['despeses'],
+                    'rendiment_net'        => $immoble['rendiment_net'],
+                    'retencions'           => $immoble['retencions'],
+                    'amortitzacio'         => $immoble['amortitzacio'],
+                    'base_repartible'      => $immoble['base_repartible'],
+                ]);
+
+                foreach ($immoble['caselles'] as $casella => $import) {
+                    Model184Casella::create([
+                        'immoble_184_id' => $fila->id,
+                        'casella'        => $casella,
+                        'import'         => $import,
+                    ]);
+                }
+
+                foreach ($immoble['comuners'] as $comuner) {
+                    Model184Comuner::create([
+                        'immoble_184_id' => $fila->id,
+                        'persona_id'     => $comuner['persona_id'],
+                        'nom'            => $comuner['nom'],
+                        'nif'            => $comuner['nif'],
+                        'quota'          => $comuner['quota'],
+                        'amortitzacio'   => $comuner['amortitzacio'],
+                        'rendiment'      => $comuner['rendiment'],
+                        'participacio'   => $comuner['participacio'],
+                        'retencio'       => $comuner['retencio'],
+                    ]);
+                }
+            }
+
+            return $declaracio;
+        });
+    }
+
+    /**
+     * La declaració presentada d'un exercici, si n'hi ha.
+     */
+    public function materialitzada(ComunitatBens $comunitat, int $any): ?Model184Declaracio
+    {
+        return Model184Declaracio::with(['immobles.caselles', 'immobles.comuners'])
+            ->where('comunitat_bens_id', $comunitat->id)
+            ->where('any', $any)
+            ->first();
+    }
+
+    /**
+     * En què difereix el càlcul d'avui del que es va declarar.
+     *
+     * Serveix per veure si val la pena tornar a materialitzar, no per corregir res sol:
+     * una declaració presentada no es toca.
+     *
+     * @param  array<string, mixed>  $calcul
+     * @return array<int, string>
+     */
+    public function diferencies(Model184Declaracio $declarada, array $calcul): array
+    {
+        $diferencies = [];
+        $viu = collect($calcul['immobles'])->keyBy('lloguer');
+
+        foreach ($declarada->immobles as $immoble) {
+            $actual = $viu->get($immoble->lloguer_nom);
+
+            if ($actual === null) {
+                $diferencies[] = "{$immoble->lloguer_nom}: ja no surt al càlcul d'avui.";
+                continue;
+            }
+
+            foreach ([
+                'ingressos'     => 'els ingressos íntegres',
+                'despeses'      => 'les despeses',
+                'rendiment_net' => 'el rendiment net',
+                'retencions'    => 'les retencions',
+            ] as $camp => $etiqueta) {
+                if (abs((float) $immoble->{$camp} - $actual[$camp]) < 0.01) {
+                    continue;
+                }
+
+                $diferencies[] = sprintf(
+                    '%s: %s de la declaració són %s i el càlcul d\'avui en dona %s.',
+                    $immoble->lloguer_nom,
+                    $etiqueta,
+                    number_format((float) $immoble->{$camp}, 2, ',', '.') . ' €',
+                    number_format($actual[$camp], 2, ',', '.') . ' €',
+                );
+            }
+
+            // Una despesa reclassificada mou diners d'una casella a una altra sense
+            // tocar el total: si només es comparessin els totals, no es veuria.
+            $declarades = $immoble->caselles->pluck('import', 'casella')
+                ->map(fn ($v) => round((float) $v, 2))->all();
+
+            foreach (array_unique(array_merge(array_keys($declarades), array_keys($actual['caselles']))) as $casella) {
+                $abans = $declarades[$casella] ?? 0.0;
+                $ara   = $actual['caselles'][$casella] ?? 0.0;
+
+                if (abs($abans - $ara) < 0.01) {
+                    continue;
+                }
+
+                $diferencies[] = sprintf(
+                    '%s · casella %d (%s): %s declarats i %s al càlcul d\'avui.',
+                    $immoble->lloguer_nom,
+                    $casella,
+                    self::CASELLES[$casella] ?? '?',
+                    number_format($abans, 2, ',', '.') . ' €',
+                    number_format($ara, 2, ',', '.') . ' €',
+                );
+            }
+        }
+
+        return $diferencies;
     }
 
     /**

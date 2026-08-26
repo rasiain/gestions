@@ -20,6 +20,8 @@ class MovimentClassificacioController extends Controller
             'categoria'              => ['nullable', 'string', 'max:20'],
             'proveidor_id'           => ['nullable', 'integer', 'exists:g_proveidors,id'],
             'tipus_despesa_fiscal_id' => ['nullable', 'integer', 'exists:g_tipus_despesa_fiscal,id'],
+            // Excepció al 184: null = la casella que digui la categoria; 0 = fora de la declaració
+            'casella_184'            => ['nullable', 'integer', 'min:0', 'max:10'],
             'numero_factura'         => ['nullable', 'string', 'max:50'],
             'concepte'               => ['nullable', 'string', 'max:255'],
             'notes'                  => ['nullable', 'string', 'max:500'],
@@ -85,6 +87,8 @@ class MovimentClassificacioController extends Controller
             'categoria'               => ['nullable', 'string', 'max:20'],
             'proveidor_id'            => ['nullable', 'integer', 'exists:g_proveidors,id'],
             'tipus_despesa_fiscal_id' => ['nullable', 'integer', 'exists:g_tipus_despesa_fiscal,id'],
+            // Excepció al 184: null = la casella que digui la categoria; 0 = fora de la declaració
+            'casella_184'            => ['nullable', 'integer', 'min:0', 'max:10'],
             'numero_factura'          => ['nullable', 'string', 'max:50'],
             'concepte'                => ['nullable', 'string', 'max:255'],
             'notes'                   => ['nullable', 'string', 'max:500'],
@@ -101,6 +105,7 @@ class MovimentClassificacioController extends Controller
             'categoria'               => $request->input('categoria'),
             'proveidor_id'            => $request->input('proveidor_id'),
             'tipus_despesa_fiscal_id' => $request->input('tipus_despesa_fiscal_id'),
+            'casella_184'             => $request->input('casella_184'),
             'numero_factura'          => $request->input('numero_factura'),
             'concepte'                => $request->input('concepte'),
             'notes'                   => $request->input('notes'),
@@ -202,6 +207,7 @@ class MovimentClassificacioController extends Controller
                     'categoria'               => $data['categoria'] ?? null,
                     'proveidor_id'            => $data['proveidor_id'] ?? null,
                     'tipus_despesa_fiscal_id' => $data['tipus_despesa_fiscal_id'] ?? null,
+                    'casella_184'             => $data['casella_184'] ?? null,
                     'notes'                   => $data['notes'] ?? null,
                     'base_imposable'          => $data['base_imposable'] ?? null,
                     'iva_percentatge'         => $data['iva_percentatge'] ?? null,

@@ -166,6 +166,9 @@ Route::middleware('auth')->group(function () {
     Route::put('/impostos/assegurances/ajustos', [ImpostosAssegurancesController::class, 'updateAjust'])->name('impostos.assegurances.ajustos.update');
     Route::get('/impostos/model-184', [Model184Controller::class, 'index'])->name('impostos.model-184');
     Route::put('/impostos/model-184/propietaris', [Model184Controller::class, 'updatePropietari'])->name('impostos.model-184.propietaris.update');
+    Route::post('/impostos/model-184/materialitza', [Model184Controller::class, 'materialitza'])->name('impostos.model-184.materialitza');
+    Route::put('/impostos/model-184/{declaracio}', [Model184Controller::class, 'updateDeclaracio'])->name('impostos.model-184.update');
+    Route::delete('/impostos/model-184/{declaracio}', [Model184Controller::class, 'destroyDeclaracio'])->name('impostos.model-184.destroy');
 
     // Fons d'inversió
     Route::resource('fons-inversio', FonsInversioController::class)->only([

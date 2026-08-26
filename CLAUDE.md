@@ -129,7 +129,11 @@ L'**amortització de cada comuner no és derivable** de les dades del projecte: 
 
 **La casella del 184 no és una classificació nova.** Es dedueix de la categoria de la despesa amb la mateixa taula que ja la tradueix al compte del PGC (`g_categoria_lloguer_fiscal.casella_184`). A `g_moviment_lloguer_despesa.casella_184` només s'hi desa l'excepció: `null` = la del mapatge, `0` = fora de la declaració. Comprovat contra una declaració real: les caselles surten soles de la classificació existent, i les que no quadraven era per una despesa classificada amb el criteri del llibre d'IVA (una prima d'assegurança com a `comissions`).
 
-Fet: pantalla de lectura amb els avisos previs (quotes que no sumen 100, comuners sense amortització, exercici sense factures). Pendent: **materialitzar la declaració presentada**, que és el que evita que un recàlcul anys després doni un número diferent del que es va declarar. Especificació completa a `.claude/specs/model-184-comunitats-bens.md` (no versionat).
+**La declaració es materialitza** (`g_184_declaracions` i les seves filles): recalcular-la anys després no dona el mateix —una despesa canvia de categoria, una factura es corregeix— i el que s'ha de poder consultar és el que va anar a Hisenda. Els noms (del lloguer, dels comuners, la referència cadastral) s'hi desen **copiats i no per clau forana**, pel mateix motiu. Quan el càlcul d'avui difereix del desat, la pantalla ho diu casella per casella: una despesa reclassificada mou diners d'una casella a una altra **sense tocar cap total**, i comparant només els totals no es veuria.
+
+La pantalla avisa del que cal repassar abans de declarar: quotes que no sumen 100, comuners sense amortització, exercici sense factures, despeses que superen els ingressos (quasi sempre vol dir que falten factures) i factures encara no cobrades (els ingressos són de tot l'any i les despeses només de les pagades). Especificació completa a `.claude/specs/model-184-comunitats-bens.md` (no versionat).
+
+Pendent: el fitxer de presentació de l'AEAT, els dies d'arrendament i la casella 3 (interessos i despeses de reparació pendents), que no s'ha fet servir mai.
 
 ### Components reutilitzables destacats
 - `Services\Concerns\ResolPerArbre`: resolució d'immoble i municipi des de l'arbre de categories, compartida per `TaxesService` i `AssegurancesService` (si divergissin, el mateix immoble sortiria amb dos noms segons la vista). `Http\Controllers\Concerns\CategoriesPerCompte` fa el mateix amb el selector de categories de les dues vistes.

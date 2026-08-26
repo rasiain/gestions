@@ -376,6 +376,8 @@ interface MovimentDespesa {
     numero_factura: string | null;
     concepte: string | null;
     categoria: string;
+    /** Excepció al 184: null = la casella de la categoria; 0 = fora de la declaració. */
+    casella_184: number | null;
     proveidor_id: number | null;
     tipus_despesa_fiscal_id: number | null;
     notes: string | null;
@@ -467,6 +469,10 @@ interface TipusDespesaFiscal {
 }
 const tipusDespesaFiscalOpcions = ref<TipusDespesaFiscal[]>([]);
 const categoriaMapping = ref<Record<string, number>>({});
+// El 184 només afecta els lloguers d'una comunitat de béns
+const esComunitatBens = ref(false);
+const casellaMapping = ref<Record<string, number>>({});
+const caselles184 = ref<Record<number, string>>({});
 
 const xsrfToken = (): string => {
     const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
@@ -495,6 +501,9 @@ const fetchMoviments = async (lloguer: Lloguer, page: number, append = false) =>
         if (json.anys) movimentsAnys.value = json.anys;
         if (json.tipusDespesaFiscal) tipusDespesaFiscalOpcions.value = json.tipusDespesaFiscal;
         if (json.categoriaMapping) categoriaMapping.value = json.categoriaMapping;
+        if (json.esComunitatBens !== undefined) esComunitatBens.value = json.esComunitatBens;
+        if (json.casellaMapping) casellaMapping.value = json.casellaMapping;
+        if (json.caselles184) caselles184.value = json.caselles184;
     } finally {
         movimentsLoading.value = false;
     }
@@ -735,6 +744,8 @@ const classificacioDespesa = ref({
     categoria: '',
     proveidor_id: null as number | null,
     tipus_despesa_fiscal_id: null as number | null,
+    // Excepció al 184: null = la casella de la categoria; 0 = fora de la declaració
+    casella_184: null as number | null,
     notes: '',
     base_imposable: null as number | null,
     iva_percentatge: null as number | null,
@@ -765,6 +776,13 @@ const categoriesDespesa = [
     { value: 'comissions',  label: 'Comissions bancàries' },
     { value: 'altres',      label: 'Altres' },
 ];
+
+/** Casella del 184 que s'aplicarà: la de l'excepció si n'hi ha, si no la de la categoria. */
+const casellaEfectiva = computed<number | null>(() => {
+    const propia = classificacioDespesa.value.casella_184;
+    if (propia !== null && propia !== undefined) return propia;
+    return casellaMapping.value[classificacioDespesa.value.categoria] ?? null;
+});
 
 // Auto-suggereix el tipus de despesa fiscal quan canvia la categoria
 const onCategoriaChange = () => {
@@ -921,6 +939,7 @@ const openClassificacioModal = (moviment: Moviment) => {
             categoria: cls.data.categoria,
             proveidor_id: cls.data.proveidor_id,
             tipus_despesa_fiscal_id: cls.data.tipus_despesa_fiscal_id ?? null,
+            casella_184: cls.data.casella_184 ?? null,
             notes: cls.data.notes ?? '',
             base_imposable: cls.data.base_imposable ?? null,
             iva_percentatge: cls.data.iva_percentatge ?? null,
@@ -947,7 +966,7 @@ const openClassificacioModal = (moviment: Moviment) => {
         };
     } else {
         classificacioTipus.value = parseFloat(moviment.import) >= 0 ? 'ingres' : 'despesa';
-        classificacioDespesa.value = { numero_factura: '', concepte: '', categoria: '', proveidor_id: null, tipus_despesa_fiscal_id: null, notes: '', base_imposable: null, iva_percentatge: null, iva_import: null };
+        classificacioDespesa.value = { numero_factura: '', concepte: '', categoria: '', proveidor_id: null, tipus_despesa_fiscal_id: null, casella_184: null, notes: '', base_imposable: null, iva_percentatge: null, iva_import: null };
         const liniesInicials: { tipus: string; descripcio: string; import: number | null; proveidor_id: number | null }[] = [];
         if (computedGestoriaImport.value) {
             liniesInicials.push({
@@ -993,6 +1012,8 @@ const submitClassificacio = async () => {
         body.categoria = classificacioDespesa.value.categoria;
         body.proveidor_id = classificacioDespesa.value.proveidor_id || null;
         body.tipus_despesa_fiscal_id = classificacioDespesa.value.tipus_despesa_fiscal_id || null;
+        // El 0 és una decisió («fora de la declaració»), no un buit
+        body.casella_184 = classificacioDespesa.value.casella_184 ?? null;
         body.notes = classificacioDespesa.value.notes || null;
         body.base_imposable = classificacioDespesa.value.base_imposable ?? null;
         body.iva_percentatge = classificacioDespesa.value.iva_percentatge ?? null;
@@ -2611,6 +2632,31 @@ const formatCurrency = (value: string | null): string => {
                                         <option v-for="t in tipusDespesaFiscalOpcions" :key="t.id" :value="t.id">{{ t.codi }} - {{ t.descripcio }}</option>
                                     </select>
                                     <p v-if="classificacioErrors['tipus_despesa_fiscal_id']" class="mt-1 text-sm text-red-600">{{ classificacioErrors['tipus_despesa_fiscal_id'] }}</p>
+                                </div>
+
+                                <!-- Casella del model 184: només als lloguers d'una comunitat de béns -->
+                                <div v-if="esComunitatBens" class="rounded-md bg-gray-50 p-3 dark:bg-gray-700/40">
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Casella del model 184
+                                    </label>
+                                    <select
+                                        v-model="classificacioDespesa.casella_184"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    >
+                                        <option :value="null">
+                                            La que digui la categoria<template v-if="casellaEfectiva !== null && classificacioDespesa.casella_184 === null">
+                                                — {{ casellaEfectiva }} · {{ caselles184[casellaEfectiva] }}</template>
+                                        </option>
+                                        <option :value="0">Fora de la declaració</option>
+                                        <option v-for="(nom, num) in caselles184" :key="num" :value="Number(num)">
+                                            {{ num }} · {{ nom }}
+                                        </option>
+                                    </select>
+                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                        Aquest lloguer és d'una comunitat de béns i les seves despeses van al 184. Normalment
+                                        no cal tocar-ho: la casella surt de la categoria.
+                                    </p>
+                                    <p v-if="classificacioErrors['casella_184']" class="mt-1 text-sm text-red-600">{{ classificacioErrors['casella_184'] }}</p>
                                 </div>
 
                                 <div>

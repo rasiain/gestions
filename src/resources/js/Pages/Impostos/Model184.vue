@@ -46,6 +46,15 @@ interface Declaracio {
     avisos: string[];
 }
 
+interface Declarada {
+    id: number;
+    numero_identificatiu: string | null;
+    notes: string | null;
+    materialitzada_el: string;
+    retencions: number;
+    immobles: Array<Omit<RegistreImmoble, 'immoble_id' | 'base_repartible' | 'factures' | 'factures_no_cobrades' | 'titularitat_des_de'>>;
+}
+
 interface Props {
     comunitats: Comunitat[];
     comunitatId: number | null;
@@ -54,6 +63,10 @@ interface Props {
     anysAmbFactures: number[];
     declaracio: Declaracio | null;
     caselles: Record<number, string>;
+    /** La declaració congelada d'aquest exercici, si ja s'ha materialitzat. */
+    declarada: Declarada | null;
+    /** En què difereix el càlcul d'avui del que es va declarar. */
+    diferencies: string[];
 }
 
 const props = defineProps<Props>();
@@ -118,6 +131,48 @@ function desaComuner() {
 }
 
 const capImmoble = computed(() => (props.declaracio?.immobles.length ?? 0) === 0);
+
+// ---- Materialitzar ----
+const materialitzaForm = useForm({ comunitat_bens_id: 0, any: 0 });
+
+function materialitza() {
+    const refer = props.declarada !== null;
+    if (refer && !confirm('Ja hi ha una declaració desada per a aquest exercici. Vols substituir-la pel càlcul d\'avui?')) return;
+
+    materialitzaForm.comunitat_bens_id = props.comunitatId ?? 0;
+    materialitzaForm.any = props.any;
+    materialitzaForm.post(route('impostos.model-184.materialitza'), { preserveScroll: true });
+}
+
+function descongela() {
+    if (!props.declarada) return;
+    if (!confirm('Vols esborrar la declaració desada? El càlcul es continuarà veient, però es perdrà el que es va presentar.')) return;
+    router.delete(route('impostos.model-184.destroy', props.declarada.id), { preserveScroll: true });
+}
+
+// Dades que només se saben un cop presentada
+const presentacioForm = useForm({ numero_identificatiu: '', notes: '' });
+const showPresentacio = ref(false);
+
+function obrePresentacio() {
+    if (!props.declarada) return;
+    presentacioForm.clearErrors();
+    presentacioForm.numero_identificatiu = props.declarada.numero_identificatiu ?? '';
+    presentacioForm.notes = props.declarada.notes ?? '';
+    showPresentacio.value = true;
+}
+
+function desaPresentacio() {
+    if (!props.declarada) return;
+    presentacioForm.put(route('impostos.model-184.update', props.declarada.id), {
+        preserveScroll: true,
+        onSuccess: () => (showPresentacio.value = false),
+    });
+}
+
+function formatDataHora(iso: string): string {
+    return new Intl.DateTimeFormat('ca-ES', { dateStyle: 'long', timeStyle: 'short' }).format(new Date(iso.replace(' ', 'T')));
+}
 </script>
 
 <template>
@@ -163,6 +218,71 @@ const capImmoble = computed(() => (props.declaracio?.immobles.length ?? 0) === 0
                                 {{ props.declaracio.comunitat.nif }}
                             </span>
                             <span class="ml-4">exercici <span class="font-semibold text-gray-900 dark:text-gray-100">{{ props.declaracio.any }}</span></span>
+                        </p>
+                    </div>
+
+                    <!-- Estat de la declaració -->
+                    <div
+                        class="flex flex-wrap items-center justify-between gap-3 rounded-lg border-l-4 px-4 py-3 shadow-sm"
+                        :class="props.declarada
+                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                            : 'border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800'"
+                    >
+                        <div class="text-sm">
+                            <template v-if="props.declarada">
+                                <span class="font-semibold text-green-800 dark:text-green-300">Declaració desada</span>
+                                <span class="ml-2 text-gray-600 dark:text-gray-400">
+                                    el {{ formatDataHora(props.declarada.materialitzada_el) }}
+                                </span>
+                                <span v-if="props.declarada.numero_identificatiu" class="ml-2 font-mono text-xs text-gray-500 dark:text-gray-400">
+                                    núm. {{ props.declarada.numero_identificatiu }}
+                                </span>
+                                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                    Els imports de sota són els que es van desar. El càlcul d'avui no els toca.
+                                </p>
+                            </template>
+                            <template v-else>
+                                <span class="font-medium text-gray-700 dark:text-gray-300">Càlcul provisional</span>
+                                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                    Quan la presentis, desa-la: recalcular-la anys després no donarà el mateix.
+                                </p>
+                            </template>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button
+                                v-if="props.declarada"
+                                @click="obrePresentacio"
+                                class="rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                            >
+                                Número i notes
+                            </button>
+                            <button
+                                v-if="props.declarada"
+                                @click="descongela"
+                                class="rounded-md px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30"
+                            >
+                                Esborra
+                            </button>
+                            <button
+                                @click="materialitza"
+                                :disabled="materialitzaForm.processing || capImmoble"
+                                class="rounded-md bg-red-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-40"
+                            >
+                                {{ props.declarada ? 'Torna a desar' : 'Desa la declaració' }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- El càlcul d'avui ja no dona el que es va declarar -->
+                    <div v-if="props.diferencies.length" class="rounded-lg border-l-4 border-blue-400 bg-blue-50 px-4 py-3 dark:bg-blue-900/20">
+                        <h3 class="text-sm font-semibold text-blue-800 dark:text-blue-300">
+                            El càlcul d'avui ja no coincideix amb el que es va desar
+                        </h3>
+                        <ul class="mt-1 list-inside list-disc text-sm text-blue-800 dark:text-blue-200">
+                            <li v-for="(d, i) in props.diferencies" :key="i">{{ d }}</li>
+                        </ul>
+                        <p class="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                            Si la declaració presentada era correcta, deixa-la estar.
                         </p>
                     </div>
 
@@ -289,6 +409,43 @@ const capImmoble = computed(() => (props.declaracio?.immobles.length ?? 0) === 0
                 </template>
             </div>
         </div>
+
+        <!-- Dades de la presentació -->
+        <Modal :show="showPresentacio" max-width="lg" @close="showPresentacio = false">
+            <div class="p-6">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Dades de la presentació</h3>
+                <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
+                    El que dona l'AEAT en presentar el model, per poder-lo localitzar després.
+                </p>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Número identificatiu</label>
+                        <input v-model="presentacioForm.numero_identificatiu" type="text" maxlength="40"
+                            class="mt-1 block w-full rounded-md border-gray-300 font-mono text-sm shadow-sm focus:border-red-500 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                        <p v-if="presentacioForm.errors.numero_identificatiu" class="mt-1 text-sm text-red-600 dark:text-red-400">
+                            {{ presentacioForm.errors.numero_identificatiu }}
+                        </p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
+                        <textarea v-model="presentacioForm.notes" rows="3"
+                            class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-red-500 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"></textarea>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-end gap-2">
+                    <button @click="showPresentacio = false" :disabled="presentacioForm.processing"
+                        class="rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">
+                        Cancel·la
+                    </button>
+                    <button @click="desaPresentacio" :disabled="presentacioForm.processing"
+                        class="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-40">
+                        Desa
+                    </button>
+                </div>
+            </div>
+        </Modal>
 
         <!-- Quota i amortització -->
         <Modal :show="showComuner" max-width="lg" @close="showComuner = false">

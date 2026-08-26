@@ -14,6 +14,7 @@ class CategoriaLloguerFiscal extends Model
     protected $fillable = [
         'categoria',
         'tipus_despesa_fiscal_id',
+        'casella_184',
     ];
 
     public function tipusDespesaFiscal()

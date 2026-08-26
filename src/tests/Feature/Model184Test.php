@@ -12,6 +12,7 @@ use App\Models\Immoble;
 use App\Models\Lloguer;
 use App\Models\MovimentCompteCorrent;
 use App\Models\MovimentConcepte;
+use App\Models\Model184Declaracio;
 use App\Models\MovimentLloguerDespesa;
 use App\Models\Persona;
 use App\Models\User;
@@ -271,5 +272,104 @@ class Model184Test extends TestCase
 
         $this->assertEqualsWithDelta(25, (float) $pivot->quota, 0.0001);
         $this->assertEqualsWithDelta(999.99, (float) $pivot->amortitzacio_anual, 0.001);
+    }
+
+    public function test_materialitzar_congela_els_imports_i_els_noms(): void
+    {
+        $this->factura(2026, 100000.00, 19000.00);
+        $this->despesa('taxes', '2026-03-01', 2500.00);
+
+        app(Model184Service::class)->materialitza($this->comunitat, 2026);
+
+        // Res del que canviï després no pot tocar el que es va declarar
+        $this->gran->update(['cognoms' => 'Cognom Nou']);
+        $this->lloguer->update(['nom' => 'UN ALTRE NOM']);
+        $this->despesa('taxes', '2026-04-01', 1000.00);
+
+        $declarada = app(Model184Service::class)->materialitzada($this->comunitat, 2026);
+        $immoble   = $declarada->immobles->sole();
+
+        $this->assertSame('LOCAL DE PROVA', $immoble->lloguer_nom);
+        $this->assertEqualsWithDelta(10000.00, (float) $immoble->despeses, 0.01);
+        $this->assertEqualsWithDelta(90000.00, (float) $immoble->rendiment_net, 0.01);
+        $this->assertNotNull($immoble->comuners->firstWhere('nom', 'Comunera, Gran'));
+    }
+
+    public function test_avisa_quan_el_calcul_dara_ja_no_dona_el_que_es_va_declarar(): void
+    {
+        $this->factura(2026, 100000.00, 19000.00);
+        $despesa = $this->despesa('taxes', '2026-03-01', 2500.00);
+
+        $servei    = app(Model184Service::class);
+        $declarada = $servei->materialitza($this->comunitat, 2026);
+
+        $this->assertSame([], $servei->diferencies($declarada->fresh('immobles.caselles'), $servei->declaracio($this->comunitat, 2026)));
+
+        // Reclassificar no canvia el total, però sí les caselles
+        $despesa->update(['categoria' => 'reparacions']);
+
+        $diferencies = $servei->diferencies($declarada->fresh('immobles.caselles'), $servei->declaracio($this->comunitat, 2026));
+
+        $this->assertNotEmpty(array_filter($diferencies, fn ($d) => str_contains($d, 'casella 4')));
+        $this->assertNotEmpty(array_filter($diferencies, fn ($d) => str_contains($d, 'casella 2')));
+    }
+
+    public function test_tornar_a_materialitzar_substitueix_la_declaracio_anterior(): void
+    {
+        $this->factura(2026, 100000.00, 19000.00);
+        $this->despesa('taxes', '2026-03-01', 2500.00);
+
+        $servei = app(Model184Service::class);
+        $servei->materialitza($this->comunitat, 2026);
+        $servei->materialitza($this->comunitat, 2026);
+
+        $this->assertSame(1, Model184Declaracio::count());
+        $this->assertSame(1, $servei->materialitzada($this->comunitat, 2026)->immobles->count());
+    }
+
+    public function test_es_pot_desar_i_esborrar_la_declaracio_des_de_la_pantalla(): void
+    {
+        $this->factura(2026, 100000.00, 19000.00);
+        $usuari = User::factory()->create();
+
+        $this->actingAs($usuari)->post(route('impostos.model-184.materialitza'), [
+            'comunitat_bens_id' => $this->comunitat->id,
+            'any'               => 2026,
+        ])->assertRedirect();
+
+        $declaracio = Model184Declaracio::sole();
+
+        $this->actingAs($usuari)->put(route('impostos.model-184.update', $declaracio->id), [
+            'numero_identificatiu' => '2026184009880000100013',
+        ])->assertRedirect();
+
+        $this->assertSame('2026184009880000100013', $declaracio->fresh()->numero_identificatiu);
+
+        $this->actingAs($usuari)->delete(route('impostos.model-184.destroy', $declaracio->id))->assertRedirect();
+
+        $this->assertSame(0, Model184Declaracio::count());
+    }
+
+    public function test_la_classificacio_dun_moviment_desa_la_casella_del_184(): void
+    {
+        $despesa  = $this->despesa('taxes', '2026-03-01', 2500.00);
+        $moviment = $despesa->moviment;
+
+        $this->actingAs(User::factory()->create())
+            ->putJson(route('moviments.classificacio.update', $moviment->id), [
+                'tipus'       => 'despesa',
+                'lloguer_id'  => $this->lloguer->id,
+                'categoria'   => 'taxes',
+                'casella_184' => 2,
+            ])->assertOk();
+
+        // La classificació recrea la fila: cal tornar-la a buscar pel moviment
+        $desada = MovimentLloguerDespesa::where('moviment_id', $moviment->id)->sole();
+        $this->assertSame(2, $desada->casella_184);
+
+        // I la declaració se n'assabenta: deixa de ser tributs i passa a conservació
+        $caselles = $this->registre()['caselles'];
+        $this->assertArrayNotHasKey(4, $caselles);
+        $this->assertSame(2500.0, $caselles[2]);
     }
 }
