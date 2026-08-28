@@ -49,12 +49,73 @@ class FonsInversioController extends Controller
 
         return Inertia::render('FonsInversio/Index', [
             'fons'               => $fons,
+            'totalsPerTitular'   => $this->totalsPerTitular($fons, $persones),
             'comptesFonsInversio' => $comptesFonsInversio,
             'entitats'           => $entitats,
             'persones'           => $persones,
             // Arribant des de la llista de comptes: obre les aportacions d'aquest compte
             'focusCompteId'      => $request->integer('compte_corrent_id') ?: null,
         ]);
+    }
+
+    /**
+     * Què val la part de cada titular, sumant tots els fons.
+     *
+     * El valor d'un contracte no és cap saldo: són les participacions pel valor de la
+     * darrera cotització. Es reparteix a parts iguals entre els titulars del compte, que
+     * és com es reparteixen també els comptes corrents, i l'últim s'endú el residu perquè
+     * la suma de les parts doni sempre el valor del contracte.
+     *
+     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $fons
+     * @param  \Illuminate\Support\Collection<int, \App\Models\Persona>  $persones
+     * @return array<int, array<string, mixed>>
+     */
+    private function totalsPerTitular($fons, $persones): array
+    {
+        $noms = $persones->mapWithKeys(fn ($p) => [$p->id => trim($p->nom . ' ' . $p->cognoms)]);
+
+        $perTitular = [];
+
+        foreach ($fons as $f) {
+            foreach ($f['contractes'] as $contracte) {
+                $valor = (float) ($contracte['valor_contracte_num'] ?? 0);
+                $ids   = $contracte['titular_ids'] ?: [null];
+                $parts = count($ids);
+
+                $repartit = 0.0;
+
+                foreach ($ids as $i => $id) {
+                    $part = $i === $parts - 1
+                        ? round($valor - $repartit, 2)
+                        : round($valor / $parts, 2);
+                    $repartit += $part;
+
+                    $clau = $id ?? 'sense';
+
+                    $perTitular[$clau] ??= [
+                        'id'         => $id,
+                        'nom'        => $id !== null ? ($noms[$id] ?? 'Titular ' . $id) : 'Sense titular',
+                        'total'      => 0.0,
+                        'contractes' => [],
+                    ];
+
+                    $perTitular[$clau]['total'] += $part;
+                    $perTitular[$clau]['contractes'][] = [
+                        'fons'     => $f['nom'],
+                        'compte'   => $contracte['compte_nom'],
+                        'valor'    => $valor,
+                        'titulars' => $parts,
+                        'part'     => $part,
+                    ];
+                }
+            }
+        }
+
+        return collect($perTitular)
+            ->map(fn (array $t) => ['total' => round($t['total'], 2)] + $t)
+            ->sortByDesc('total')
+            ->values()
+            ->all();
     }
 
     // === FONS ===

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import Modal from '@/Components/Modal.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref, watch, nextTick, onMounted, onUnmounted, computed } from 'vue';
 import { Chart, registerables } from 'chart.js';
@@ -93,8 +94,27 @@ interface Persona {
     cognoms: string;
 }
 
+/** Un contracte dins del repartiment d'un titular. */
+interface ContracteDelTitular {
+    fons: string;
+    compte: string;
+    valor: number;
+    /** Entre quants es reparteix. */
+    titulars: number;
+    part: number;
+}
+
+interface TotalTitular {
+    id: number | null;
+    nom: string;
+    total: number;
+    contractes: ContracteDelTitular[];
+}
+
 interface Props {
     fons: Fons[];
+    /** El que val la part de cada titular, repartida a parts iguals. */
+    totalsPerTitular: TotalTitular[];
     comptesFonsInversio: CompteFonsInversio[];
     entitats: Entitat[];
     persones: Persona[];
@@ -505,6 +525,19 @@ onUnmounted(() => {
 });
 
 // === FONS CRUD (Inertia) ===
+// ---- Totals per titular ----
+const showTotals = ref(false);
+const titularObert = ref<number | string | null>(null);
+
+const totalGeneral = computed(() =>
+    props.totalsPerTitular.reduce((suma, t) => suma + t.total, 0)
+);
+
+function obreDetallTitular(titular: TotalTitular) {
+    const clau = titular.id ?? 'sense';
+    titularObert.value = titularObert.value === clau ? null : clau;
+}
+
 const showFonsModal = ref(false);
 const isEditingFons = ref(false);
 const editingFonsId = ref<number | null>(null);
@@ -900,6 +933,10 @@ const recalcFons = (fons: Fons) => {
                                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">Catàleg de fons amb els seus contractes, aportacions i rendibilitat</p>
                             </div>
                             <div class="flex items-center gap-2">
+                                <button @click="showTotals = true" class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600">
+                                    <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                                    Totals per titular
+                                </button>
                                 <button @click="openImportModal" class="inline-flex items-center rounded-md border border-emerald-600 bg-white px-4 py-2 text-sm font-medium text-emerald-700 shadow-sm hover:bg-emerald-50 dark:bg-gray-800 dark:text-emerald-400 dark:hover:bg-gray-700">
                                     <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                                     Importar valors
@@ -1481,6 +1518,70 @@ const recalcFons = (fons: Fons) => {
                 </div>
             </div>
         </div>
+
+        <!-- Totals per titular -->
+        <Modal :show="showTotals" max-width="2xl" @close="showTotals = false">
+            <div class="p-6">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Totals per titular</h3>
+                <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
+                    El valor d'avui de cada participació, repartit entre els titulars del compte de cada contracte.
+                </p>
+
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-gray-200 text-left text-xs uppercase text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                            <th class="pb-2 font-medium">Titular</th>
+                            <th class="w-28 pb-2 text-right font-medium">Contractes</th>
+                            <th class="w-40 pb-2 text-right font-medium">Valor</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                        <template v-for="t in props.totalsPerTitular" :key="t.id ?? 'sense'">
+                            <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40" @click="obreDetallTitular(t)">
+                                <td class="py-2 font-medium text-gray-900 dark:text-gray-100">
+                                    <span class="mr-1 inline-block w-3 text-gray-400">{{ titularObert === (t.id ?? 'sense') ? '▾' : '▸' }}</span>
+                                    {{ t.nom }}
+                                </td>
+                                <td class="py-2 text-right text-gray-500 dark:text-gray-400">{{ t.contractes.length }}</td>
+                                <td class="py-2 text-right font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ formatEur(t.total) }}</td>
+                            </tr>
+                            <tr v-if="titularObert === (t.id ?? 'sense')" class="bg-gray-50 dark:bg-gray-700/30">
+                                <td colspan="3" class="px-3 py-2">
+                                    <div v-for="(c, i) in t.contractes" :key="i" class="flex items-baseline justify-between gap-4 py-0.5 text-xs">
+                                        <span class="text-gray-600 dark:text-gray-400">
+                                            {{ c.fons }}
+                                            <span class="ml-1 text-gray-400 dark:text-gray-500">· {{ c.compte }}</span>
+                                            <span v-if="c.titulars > 1" class="ml-1 text-gray-400 dark:text-gray-500">
+                                                {{ formatEur(c.valor) }} entre {{ c.titulars }}
+                                            </span>
+                                        </span>
+                                        <span class="shrink-0 tabular-nums text-gray-700 dark:text-gray-300">{{ formatEur(c.part) }}</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                    <tfoot class="border-t-2 border-gray-200 dark:border-gray-600">
+                        <tr class="font-bold">
+                            <td colspan="2" class="py-2 text-gray-900 dark:text-gray-100">Total</td>
+                            <td class="py-2 text-right tabular-nums text-gray-900 dark:text-gray-100">{{ formatEur(totalGeneral) }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+
+                <p class="mt-4 text-xs text-gray-400 dark:text-gray-500">
+                    No és cap saldo: són les participacions per la darrera cotització de cada fons. Es reparteix a
+                    parts iguals entre els titulars del compte, que és com es reparteixen també els comptes corrents.
+                </p>
+
+                <div class="mt-6 flex justify-end">
+                    <button @click="showTotals = false"
+                        class="rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">
+                        Tancar
+                    </button>
+                </div>
+            </div>
+        </Modal>
 
     </AuthenticatedLayout>
 </template>
