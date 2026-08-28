@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import BalancCompteModal from '@/Components/BalancCompteModal.vue';
+import Modal from '@/Components/Modal.vue';
 import { Head, useForm, router, Link } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
 
@@ -35,8 +36,27 @@ interface Entitat {
     nom: string;
 }
 
+/** Un compte dins del repartiment d'un titular. */
+interface CompteDelTitular {
+    nom: string;
+    lloguer: string | null;
+    saldo: number;
+    /** Entre quants es reparteix. */
+    titulars: number;
+    part: number;
+}
+
+interface TotalTitular {
+    id: number | null;
+    nom: string;
+    total: number;
+    comptes: CompteDelTitular[];
+}
+
 interface Props {
     comptesCorrents: CompteCorrent[];
+    /** Saldo de cada titular sumant els comptes corrents, repartit a parts iguals. */
+    totalsPerTitular: TotalTitular[];
     titulars: Titular[];
     entitats: Entitat[];
 }
@@ -44,6 +64,19 @@ interface Props {
 const props = defineProps<Props>();
 
 const showModal = ref(false);
+
+// ---- Totals per titular ----
+const showTotals = ref(false);
+const titularObert = ref<number | string | null>(null);
+
+const totalGeneral = computed(() =>
+    props.totalsPerTitular.reduce((suma, t) => suma + t.total, 0)
+);
+
+function obreDetall(titular: TotalTitular) {
+    const clau = titular.id ?? 'sense';
+    titularObert.value = titularObert.value === clau ? null : clau;
+}
 const isEditing = ref(false);
 const editingCompteCorrent = ref<CompteCorrent | null>(null);
 
@@ -185,6 +218,17 @@ const closeBalancModal = () => {
                                     Gestiona els comptes corrents i els seus titulars
                                 </p>
                             </div>
+                            <div class="flex items-center gap-3">
+                            <button
+                                @click="showTotals = true"
+                                class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                            >
+                                <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                </svg>
+                                Totals per titular
+                            </button>
                             <button
                                 @click="openCreateModal"
                                 class="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
@@ -204,6 +248,7 @@ const closeBalancModal = () => {
                                 </svg>
                                 Afegir Compte Corrent
                             </button>
+                            </div>
                         </div>
 
                         <!-- Taula unificada -->
@@ -374,6 +419,72 @@ const closeBalancModal = () => {
         </div>
 
         <!-- Modal Balanç -->
+        <!-- Totals per titular -->
+        <Modal :show="showTotals" max-width="2xl" @close="showTotals = false">
+            <div class="p-6">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Totals per titular</h3>
+                <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
+                    Els comptes corrents, personals i de lloguer. Els d'inversió no hi entren: el seu valor
+                    es mira a la seva pantalla.
+                </p>
+
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-gray-200 text-left text-xs uppercase text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                            <th class="pb-2 font-medium">Titular</th>
+                            <th class="w-24 pb-2 text-right font-medium">Comptes</th>
+                            <th class="w-40 pb-2 text-right font-medium">Import</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                        <template v-for="t in props.totalsPerTitular" :key="t.id ?? 'sense'">
+                            <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40" @click="obreDetall(t)">
+                                <td class="py-2 font-medium text-gray-900 dark:text-gray-100">
+                                    <span class="mr-1 inline-block w-3 text-gray-400">{{ titularObert === (t.id ?? 'sense') ? '▾' : '▸' }}</span>
+                                    {{ t.nom }}
+                                </td>
+                                <td class="py-2 text-right text-gray-500 dark:text-gray-400">{{ t.comptes.length }}</td>
+                                <td class="py-2 text-right font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ formatSaldo(t.total) }}</td>
+                            </tr>
+                            <!-- El detall: de quin compte ve cada part -->
+                            <tr v-if="titularObert === (t.id ?? 'sense')" class="bg-gray-50 dark:bg-gray-700/30">
+                                <td colspan="3" class="px-3 py-2">
+                                    <div v-for="(c, i) in t.comptes" :key="i" class="flex items-baseline justify-between gap-4 py-0.5 text-xs">
+                                        <span class="text-gray-600 dark:text-gray-400">
+                                            {{ c.nom }}
+                                            <span v-if="c.lloguer" class="ml-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">lloguer</span>
+                                            <span v-if="c.titulars > 1" class="ml-1 text-gray-400 dark:text-gray-500">
+                                                {{ formatSaldo(c.saldo) }} entre {{ c.titulars }}
+                                            </span>
+                                        </span>
+                                        <span class="shrink-0 tabular-nums text-gray-700 dark:text-gray-300">{{ formatSaldo(c.part) }}</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                    <tfoot class="border-t-2 border-gray-200 dark:border-gray-600">
+                        <tr class="font-bold">
+                            <td colspan="2" class="py-2 text-gray-900 dark:text-gray-100">Total</td>
+                            <td class="py-2 text-right tabular-nums text-gray-900 dark:text-gray-100">{{ formatSaldo(totalGeneral) }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+
+                <p class="mt-4 text-xs text-gray-400 dark:text-gray-500">
+                    El saldo de cada compte es reparteix a parts iguals entre els seus titulars: no se'n desa cap
+                    percentatge. La suma de les parts sempre quadra amb el saldo del compte.
+                </p>
+
+                <div class="mt-6 flex justify-end">
+                    <button @click="showTotals = false"
+                        class="rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">
+                        Tancar
+                    </button>
+                </div>
+            </div>
+        </Modal>
+
         <BalancCompteModal
             :show="showBalancModal"
             :compte-corrent-id="balancCompteId"

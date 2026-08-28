@@ -55,9 +55,10 @@ class CompteCorrentController extends Controller
         $entitats = Entitat::orderBy('nom')->get();
 
         return Inertia::render('ComptesCorrents/Index', [
-            'comptesCorrents' => $comptesCorrents,
-            'titulars'        => $titulars,
-            'entitats'        => $entitats,
+            'comptesCorrents'  => $comptesCorrents,
+            'totalsPerTitular' => $this->totalsPerTitular($comptesCorrents),
+            'titulars'         => $titulars,
+            'entitats'         => $entitats,
         ]);
     }
 
@@ -116,6 +117,70 @@ class CompteCorrentController extends Controller
 
     /** Anys com a màxim a la vista anual. */
     private const MAX_ANYS = 60;
+
+    /**
+     * Què té cada titular sumant tots els comptes.
+     *
+     * Només els comptes corrents —personals i de lloguer—: als d'inversió el saldo no és
+     * el que hi ha, sinó el que valen les participacions, i es mira a la seva pantalla.
+     *
+     * El saldo es reparteix **a parts iguals** entre els titulars del compte: el pivot no
+     * desa cap percentatge. Si mai cal repartir-lo d'una altra manera, hi haurà d'anar
+     * una quota, com a `g_propietaris_immobles`.
+     *
+     * @param  \Illuminate\Support\Collection<int, CompteCorrent>  $comptes
+     * @return array<int, array<string, mixed>>
+     */
+    private function totalsPerTitular($comptes): array
+    {
+        $perTitular = [];
+
+        foreach ($comptes->where('tipus', 'corrent') as $compte) {
+            $saldo    = (float) $compte->saldo_actual;
+            $titulars = $compte->titulars;
+            // Un compte sense titular no es pot repartir, però tampoc s'ha de perdre
+            $parts    = max($titulars->count(), 1);
+
+            $files = $titulars->isEmpty()
+                ? [['id' => null, 'nom' => 'Sense titular']]
+                : $titulars->map(fn ($t) => ['id' => $t->id, 'nom' => trim($t->nom . ' ' . $t->cognoms)])->all();
+
+            $repartit = 0.0;
+
+            foreach ($files as $i => $titular) {
+                // L'últim s'endú el que queda: arrodonir cada part per separat faria que
+                // la suma dels titulars no donés el saldo del compte.
+                $part = $i === $parts - 1
+                    ? round($saldo - $repartit, 2)
+                    : round($saldo / $parts, 2);
+                $repartit += $part;
+
+                $clau = $titular['id'] ?? 'sense';
+
+                $perTitular[$clau] ??= [
+                    'id'      => $titular['id'],
+                    'nom'     => $titular['nom'],
+                    'total'   => 0.0,
+                    'comptes' => [],
+                ];
+
+                $perTitular[$clau]['total'] += $part;
+                $perTitular[$clau]['comptes'][] = [
+                    'nom'      => $compte->nom ?? $compte->compte_corrent,
+                    'lloguer'  => $compte->lloguer_nom,
+                    'saldo'    => $saldo,
+                    'titulars' => $parts,
+                    'part'     => $part,
+                ];
+            }
+        }
+
+        return collect($perTitular)
+            ->map(fn (array $t) => ['total' => round($t['total'], 2)] + $t)
+            ->sortByDesc('total')
+            ->values()
+            ->all();
+    }
 
     /**
      * Retorna el balanc (ingressos, despeses, net) per periodes i categories.
