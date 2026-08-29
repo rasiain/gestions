@@ -129,6 +129,7 @@ export const grups: Grup[] = [
             { titol: 'IRPF Lloguers', ruta: 'impostos.irpf' },
             { titol: 'IVA Lloguers', ruta: 'impostos.iva' },
             { titol: 'Model 184', ruta: 'impostos.model-184' },
+            { titol: 'Patrimoni', ruta: 'impostos.patrimoni' },
             { titol: 'Taxes', ruta: 'impostos.taxes' },
             { titol: 'Assegurances', ruta: 'impostos.assegurances' },
         ],

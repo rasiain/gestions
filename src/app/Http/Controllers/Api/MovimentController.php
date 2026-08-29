@@ -32,9 +32,9 @@ class MovimentController extends Controller
         if (!empty($validated['data_inici']) && !empty($validated['data_fi'])) {
             $query->betweenDates($validated['data_inici'], $validated['data_fi']);
         } elseif (!empty($validated['data_inici'])) {
-            $query->where('data_moviment', '>=', $validated['data_inici']);
+            $query->whereDate('data_moviment', '>=', $validated['data_inici']);
         } elseif (!empty($validated['data_fi'])) {
-            $query->where('data_moviment', '<=', $validated['data_fi']);
+            $query->whereDate('data_moviment', '<=', $validated['data_fi']);
         }
 
         $limit = $validated['limit'] ?? 100;

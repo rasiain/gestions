@@ -65,7 +65,7 @@ class DiagnoseMovementHash extends Command
 
         // Buscar moviments similars (mateixa data i import aproximat)
         $similar = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)
-            ->where('data_moviment', $data)
+            ->whereDate('data_moviment', $data)
             ->whereBetween('import', [$import - 0.01, $import + 0.01])
             ->get();
 

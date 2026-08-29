@@ -197,7 +197,8 @@ class CompteCorrentController extends Controller
 
         if ($vista === 'mensual') {
             $resultats = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrent->id)
-                ->whereBetween('data_moviment', [$dataInici, $dataFi])
+                ->whereDate('data_moviment', '>=', $dataInici)
+                ->whereDate('data_moviment', '<=', $dataFi)
                 ->selectRaw("
                     strftime('%Y-%m', data_moviment) as periode,
                     SUM(CASE WHEN import > 0 THEN import ELSE 0 END) as ingressos,
@@ -240,7 +241,8 @@ class CompteCorrentController extends Controller
             }
         } else {
             $resultats = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrent->id)
-                ->whereBetween('data_moviment', [$dataInici, $dataFi])
+                ->whereDate('data_moviment', '>=', $dataInici)
+                ->whereDate('data_moviment', '<=', $dataFi)
                 ->selectRaw("
                     strftime('%Y', data_moviment) as any,
                     SUM(CASE WHEN import > 0 THEN import ELSE 0 END) as ingressos,
@@ -366,7 +368,8 @@ class CompteCorrentController extends Controller
         $format = $vista === 'mensual' ? 'Y-m' : 'Y';
 
         $saldos = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)
-            ->whereBetween('data_moviment', [$dataInici, $dataFi])
+            ->whereDate('data_moviment', '>=', $dataInici)
+            ->whereDate('data_moviment', '<=', $dataFi)
             ->whereNotNull('saldo_posterior')
             ->orderBy('data_moviment')
             ->orderBy('id')
@@ -377,7 +380,7 @@ class CompteCorrentController extends Controller
         // El saldo amb què s'arriba al rang: si no, els primers mesos sense
         // moviments no en tindrien cap i la línia començaria tard.
         $anterior = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)
-            ->where('data_moviment', '<', $dataInici)
+            ->whereDate('data_moviment', '<', $dataInici)
             ->whereNotNull('saldo_posterior')
             ->orderByDesc('data_moviment')
             ->orderByDesc('id')
@@ -406,7 +409,8 @@ class CompteCorrentController extends Controller
 
         $fila = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)
             ->whereIn('categoria_id', $ids)
-            ->whereBetween('data_moviment', [$dataInici, $dataFi])
+            ->whereDate('data_moviment', '>=', $dataInici)
+            ->whereDate('data_moviment', '<=', $dataFi)
             ->selectRaw("
                 COALESCE(SUM(CASE WHEN import > 0 THEN import ELSE 0 END), 0) as ingressos,
                 COALESCE(SUM(CASE WHEN import < 0 THEN import ELSE 0 END), 0) as despeses,

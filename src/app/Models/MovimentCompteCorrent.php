@@ -121,7 +121,10 @@ class MovimentCompteCorrent extends Model
      */
     public function scopeBetweenDates($query, $startDate, $endDate)
     {
-        return $query->whereBetween('data_moviment', [$startDate, $endDate]);
+        // La data es desa amb hora a zero: una comparació de text deixaria fora el
+        // darrer dia del rang.
+        return $query->whereDate('data_moviment', '>=', $startDate)
+            ->whereDate('data_moviment', '<=', $endDate);
     }
 
     /**
