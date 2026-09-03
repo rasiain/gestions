@@ -169,4 +169,63 @@ class AssegurancesEstatServiceTest extends TestCase
         $this->assertNull($estat['prima']);
         $this->assertNull($estat['variacio_pct']);
     }
+
+    public function test_avisa_del_rebut_que_altres_anys_arriba_dins_de_dos_mesos(): void
+    {
+        $any  = (int) date('Y');
+        $avui = \Carbon\Carbon::today();
+        // Un mes endavant: dins de la finestra dels dos mesos
+        $venciment = $avui->copy()->addMonth();
+
+        $estat = $this->estat([
+            [$venciment->copy()->subYears(2)->toDateString(), -300.0],
+            [$venciment->copy()->subYear()->toDateString(), -320.0],
+        ], any: $any, referencia: $avui->toDateString());
+
+        $this->assertNotNull($estat['renovacio']);
+        $this->assertSame($venciment->toDateString(), $estat['renovacio']['data']);
+        // L'import de l'últim cop, que és amb el que s'haurà de comparar
+        $this->assertSame(320.0, $estat['renovacio']['import']);
+    }
+
+    public function test_no_avisa_si_el_rebut_ja_ha_arribat_enguany(): void
+    {
+        $any  = (int) date('Y');
+        $avui = \Carbon\Carbon::today();
+        $venciment = $avui->copy()->addMonth();
+
+        $estat = $this->estat([
+            [$venciment->copy()->subYear()->toDateString(), -320.0],
+            // Enguany ja s'ha cobrat dins la finestra
+            [$avui->copy()->addDays(3)->toDateString(), -340.0],
+        ], any: $any, referencia: $avui->toDateString());
+
+        $this->assertNull($estat['renovacio']);
+    }
+
+    public function test_a_una_polissa_mensual_no_te_sentit_avisar_ne(): void
+    {
+        $avui = \Carbon\Carbon::today();
+        $linies = [];
+
+        // Dos anys de càrrecs mensuals: sempre en ve un el mes que ve
+        for ($i = 1; $i <= 24; $i++) {
+            $linies[] = [$avui->copy()->subMonths($i)->toDateString(), -20.0];
+        }
+
+        $estat = $this->estat($linies, any: (int) date('Y'), referencia: $avui->toDateString());
+
+        $this->assertSame('mensual', $estat['periodicitat']);
+        $this->assertNull($estat['renovacio']);
+    }
+
+    public function test_un_exercici_tancat_no_espera_cap_rebut(): void
+    {
+        $estat = $this->estat([
+            ['2024-10-15', -300.0],
+            ['2025-10-15', -320.0],
+        ], any: 2025, referencia: '2025-12-31');
+
+        $this->assertNull($estat['renovacio']);
+    }
 }

@@ -98,6 +98,12 @@ class AssegurancesEstatService
 
         [$periodicitat, $carrecsAny] = $this->periodicitat($ultimAny);
 
+        // A una pòlissa mensual sempre li ve un càrrec el mes que ve: avisar-ne no diu
+        // res. La pujada de preu d'una mensual ja es veu a la columna de la prima.
+        $renovacio = $periodicitat === 'mensual'
+            ? null
+            : $this->renovacioPropera($carrecs, $referencia);
+
         $pagaments = $this->compta($carrecs, $any);
 
         // Mentre l'any corre es pot dir què hi falta; un any tancat ja no espera
@@ -118,6 +124,9 @@ class AssegurancesEstatService
             'proper_carrec'     => $pendents > 0 && $carrecsAny !== null && $ultim !== null
                 ? $ultim->data_moviment->copy()->addMonths(intdiv(12, $carrecsAny))->toDateString()
                 : null,
+            // Un rebut que altres anys arriba dins dels dos propers mesos: val la pena
+            // mirar-se'n l'import abans que el cobrin.
+            'renovacio'         => $renovacio,
             // Any anterior retallat al mateix dia: l'única comparació honesta
             // mentre l'any en curs no ha acabat.
             'anterior_a_data'   => $anteriorAData,
@@ -145,6 +154,84 @@ class AssegurancesEstatService
                     && $m->despesa === null)
                 ->count(),
         ];
+    }
+
+    /**
+     * El rebut que ve: un càrrec que en anys anteriors va caure dins dels dos propers
+     * mesos i que enguany encara no ha arribat.
+     *
+     * No es dedueix de la periodicitat sinó de les dates reals d'altres anys, que és el
+     * senyal bo per a una pòlissa anual: si cada any la cobren el 14 d'abril, al febrer
+     * ja es pot avisar. Es mira l'any en curs i el següent perquè la finestra pot passar
+     * el cap d'any.
+     *
+     * Les mensuals en queden fora: se'n crida des de `estat()`.
+     *
+     * @param  Collection<int, MovimentCompteCorrent>  $carrecs
+     * @return array{data: string, import: float}|null
+     */
+    private function renovacioPropera(Collection $carrecs, CarbonInterface $referencia): array|null
+    {
+        // Només té sentit mirant l'any en curs: en un exercici tancat no ve res
+        if ((int) $referencia->format('Y') !== (int) date('Y')) {
+            return null;
+        }
+
+        $fins = $referencia->copy()->addMonths(2);
+
+        // Si ja l'han cobrat dins la finestra, no hi ha res a esperar
+        $jaCobrat = $carrecs->contains(fn (MovimentCompteCorrent $m) => $m->data_moviment->gte($referencia)
+            && $m->data_moviment->lte($fins));
+
+        if ($jaCobrat) {
+            return null;
+        }
+
+        $millor = null;
+
+        foreach ($carrecs as $carrec) {
+            $data = $carrec->data_moviment;
+
+            if ((int) $data->format('Y') >= (int) $referencia->format('Y')) {
+                continue;
+            }
+
+            foreach ([(int) $referencia->format('Y'), (int) $referencia->format('Y') + 1] as $any) {
+                $prevista = $this->mateixDia($data, $any);
+
+                if ($prevista->lt($referencia) || $prevista->gt($fins)) {
+                    continue;
+                }
+
+                // El càrrec més recent és el que millor diu quant costarà
+                if ($millor === null || $data->gt($millor['origen'])) {
+                    $millor = [
+                        'data'   => $prevista->toDateString(),
+                        'import' => round(abs((float) $carrec->import), 2),
+                        'origen' => $data,
+                    ];
+                }
+            }
+        }
+
+        if ($millor === null) {
+            return null;
+        }
+
+        unset($millor['origen']);
+
+        return $millor;
+    }
+
+    /**
+     * El mateix dia i mes en un altre any, sense desbordar els mesos curts.
+     */
+    private function mateixDia(CarbonInterface $data, int $any): CarbonInterface
+    {
+        $mes = (int) $data->format('n');
+        $dia = min((int) $data->format('j'), (int) $data->copy()->setDate($any, $mes, 1)->daysInMonth);
+
+        return $data->copy()->setDate($any, $mes, $dia)->startOfDay();
     }
 
     /**

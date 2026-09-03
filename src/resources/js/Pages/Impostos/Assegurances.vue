@@ -39,6 +39,8 @@ interface EstatPolissa {
     retornat: number;
     /** Pagaments d'un immoble de lloguer que no passen per les despeses. */
     sense_classificar: number;
+    /** El rebut que altres anys arriba dins dels dos propers mesos i encara no ha vingut. */
+    renovacio: { data: string; import: number } | null;
 }
 
 interface Polissa {
@@ -463,9 +465,21 @@ function desaEdicio() {
                                             </tr>
                                         </thead>
                                         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-                                            <tr v-for="p in grup.polisses" :key="p.tipus" class="align-top hover:bg-gray-50 dark:hover:bg-gray-700/40">
+                                            <!-- Fons d'alerta: en ve el rebut i cal mirar-se'n l'import -->
+                                            <tr v-for="p in grup.polisses" :key="p.tipus" class="align-top"
+                                                :class="p.estat?.renovacio
+                                                    ? 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-900/20 dark:hover:bg-amber-900/30'
+                                                    : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'">
                                                 <td class="px-4 py-2 text-sm font-medium text-gray-800 dark:text-gray-200">
                                                     {{ p.tipus }}
+                                                    <span
+                                                        v-if="p.estat?.renovacio"
+                                                        class="mt-0.5 block text-xs font-normal text-amber-800 dark:text-amber-300"
+                                                        :title="'Altres anys es cobra per aquestes dates. Comprova l\'import abans que arribi.'"
+                                                    >
+                                                        ⏳ rebut cap al {{ formatDiaMesCurt(p.estat.renovacio.data) }}
+                                                        · l'últim: {{ formatEur(p.estat.renovacio.import) }}
+                                                    </span>
                                                     <span
                                                         v-if="grup.seccio === 'lloguer' && p.estat && p.estat.sense_classificar > 0"
                                                         class="mt-0.5 block text-xs font-normal text-amber-700 dark:text-amber-400"
