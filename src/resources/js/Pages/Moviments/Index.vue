@@ -213,7 +213,7 @@ const selectedCompte = computed(() => {
 
 // Els mateixos tres grups que la llista de comptes corrents: barrejar les
 // inversions amb els comptes del dia a dia obliga a llegir-se la llista sencera.
-const esInversio = (c: CompteCorrent) => c.tipus === 'fons_inversio' || c.tipus === 'pla_pensions';
+const esInversio = (c: CompteCorrent) => c.tipus === 'fons_inversio' || c.tipus === 'pla_pensions' || c.tipus === 'renda_fixa';
 
 const comptesCorrents = computed(() => props.comptesCorrents.filter(c => !c.lloguer_nom && !esInversio(c)));
 const comptesLloguers = computed(() => props.comptesCorrents.filter(c => !!c.lloguer_nom));

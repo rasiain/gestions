@@ -153,7 +153,7 @@ const formatSaldo = (saldo: number | null): string => {
 };
 
 /** Fons d'inversió i plans de pensions: dues coses diferents, un sol grup. */
-const esInversio = (c: CompteCorrent) => c.tipus === 'fons_inversio' || c.tipus === 'pla_pensions';
+const esInversio = (c: CompteCorrent) => c.tipus === 'fons_inversio' || c.tipus === 'pla_pensions' || c.tipus === 'renda_fixa';
 
 const comptesCorrents = computed(() => props.comptesCorrents.filter(c => !c.lloguer_nom && !esInversio(c)));
 const comptesLloguers = computed(() => props.comptesCorrents.filter(c => !!c.lloguer_nom));
@@ -597,6 +597,7 @@ const closeBalancModal = () => {
                                         <option value="corrent">Corrent</option>
                                         <option value="fons_inversio">Fons d'inversió</option>
                                         <option value="pla_pensions">Pla de pensions</option>
+                                        <option value="renda_fixa">Renda fixa</option>
                                     </select>
                                     <p v-if="form.errors.tipus" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.tipus }}</p>
                                 </div>

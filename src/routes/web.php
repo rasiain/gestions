@@ -28,6 +28,7 @@ use App\Http\Controllers\MovimentCompteCorrentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PersonaController;
 use App\Http\Controllers\ProveidorController;
+use App\Http\Controllers\RendaFixaController;
 use App\Http\Controllers\VehicleController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -98,6 +99,19 @@ Route::middleware('auth')->group(function () {
     Route::resource('proveidors', ProveidorController::class)->only([
         'index', 'store', 'update', 'destroy'
     ]);
+
+    // Renda fixa
+    Route::get('/renda-fixa', [RendaFixaController::class, 'index'])->name('renda-fixa.index');
+    Route::post('/renda-fixa/titols', [RendaFixaController::class, 'storeTitol'])->name('renda-fixa.titols.store');
+    Route::put('/renda-fixa/titols/{titol}', [RendaFixaController::class, 'updateTitol'])->name('renda-fixa.titols.update');
+    Route::delete('/renda-fixa/titols/{titol}', [RendaFixaController::class, 'destroyTitol'])->name('renda-fixa.titols.destroy');
+    Route::post('/renda-fixa/contractes', [RendaFixaController::class, 'storeContracte'])->name('renda-fixa.contractes.store');
+    Route::put('/renda-fixa/contractes/{contracte}', [RendaFixaController::class, 'updateContracte'])->name('renda-fixa.contractes.update');
+    Route::delete('/renda-fixa/contractes/{contracte}', [RendaFixaController::class, 'destroyContracte'])->name('renda-fixa.contractes.destroy');
+    Route::post('/renda-fixa/valors', [RendaFixaController::class, 'storeValor'])->name('renda-fixa.valors.store');
+    Route::delete('/renda-fixa/valors/{valor}', [RendaFixaController::class, 'destroyValor'])->name('renda-fixa.valors.destroy');
+    Route::post('/renda-fixa/rendibilitats', [RendaFixaController::class, 'storeRendibilitat'])->name('renda-fixa.rendibilitats.store');
+    Route::delete('/renda-fixa/rendibilitats/{rendibilitat}', [RendaFixaController::class, 'destroyRendibilitat'])->name('renda-fixa.rendibilitats.destroy');
 
     // Vehicles: dues llistes (cotxes i motos, bicis) sobre el mateix catàleg
     Route::get('/cotxes', [VehicleController::class, 'cotxes'])->name('cotxes.index');
