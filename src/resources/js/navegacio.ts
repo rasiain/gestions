@@ -142,7 +142,7 @@ export const grups: Grup[] = [
         icona: icones.caixa,
         color: colors.cel,
         accions: [
-            { titol: 'Cotxes', ruta: 'cotxes.index' },
+            { titol: 'Vehicles a motor', ruta: 'vehicles-motor.index' },
             { titol: 'Bicis', ruta: 'bicis.index' },
         ],
     },

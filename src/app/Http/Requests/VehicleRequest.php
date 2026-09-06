@@ -18,6 +18,7 @@ class VehicleRequest extends FormRequest
         return [
             'nom'            => ['required', 'string', 'max:100'],
             'tipus'          => ['required', Rule::in(Vehicle::TIPUS)],
+            'combustible'    => ['nullable', Rule::in(Vehicle::COMBUSTIBLES)],
             'marca'          => ['nullable', 'string', 'max:60'],
             'model'          => ['nullable', 'string', 'max:60'],
             'matricula'      => ['nullable', 'string', 'max:20'],

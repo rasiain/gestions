@@ -113,12 +113,19 @@ Route::middleware('auth')->group(function () {
     Route::post('/renda-fixa/rendibilitats', [RendaFixaController::class, 'storeRendibilitat'])->name('renda-fixa.rendibilitats.store');
     Route::delete('/renda-fixa/rendibilitats/{rendibilitat}', [RendaFixaController::class, 'destroyRendibilitat'])->name('renda-fixa.rendibilitats.destroy');
 
-    // Vehicles: dues llistes (cotxes i motos, bicis) sobre el mateix catàleg
-    Route::get('/cotxes', [VehicleController::class, 'cotxes'])->name('cotxes.index');
+    // Vehicles: dues llistes (els de motor, les bicis) sobre el mateix catàleg
+    Route::get('/vehicles-motor', [VehicleController::class, 'vehiclesMotor'])->name('vehicles-motor.index');
     Route::get('/bicis', [VehicleController::class, 'bicis'])->name('bicis.index');
     Route::post('/vehicles', [VehicleController::class, 'store'])->name('vehicles.store');
     Route::put('/vehicles/{vehicle}', [VehicleController::class, 'update'])->name('vehicles.update');
     Route::delete('/vehicles/{vehicle}', [VehicleController::class, 'destroy'])->name('vehicles.destroy');
+    Route::get('/vehicles/moviments-combustible', [VehicleController::class, 'movimentsCombustible'])->name('vehicles.moviments-combustible');
+    Route::post('/vehicles/repostatges', [VehicleController::class, 'storeRepostatge'])->name('vehicles.repostatges.store');
+    Route::put('/vehicles/repostatges/{repostatge}', [VehicleController::class, 'updateRepostatge'])->name('vehicles.repostatges.update');
+    Route::delete('/vehicles/repostatges/{repostatge}', [VehicleController::class, 'destroyRepostatge'])->name('vehicles.repostatges.destroy');
+    Route::post('/vehicles/despeses', [VehicleController::class, 'storeDespesa'])->name('vehicles.despeses.store');
+    Route::put('/vehicles/despeses/{despesa}', [VehicleController::class, 'updateDespesa'])->name('vehicles.despeses.update');
+    Route::delete('/vehicles/despeses/{despesa}', [VehicleController::class, 'destroyDespesa'])->name('vehicles.despeses.destroy');
 
     // Comunitats de Béns management
     Route::resource('comunitats-bens', ComunitatBensController::class)->only([

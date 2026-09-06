@@ -135,6 +135,23 @@ La pantalla avisa del que cal repassar abans de declarar: quotes que no sumen 10
 
 Pendent: el fitxer de presentació de l'AEAT, els dies d'arrendament i la casella 3 (interessos i despeses de reparació pendents), que no s'ha fet servir mai.
 
+### Vehicles (a motor i bicis)
+`g_vehicles` és el catàleg, i n'hi ha dues llistes sobre la mateixa taula: **Vehicles a motor** (`/vehicles-motor`, tipus `cotxe` i `moto`, els que tenen matrícula, ITV i combustible) i **Bicis** (`/bicis`). La secció es deia «Cotxes» i es va reanomenar el 2026-09-06, perquè hi han conviscut sempre cotxes i motos; a dins, `cotxe` continua sent un tipus de vehicle. La ruta i el mètode van sense la preposició —`vehicles-motor.index`, `VehicleController::vehiclesMotor()`— per a anar amb les taules, que ja es deien `g_vehicles_motor_*`. Les bicis no tenen `combustible`. Dues taules de despesa, totes dues amb `moviment_id` opcional cap al moviment bancari:
+
+- **`g_vehicles_motor_repostatges`**: només el que s'apunta a mà —data, `km_totals` del comptador, `preu_litre`, `cost`. Litres, quilòmetres fets i consum es **calculen sempre**, mai es desen: així estava al full de càlcul d'on venen les dades i comparar-los amb les seves columnes calculades és com es valida la importació (`vehicles:importa-repostatges --prova`). `diposit_ple` marca els que no serveixen per mesurar consum.
+- **`g_vehicles_motor_despeses`**: reparacions, ITV, assegurança, impost de circulació i `altres`. `km_totals` és opcional —l'assegurança no passa pel taller—, però quan hi és **també compta com a lectura del comptador**.
+
+El resum per any (`VehicleController::perAny()`) creua les dues taules i en treu **dues mesures de quilòmetres**, totes dues «darrera lectura de l'any menys darrera lectura d'abans» però amb lectures diferents:
+
+- **`km`** només mira els repostatges. Es queda curta —del darrer ple a Cap d'Any encara s'hi roda—, però és l'únic tram que té els litres al costat: barrejar-hi la lectura del taller donava un L/100 km que no volia dir res, perquè hi sumava quilòmetres sense litres. És la que divideix el `consum`.
+- **`km_estimats`** hi afegeix les lectures apuntades a les despeses (taller, ITV): la millor estimació del que s'ha rodat, i la que divideix el `cost_km`.
+
+Un any sense cap lectura pròpia —només l'assegurança, posem— té `km` i `km_estimats` a `null`, no pas a zero: no se sap fins on va arribar el comptador. El primer any tampoc no té cap lectura anterior amb què comparar.
+
+La pestanya **Gràfiques** dibuixa el que diuen els repostatges (chart.js + vue-chartjs, com als fons i als plans de pensions): consum de cada ple amb la mitjana anual sobreposada com a tram pla, dies entre repostatges i lectura del comptador. Tot es calcula al client a partir de les mateixes dades que ja porten les taules —cap consulta nova—, i el tram de la mitjana va del darrer repostatge de l'any anterior al darrer de l'any, que és exactament el que ha mesurat `perAny()`. Les dues sèries són `#0284c7` i `#d97706` a les dues aparences: passen les comprovacions de contrast i de daltonisme sobre fons clar i fosc, i així només cal canviar textos i quadrícula segons `prefers-color-scheme` (que és com Tailwind fa el mode fosc en aquest projecte, sense classe `dark` a l'arrel).
+
+Els CSV del Numbers van del més recent al més antic i hi ha dies amb dos repostatges: l'ordenació desempata per `km_totals`, que només puja.
+
 ### Components reutilitzables destacats
 - `Services\Concerns\ResolPerArbre`: resolució d'immoble i municipi des de l'arbre de categories, compartida per `TaxesService` i `AssegurancesService` (si divergissin, el mateix immoble sortiria amb dos noms segons la vista). `Http\Controllers\Concerns\CategoriesPerCompte` fa el mateix amb el selector de categories de les dues vistes.
 - `BulkEditModal.vue`: modal d'edició múltiple (concepte, notes, categoria). Gestiona el formulari internament; emet `@submit(payload)` i `v-model:open`. El pare conserva `saving` i `error` i fa la crida API. Usat a `Moviments/Index.vue` i `Lloguers/Index.vue`.
