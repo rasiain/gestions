@@ -97,6 +97,15 @@ interface Props {
 
 const props = defineProps<Props>();
 
+/**
+ * Al formulari el camp de la data es diu `dia`, i al servidor `data`.
+ *
+ * `data` és un mètode d'`useForm` —`form.data()` són els camps— i un camp que es digui
+ * així el trepitja: l'input rep la funció com a valor i l'enviament peta amb «data is not
+ * a function», sense que arribi cap petició al servidor.
+ */
+const perAlServidor = <T extends { dia: string }>({ dia, ...dades }: T) => ({ ...dades, data: dia });
+
 const etiquetaTipus: Record<string, string> = {
     cotxe: 'Cotxe',
     moto: 'Moto',
@@ -125,7 +134,7 @@ const pestanya = ref<'anys' | 'repostatges' | 'despeses' | 'grafiques'>('anys');
 
 const despesaForm = useForm({
     vehicle_id: 0,
-    data: '',
+    dia: '',
     tipus: 'reparacio',
     import: null as number | null,
     km_totals: null as number | null,
@@ -141,7 +150,7 @@ function editaDespesa(d: Despesa) {
     despesaForm.clearErrors();
     // De cop: `form.data` és alhora el camp i el mètode data() d'Inertia, i assignar-l'hi de una en una no tipa
     Object.assign(despesaForm, {
-        data: d.data,
+        dia: d.data,
         tipus: d.tipus,
         import: d.import,
         km_totals: d.km_totals,
@@ -153,7 +162,7 @@ function editaDespesa(d: Despesa) {
 function cancelaEdicioDespesa() {
     despesaEditant.value = null;
     despesaForm.clearErrors();
-    despesaForm.reset('data', 'import', 'km_totals', 'taller', 'motiu');
+    despesaForm.reset('dia', 'import', 'km_totals', 'taller', 'motiu');
 }
 
 function desaDespesa(vehicle: Vehicle) {
@@ -163,16 +172,16 @@ function desaDespesa(vehicle: Vehicle) {
         preserveScroll: true,
         onSuccess: () => {
             despesaEditant.value = null;
-            despesaForm.reset('data', 'import', 'km_totals', 'taller', 'motiu');
+            despesaForm.reset('dia', 'import', 'km_totals', 'taller', 'motiu');
         },
     };
 
     if (despesaEditant.value !== null) {
-        despesaForm.put(route('vehicles.despeses.update', despesaEditant.value), opcions);
+        despesaForm.transform(perAlServidor).put(route('vehicles.despeses.update', despesaEditant.value), opcions);
         return;
     }
 
-    despesaForm.post(route('vehicles.despeses.store'), opcions);
+    despesaForm.transform(perAlServidor).post(route('vehicles.despeses.store'), opcions);
 }
 
 function eliminaDespesa(d: Despesa) {
@@ -190,7 +199,7 @@ function obreRepostatges(vehicle: Vehicle) {
 
 const repostatgeForm = useForm({
     vehicle_id: 0,
-    data: '',
+    dia: '',
     km_totals: null as number | null,
     preu_litre: null as number | null,
     cost: null as number | null,
@@ -205,10 +214,10 @@ const movimentsProposats = ref<Array<{ id: number; data: string; import: number;
 
 async function buscaMoviment() {
     movimentsProposats.value = [];
-    if (!repostatgeForm.data) return;
+    if (!repostatgeForm.dia) return;
 
     // En edició cal passar-hi l'id: si no, el seu propi moviment surt com a ocupat i no es pot ni veure ni desvincular
-    const url = route('vehicles.moviments-combustible') + '?data=' + repostatgeForm.data
+    const url = route('vehicles.moviments-combustible') + '?data=' + repostatgeForm.dia
         + (repostatgeEditant.value !== null ? '&repostatge=' + repostatgeEditant.value : '');
     const res = await fetch(url, { headers: { Accept: 'application/json' } });
     if (res.ok) movimentsProposats.value = await res.json();
@@ -226,9 +235,8 @@ const repostatgeEditant = ref<number | null>(null);
 function editaRepostatge(r: Repostatge) {
     repostatgeEditant.value = r.id;
     repostatgeForm.clearErrors();
-    // De cop: `form.data` és alhora el camp i el mètode data() d'Inertia, i assignar-l'hi de una en una no tipa
     Object.assign(repostatgeForm, {
-        data: r.data,
+        dia: r.data,
         km_totals: r.km_totals,
         preu_litre: r.preu_litre,
         cost: r.cost,
@@ -243,7 +251,7 @@ function editaRepostatge(r: Repostatge) {
 function cancelaEdicioRepostatge() {
     repostatgeEditant.value = null;
     repostatgeForm.clearErrors();
-    repostatgeForm.reset('data', 'km_totals', 'preu_litre', 'cost', 'moviment_id', 'notes');
+    repostatgeForm.reset('dia', 'km_totals', 'preu_litre', 'cost', 'moviment_id', 'notes');
     movimentsProposats.value = [];
 }
 
@@ -254,17 +262,17 @@ function desaRepostatge(vehicle: Vehicle) {
         preserveScroll: true,
         onSuccess: () => {
             repostatgeEditant.value = null;
-            repostatgeForm.reset('data', 'km_totals', 'preu_litre', 'cost', 'moviment_id', 'notes');
+            repostatgeForm.reset('dia', 'km_totals', 'preu_litre', 'cost', 'moviment_id', 'notes');
             movimentsProposats.value = [];
         },
     };
 
     if (repostatgeEditant.value !== null) {
-        repostatgeForm.put(route('vehicles.repostatges.update', repostatgeEditant.value), opcions);
+        repostatgeForm.transform(perAlServidor).put(route('vehicles.repostatges.update', repostatgeEditant.value), opcions);
         return;
     }
 
-    repostatgeForm.post(route('vehicles.repostatges.store'), opcions);
+    repostatgeForm.transform(perAlServidor).post(route('vehicles.repostatges.store'), opcions);
 }
 
 function eliminaRepostatge(r: Repostatge) {
@@ -734,7 +742,7 @@ function elimina(vehicle: Vehicle) {
                                             <div v-if="pestanya === 'repostatges'" class="mb-3 flex flex-wrap items-end gap-2 border-b border-gray-200 pb-3 dark:border-gray-600">
                                                 <label class="text-xs text-gray-500 dark:text-gray-400">
                                                     Data
-                                                    <input v-model="repostatgeForm.data" @change="buscaMoviment" type="date"
+                                                    <input v-model="repostatgeForm.dia" @change="buscaMoviment" type="date"
                                                         class="mt-0.5 block w-36 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
                                                 </label>
                                                 <label class="text-xs text-gray-500 dark:text-gray-400">
@@ -762,7 +770,7 @@ function elimina(vehicle: Vehicle) {
                                                         class="rounded border-gray-300 text-sky-600 focus:ring-sky-500 dark:border-gray-600 dark:bg-gray-700" />
                                                     ple
                                                 </label>
-                                                <button @click="desaRepostatge(v)" :disabled="repostatgeForm.processing || !repostatgeForm.data || repostatgeForm.km_totals === null"
+                                                <button @click="desaRepostatge(v)" :disabled="repostatgeForm.processing || !repostatgeForm.dia || repostatgeForm.km_totals === null"
                                                     class="mb-1 rounded-md bg-sky-600 px-3 py-1 text-sm text-white hover:bg-sky-700 disabled:opacity-40">
                                                     {{ repostatgeEditant === null ? 'Afegeix' : 'Desa' }}
                                                 </button>
@@ -794,7 +802,7 @@ function elimina(vehicle: Vehicle) {
                                                 <div class="mb-3 flex flex-wrap items-end gap-2 border-b border-gray-200 pb-3 dark:border-gray-600">
                                                     <label class="text-xs text-gray-500 dark:text-gray-400">
                                                         Data
-                                                        <input v-model="despesaForm.data" type="date"
+                                                        <input v-model="despesaForm.dia" type="date"
                                                             class="mt-0.5 block w-36 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
                                                     </label>
                                                     <label class="text-xs text-gray-500 dark:text-gray-400">
@@ -824,7 +832,7 @@ function elimina(vehicle: Vehicle) {
                                                         <input v-model="despesaForm.motiu" type="text"
                                                             class="mt-0.5 block w-full rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
                                                     </label>
-                                                    <button @click="desaDespesa(v)" :disabled="despesaForm.processing || !despesaForm.data || despesaForm.import === null"
+                                                    <button @click="desaDespesa(v)" :disabled="despesaForm.processing || !despesaForm.dia || despesaForm.import === null"
                                                         class="mb-1 rounded-md bg-sky-600 px-3 py-1 text-sm text-white hover:bg-sky-700 disabled:opacity-40">
                                                         {{ despesaEditant === null ? 'Afegeix' : 'Desa' }}
                                                     </button>

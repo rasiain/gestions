@@ -11,6 +11,7 @@ use App\Models\RendaFixaRendibilitat;
 use App\Models\RendaFixaTitol;
 use App\Models\RendaFixaValor;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 
 class RendaFixaController extends Controller
@@ -234,9 +235,10 @@ class RendaFixaController extends Controller
             'valor_patrimonial' => ['required', 'numeric'],
         ]);
 
-        // Un valor per data: tornar-hi el corregeix
+        // Un valor per data: tornar-hi el corregeix. La data va normalitzada perquè el
+        // cast la desa a mitjanit i buscar-la en sec no trobaria la que ja hi és.
         RendaFixaValor::updateOrCreate(
-            ['contracte_id' => $dades['contracte_id'], 'data' => $dades['data']],
+            ['contracte_id' => $dades['contracte_id'], 'data' => Carbon::parse($dades['data'])->startOfDay()],
             ['valor_patrimonial' => $dades['valor_patrimonial']],
         );
 

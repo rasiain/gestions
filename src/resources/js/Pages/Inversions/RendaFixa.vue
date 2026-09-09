@@ -190,14 +190,15 @@ function eliminaContracte(contracte: Contracte) {
 }
 
 // ---- Valors i cupons ----
-const valorForm = useForm({ contracte_id: 0, data: '', valor_patrimonial: null as number | null });
-const rendibilitatForm = useForm({ contracte_id: 0, data: '', import: null as number | null, notes: '' });
+const valorForm = useForm({ contracte_id: 0, dia: '', valor_patrimonial: null as number | null });
+const rendibilitatForm = useForm({ contracte_id: 0, dia: '', import: null as number | null, notes: '' });
 
 function afegeixValor(contracte: Contracte) {
     valorForm.contracte_id = contracte.id;
-    valorForm.post(route('renda-fixa.valors.store'), {
+    // `dia` viatja com a `data`: al formulari no s'hi pot dir així, al servidor sí
+    valorForm.transform(({ dia, ...dades }) => ({ ...dades, data: dia })).post(route('renda-fixa.valors.store'), {
         preserveScroll: true,
-        onSuccess: () => valorForm.reset('data', 'valor_patrimonial'),
+        onSuccess: () => valorForm.reset('dia', 'valor_patrimonial'),
     });
 }
 
@@ -207,9 +208,9 @@ function eliminaValor(id: number) {
 
 function afegeixRendibilitat(contracte: Contracte) {
     rendibilitatForm.contracte_id = contracte.id;
-    rendibilitatForm.post(route('renda-fixa.rendibilitats.store'), {
+    rendibilitatForm.transform(({ dia, ...dades }) => ({ ...dades, data: dia })).post(route('renda-fixa.rendibilitats.store'), {
         preserveScroll: true,
-        onSuccess: () => rendibilitatForm.reset('data', 'import', 'notes'),
+        onSuccess: () => rendibilitatForm.reset('dia', 'import', 'notes'),
     });
 }
 
@@ -336,11 +337,11 @@ function obreDetallTitular(t: TotalTitular) {
                                 </tbody>
                             </table>
                             <div class="mt-2 flex gap-2">
-                                <input v-model="valorForm.data" type="date"
+                                <input v-model="valorForm.dia" type="date"
                                     class="w-40 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
                                 <input v-model.number="valorForm.valor_patrimonial" type="number" step="0.01" placeholder="Valor"
                                     class="w-32 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
-                                <button @click="afegeixValor(c)" :disabled="!valorForm.data || valorForm.valor_patrimonial === null"
+                                <button @click="afegeixValor(c)" :disabled="!valorForm.dia || valorForm.valor_patrimonial === null"
                                     class="rounded-md bg-green-600 px-3 py-1 text-sm text-white hover:bg-green-700 disabled:opacity-40">
                                     Afegeix
                                 </button>
@@ -379,13 +380,13 @@ function obreDetallTitular(t: TotalTitular) {
                                 </tbody>
                             </table>
                             <div class="mt-2 flex gap-2">
-                                <input v-model="rendibilitatForm.data" type="date"
+                                <input v-model="rendibilitatForm.dia" type="date"
                                     class="w-36 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
                                 <input v-model.number="rendibilitatForm.import" type="number" step="0.01" placeholder="Import"
                                     class="w-28 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
                                 <input v-model="rendibilitatForm.notes" type="text" placeholder="Notes"
                                     class="min-w-0 flex-1 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
-                                <button @click="afegeixRendibilitat(c)" :disabled="!rendibilitatForm.data || rendibilitatForm.import === null"
+                                <button @click="afegeixRendibilitat(c)" :disabled="!rendibilitatForm.dia || rendibilitatForm.import === null"
                                     class="shrink-0 rounded-md bg-green-600 px-3 py-1 text-sm text-white hover:bg-green-700 disabled:opacity-40">
                                     Afegeix
                                 </button>
