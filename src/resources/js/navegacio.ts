@@ -107,6 +107,7 @@ export const grups: Grup[] = [
             { titol: "Fons d'Inversió", ruta: 'fons-inversio.index' },
             { titol: 'Plans de Pensions', ruta: 'plans-pensions.index' },
             { titol: 'Renda Fixa', ruta: 'renda-fixa.index' },
+            { titol: 'Capital social', ruta: 'capital-social.index' },
             { titol: 'Totals mobiliaris', ruta: 'inversions.totals-mobiliaris' },
         ],
     },

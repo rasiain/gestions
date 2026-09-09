@@ -53,7 +53,7 @@ class CompteCorrentRequest extends FormRequest
             'tipus' => [
                 'nullable',
                 'string',
-                'in:corrent,fons_inversio,pla_pensions,renda_fixa',
+                'in:corrent,fons_inversio,pla_pensions,renda_fixa,capital_social',
             ],
             'titular_ids' => [
                 'nullable',

@@ -15,9 +15,10 @@ export interface CompteOrdenable {
     lloguer_nom: string | null;
 }
 
-/** Fons d'inversió, plans de pensions i renda fixa: coses diferents, un sol grup. */
+/** Fons, plans de pensions, renda fixa i capital social: coses diferents, un sol grup. */
 export const esInversio = (c: CompteOrdenable): boolean =>
-    c.tipus === 'fons_inversio' || c.tipus === 'pla_pensions' || c.tipus === 'renda_fixa';
+    c.tipus === 'fons_inversio' || c.tipus === 'pla_pensions'
+    || c.tipus === 'renda_fixa' || c.tipus === 'capital_social';
 
 /** El nom que es llegeix a la fila: el del compte si en té, i si no el número. */
 export const nomVisible = (c: CompteOrdenable): string => c.nom || c.compte_corrent;

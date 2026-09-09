@@ -4,6 +4,7 @@ use App\Http\Controllers\ArrendadorController;
 use App\Http\Controllers\EntitatController;
 use App\Http\Controllers\FonsInversioController;
 use App\Http\Controllers\PlaPensionsController;
+use App\Http\Controllers\CapitalSocialController;
 use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\CategoryImportController;
 use App\Http\Controllers\CompteCorrentController;
@@ -113,7 +114,17 @@ Route::middleware('auth')->group(function () {
     Route::post('/renda-fixa/rendibilitats', [RendaFixaController::class, 'storeRendibilitat'])->name('renda-fixa.rendibilitats.store');
     Route::delete('/renda-fixa/rendibilitats/{rendibilitat}', [RendaFixaController::class, 'destroyRendibilitat'])->name('renda-fixa.rendibilitats.destroy');
 
-    // Els totals mobiliaris sumen les quatre pantalles d'inversions alhora
+    // Capital social de cooperatives de crèdit
+    Route::get('/capital-social', [CapitalSocialController::class, 'index'])->name('capital-social.index');
+    Route::post('/capital-social/contractes', [CapitalSocialController::class, 'storeContracte'])->name('capital-social.contractes.store');
+    Route::put('/capital-social/contractes/{contracte}', [CapitalSocialController::class, 'updateContracte'])->name('capital-social.contractes.update');
+    Route::delete('/capital-social/contractes/{contracte}', [CapitalSocialController::class, 'destroyContracte'])->name('capital-social.contractes.destroy');
+    Route::post('/capital-social/valors', [CapitalSocialController::class, 'storeValor'])->name('capital-social.valors.store');
+    Route::delete('/capital-social/valors/{valor}', [CapitalSocialController::class, 'destroyValor'])->name('capital-social.valors.destroy');
+    Route::post('/capital-social/rendiments', [CapitalSocialController::class, 'storeRendiment'])->name('capital-social.rendiments.store');
+    Route::delete('/capital-social/rendiments/{rendiment}', [CapitalSocialController::class, 'destroyRendiment'])->name('capital-social.rendiments.destroy');
+
+    // Els totals mobiliaris sumen les pantalles d'inversions alhora
     Route::get('/inversions/totals-mobiliaris', [TotalsMobiliarisController::class, 'index'])->name('inversions.totals-mobiliaris');
 
     // Vehicles: dues llistes (els de motor, les bicis) sobre el mateix catàleg

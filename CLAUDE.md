@@ -67,7 +67,7 @@ src/
 - Colors per mòdul: blau → comptes bancaris, ambre → lloguers
 
 ### Base de dades
-- **`g_comptes_corrents.tipus`**: `corrent`, `fons_inversio` o `pla_pensions`. Els dos últims no tenen moviments bancaris —el seu detall són les aportacions, a les pantalles de Fons d'Inversió i de Plans de Pensions— i a les llistes van junts sota el grup **Inversions**, que és com se'n diu al Dashboard. Fins a la migració `2026_08_22_000001` els plans de pensions també eren `fons_inversio`: com que el tipus no els distingia, les dues pantalles oferien els mateixos comptes en crear un contracte i res no impedia penjar un contracte de pensions d'un compte de fons.
+- **`g_comptes_corrents.tipus`**: `corrent`, `fons_inversio`, `pla_pensions`, `renda_fixa` o `capital_social`. Tots menys `corrent` no tenen moviments bancaris —el seu detall són les aportacions o els valors declarats, a les pantalles de Fons d'Inversió, Plans de Pensions, Renda Fixa i Capital social— i a les llistes van junts sota el grup **Inversions**, que és com se'n diu al Dashboard. Fins a la migració `2026_08_22_000001` els plans de pensions també eren `fons_inversio`: com que el tipus no els distingia, les dues pantalles oferien els mateixos comptes en crear un contracte i res no impedia penjar un contracte de pensions d'un compte de fons.
 - Deduplicació de moviments bancaris per hash SHA-256: `data|import|compte_id|seqüència` (el concepte s'exclou intencionadament)
 - Categories jeràrquiques (auto-referència `categoria_pare_id`)
 - Pivots amb dates per a propietaris d'immobles
@@ -141,9 +141,20 @@ Pendent: el fitxer de presentació de l'AEAT, els dies d'arrendament i la casell
 
 Per això **no hi ha formulari de títol nou**: es crea des del formulari del contracte, que és quan se sap l'ISIN. Un ISIN que ja és al catàleg no és cap error de duplicat sinó el mateix producte comprat un altre cop, i s'hi reaprofita el títol **sense tocar-ne el nom** —el nom el comparteixen tots els seus contractes i s'edita al catàleg, que queda només per consultar i corregir. La pantalla avisa abans de desar quan l'ISIN escrit ja hi és.
 
+### Capital social
+
+Les aportacions que fan soci d'una cooperativa de crèdit (`/capital-social`). Va com la renda fixa —un contracte per compte, una sèrie de valors per data i els rendiments cobrats— amb dues diferències que imposa l'extracte:
+
+- **No hi ha catàleg de productes.** El capital social no és cap valor de mercat amb ISIN: és de l'entitat del compte, i el «Contracte» que diu l'extracte és el número del compte mateix. Per això el compte és de tipus `capital_social` i el nom de la posició surt d'ell.
+- **El valor són dos números, no un import**: `titols` i `valor_unitari`, tal com ve l'extracte («Nre. títols 11 · Valor Nominal Unitari 100,00»). El total **no es desa**, que és el producte dels dos i desat només podria contradir-los. El «N. titulars» tampoc: els titulars surten del compte, com a tot el grup d'inversions.
+
+Sense cap valor declarat no val res —aquí no hi ha cap nominal de contracte que serveixi de mínim, com sí que en té la renda fixa— i per això la seva sèrie als totals mobiliaris comença a zero fins al primer valor.
+
+**El nominal es revaloritza.** Entre dos valors seguits el total pot pujar per dues raons ben diferents: perquè hi ha **títols nous** (una aportació) o perquè els que ja hi eren **valen més** (una revaloració, que al banc arriba com un moviment «REVALORACIO TITOLS»: 11 títols de 100 que passen a 102 són 22 €). Les dues es **dedueixen dels valors** i no es desen —els títols nous al preu que hi havia, el canvi de preu a tots els títols—, i per construcció sumen exactament la diferència de total, cosa que és un test. Un capital social que només creix per revaloració i un que creix perquè s'hi ha aportat diners són coses diferents, i la pantalla les separa.
+
 ### Totals mobiliaris
 
-`/inversions/totals-mobiliaris` suma en una sola taula el que les quatre pantalles d'inversions diuen per separat: comptes corrents, fons, plans de pensions i renda fixa. `PatrimoniMobiliariService` posa les quatre en la mateixa forma —un nom, un valor i com es reparteix— i cadascuna es valora **com a la seva pantalla**: el compte pel saldo, el fons i el pla per participacions × darrera cotització, la renda fixa per `valorAData()` (i si no hi ha valor declarat, pel nominal). Els comptes de tipus `fons_inversio`, `pla_pensions` i `renda_fixa` **no hi entren com a comptes**: el que valen són els contractes que hi pengen, i comptar-los tots dos els doblaria.
+`/inversions/totals-mobiliaris` suma en una sola taula el que les pantalles d'inversions diuen per separat: comptes corrents, fons, plans de pensions, renda fixa i capital social. `PatrimoniMobiliariService` posa les quatre en la mateixa forma —un nom, un valor i com es reparteix— i cadascuna es valora **com a la seva pantalla**: el compte pel saldo, el fons i el pla per participacions × darrera cotització, la renda fixa per `valorAData()` (i si no hi ha valor declarat, pel nominal) i el capital social per títols × nominal unitari. Els comptes de tipus `fons_inversio`, `pla_pensions`, `renda_fixa` i `capital_social` **no hi entren com a comptes**: el que valen són els contractes que hi pengen, i comptar-los tots dos els doblaria.
 
 El repartiment és **a parts iguals** entre els titulars del compte, amb el residu per a l'últim, que és el que ja fan els tres «Totals per titular» existents (`CompteCorrentController`, `FonsInversioController`, `RendaFixaController`). Comprovat contra dos d'ells: dona els mateixos números.
 
@@ -169,6 +180,14 @@ Un any sense cap lectura pròpia —només l'assegurança, posem— té `km` i `
 La pestanya **Gràfiques** dibuixa el que diuen els repostatges (chart.js + vue-chartjs, com als fons i als plans de pensions): consum de cada ple amb la mitjana anual sobreposada com a tram pla, dies entre repostatges i lectura del comptador. Tot es calcula al client a partir de les mateixes dades que ja porten les taules —cap consulta nova—, i el tram de la mitjana va del darrer repostatge de l'any anterior al darrer de l'any, que és exactament el que ha mesurat `perAny()`. Les dues sèries són `#0284c7` i `#d97706` a les dues aparences: passen les comprovacions de contrast i de daltonisme sobre fons clar i fosc, i així només cal canviar textos i quadrícula segons `prefers-color-scheme` (que és com Tailwind fa el mode fosc en aquest projecte, sense classe `dark` a l'arrel).
 
 Els CSV del Numbers van del més recent al més antic i hi ha dies amb dos repostatges: l'ordenació desempata per `km_totals`, que només puja.
+
+### Formularis d'Inertia: `data` és un nom prohibit
+
+**Cap camp d'`useForm` no es pot dir `data`.** `form.data()` és un mètode del formulari —retorna els camps— i un camp amb aquest nom el trepitja: el `v-model` posa la funció dins de l'`<input>` (`The specified value "data(){...}" does not conform to "yyyy-MM-dd"`) i l'enviament peta amb `data is not a function` **abans de sortir del navegador**, de manera que al servidor no hi arriba res: ni petició als logs, ni error, ni fila a la base de dades. El botó sembla mort i no hi ha cap pista de per què.
+
+La convenció és dir-ne **`dia`** al formulari i enviar-lo com a `data` amb `transform` (`Vehicles/Index.vue` en té la funció `perAlServidor`), que així el servidor no canvia. Hi van caure alhora els valors i els cupons de renda fixa, els valors i els rendiments de capital social, i els repostatges i les despeses de vehicles.
+
+D'aquí també ve una regla de disseny d'aquests formularis: **el botó de desar no es deshabilita** quan falta alguna cosa. Un botó apagat no diu què li falta, i el mateix silenci tapava el problema; en comptes d'això es clica sempre i, si falta un camp, es diu quin. Els imports i els números van en camps de **text**, no `type="number"`: un camp numèric rebutja en silenci el que no entén («100,00» amb coma, segons el navegador) i el deixa buit per dins encara que a la pantalla s'hi vegi el text.
 
 ### Components reutilitzables destacats
 - `Services\Concerns\ResolPerArbre`: resolució d'immoble i municipi des de l'arbre de categories, compartida per `TaxesService` i `AssegurancesService` (si divergissin, el mateix immoble sortiria amb dos noms segons la vista). `Http\Controllers\Concerns\CategoriesPerCompte` fa el mateix amb el selector de categories de les dues vistes.

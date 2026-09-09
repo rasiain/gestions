@@ -34,7 +34,7 @@ interface Titular {
     nom: string;
 }
 
-type Font = 'comptes' | 'fons' | 'pensions' | 'renda_fixa';
+type Font = 'comptes' | 'fons' | 'pensions' | 'renda_fixa' | 'capital_social';
 
 interface Props {
     posicions: Posicio[];
@@ -50,6 +50,7 @@ const FONTS: { clau: Font; titol: string; descripcio: string }[] = [
     { clau: 'fons',       titol: "Fons d'inversió",  descripcio: 'Participacions per la darrera cotització' },
     { clau: 'pensions',   titol: 'Plans de pensions', descripcio: 'Participacions per la darrera cotització' },
     { clau: 'renda_fixa', titol: 'Renda fixa',       descripcio: 'Darrer valor patrimonial declarat' },
+    { clau: 'capital_social', titol: 'Capital social', descripcio: 'Títols pel nominal unitari' },
 ];
 
 const clauTitular = (id: number | null) => id ?? 'sense';
@@ -492,9 +493,12 @@ const obreDetall = (fila: FilaTitular) => {
                     </div>
 
                     <!-- Posicions, per font -->
-                    <div class="grid gap-px bg-gray-200 dark:bg-gray-700 sm:grid-cols-2 xl:grid-cols-4">
-                        <div v-for="f in fontsAmbPosicions" :key="f.clau" class="bg-white p-4 dark:bg-gray-800">
-                            <label class="flex cursor-pointer items-start gap-2">
+                    <div class="grid gap-px bg-gray-200 dark:bg-gray-700 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+                        <div v-for="f in fontsAmbPosicions" :key="f.clau" class="flex flex-col bg-white dark:bg-gray-800">
+                            <label
+                                class="flex cursor-pointer items-start gap-2 border-b border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-700/50"
+                                :class="estatFont(f.clau) === 'res' ? 'opacity-60' : ''"
+                            >
                                 <input
                                     type="checkbox"
                                     class="mt-0.5 rounded border-gray-300 text-green-600 focus:ring-green-500 dark:border-gray-600"
@@ -508,7 +512,7 @@ const obreDetall = (fila: FilaTitular) => {
                                 </span>
                             </label>
 
-                            <div class="mt-3 space-y-1 border-t border-gray-100 pt-2 dark:border-gray-700">
+                            <div class="space-y-1 p-3">
                                 <label
                                     v-for="p in posicionsDe(f.clau)"
                                     :key="p.clau"

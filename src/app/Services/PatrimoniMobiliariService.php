@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\CapitalSocialContracte;
+use App\Models\CapitalSocialValor;
 use App\Models\CompteCorrent;
 use App\Models\FonsInversio;
 use App\Models\PlaPensions;
@@ -15,7 +17,8 @@ use Illuminate\Support\Facades\DB;
  *
  * Cada pantalla d'inversions ja diu què val el que hi té, però ho diu pel seu compte:
  * els comptes corrents pel saldo, els fons i els plans per participacions × cotització,
- * la renda fixa pel valor patrimonial. Aquí es posen totes en la mateixa forma —un nom,
+ * la renda fixa pel valor patrimonial i el capital social per títols × nominal. Aquí es posen
+ * totes en la mateixa forma —un nom,
  * un valor i com es reparteix entre els titulars— perquè es puguin sumar.
  *
  * El repartiment és sempre **a parts iguals** entre els titulars del compte, que és el
@@ -31,7 +34,7 @@ use Illuminate\Support\Facades\DB;
 class PatrimoniMobiliariService
 {
     /** Les fonts que se sumen, en l'ordre en què es llegeixen. */
-    public const FONTS = ['comptes', 'fons', 'pensions', 'renda_fixa'];
+    public const FONTS = ['comptes', 'fons', 'pensions', 'renda_fixa', 'capital_social'];
 
     /**
      * Una fila per posició: un compte, un contracte de fons, de pla o de renda fixa.
@@ -48,6 +51,7 @@ class PatrimoniMobiliariService
             ...$this->fons($mesos),
             ...$this->pensions($mesos),
             ...$this->rendaFixa($mesos),
+            ...$this->capitalSocial($mesos),
         ];
     }
 
@@ -66,6 +70,7 @@ class PatrimoniMobiliariService
             DB::table('g_fi_aportacions')->min('data'),
             DB::table('g_pp_aportacions')->min('data'),
             DB::table('g_rf_contractes')->min('data_compra'),
+            DB::table('g_cs_valors')->min('data'),
         ])->filter()->min();
 
         $fins  = Carbon::now()->startOfMonth();
@@ -101,8 +106,8 @@ class PatrimoniMobiliariService
     /**
      * Els comptes del dia a dia, pel saldo d'avui.
      *
-     * Els comptes d'inversió no hi entren encara que siguin comptes: el seu valor són les
-     * participacions dels contractes que hi pengen, i comptar-los dues vegades el doblaria.
+     * Els comptes d'inversió no hi entren encara que siguin comptes: el seu valor són els
+     * contractes que hi pengen, i comptar-los dues vegades el doblaria.
      *
      * @param  array<int, string>  $mesos
      * @return array<int, array<string, mixed>>
@@ -232,6 +237,52 @@ class PatrimoniMobiliariService
                 serie: $this->serieRendaFixa($c, $mesos),
             ))
             ->all();
+    }
+
+    /**
+     * El capital social: títols per nominal unitari, com ho diu l'extracte.
+     *
+     * El nom de la posició és el del compte, que és on hi ha l'entitat i el número de
+     * contracte: aquí no hi ha cap catàleg de producte del qual prendre'l.
+     *
+     * @param  array<int, string>  $mesos
+     * @return array<int, array<string, mixed>>
+     */
+    private function capitalSocial(array $mesos): array
+    {
+        return CapitalSocialContracte::with(['valors', 'compteCorrent.titulars', 'compteCorrent.entitatRelacio'])
+            ->get()
+            ->map(fn (CapitalSocialContracte $c) => $this->posicio(
+                font: 'capital_social',
+                id: $c->id,
+                nom: $c->compteCorrent?->nom ?? $c->compteCorrent?->compte_corrent ?? 'Capital social',
+                detall: $c->compteCorrent?->entitat,
+                etiqueta: null,
+                valor: $c->valorAData(),
+                titulars: $c->compteCorrent?->titulars ?? collect(),
+                serie: $this->serieCapitalSocial($c, $mesos),
+            ))
+            ->all();
+    }
+
+    /**
+     * Què valia el capital social a final de cada mes.
+     *
+     * Abans del primer valor declarat no val res: aquí no hi ha cap nominal de contracte
+     * que serveixi de mínim, com sí que en té la renda fixa.
+     *
+     * @param  array<int, string>  $mesos
+     * @return array<string, float>
+     */
+    private function serieCapitalSocial(CapitalSocialContracte $c, array $mesos): array
+    {
+        $perMes = [];
+
+        foreach ($c->valors->sortBy(fn ($v) => $v->data->timestamp) as $valor) {
+            $perMes[$valor->data->format('Y-m')] = round($valor->titols * (float) $valor->valor_unitari, 2);
+        }
+
+        return $this->arrossega($perMes, $mesos);
     }
 
     /**
