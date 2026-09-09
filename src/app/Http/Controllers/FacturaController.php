@@ -13,10 +13,23 @@ class FacturaController extends Controller
     public function index(Lloguer $lloguer, Request $request): JsonResponse
     {
         $query = $lloguer->factures()
-            ->with(['linies', 'moviment:id,data_moviment,import'])
-            ->orderByRaw("CASE WHEN tipus = 'mensual' THEN 0 ELSE 1 END")
-            ->orderBy('mes')
-            ->orderBy('data_emissio');
+            ->with(['linies', 'moviment:id,data_moviment,import']);
+
+        if ($lloguer->es_habitatge) {
+            // Sense numeració: els mensuals per mes i, al final, els puntuals.
+            $query->orderByRaw("CASE WHEN tipus = 'mensual' THEN 0 ELSE 1 END")
+                ->orderBy('mes')
+                ->orderBy('data_emissio');
+        } else {
+            // El número de factura és la seqüència d'emissió: una factura puntual
+            // va entre les mensuals del seu mes, no al final de la llista.
+            // Les que encara no en tenen (esborranys) van al final.
+            $query->orderByRaw("CASE WHEN numero_factura IS NULL OR numero_factura = '' THEN 1 ELSE 0 END")
+                ->orderBy('numero_factura')
+                ->orderByRaw("CASE WHEN tipus = 'mensual' THEN 0 ELSE 1 END")
+                ->orderBy('mes')
+                ->orderBy('data_emissio');
+        }
 
         if ($any = $request->integer('any')) {
             $query->where(function ($q) use ($any) {
