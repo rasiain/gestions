@@ -276,15 +276,15 @@ const setDateRange = (range: 'week' | 'month' | 'year') => {
     filterForm.data_fi = formatLocalDate(fi);
 };
 
+// Netejar filtres torna a la URL neta del compte. Buidar els camps un a un
+// deixava rastre: el cercador i els nodes desplegats de l'arbre de categories
+// són estat intern del selector, i la petició depenia del watch amb debounce.
+// Remuntant la pàgina, el formulari es refà des dels filtres buits del servidor.
 const clearFilters = () => {
-    filterForm.search = '';
-    filterForm.import_exacte = '';
-    filterForm.categoria_id = null;
-    filterForm.data_inici = '';
-    filterForm.data_fi = '';
-    filterForm.tipus = null;
-    filterForm.conciliat = null;
-    filterForm.ordre = 'desc';
+    router.get('/moviments', { compte_corrent_id: filterForm.compte_corrent_id }, {
+        preserveState: false,
+        preserveScroll: true,
+    });
 };
 
 // ── Verificació de saldos ────────────────────────────────────────
@@ -795,8 +795,11 @@ const conciliarPagina = async (conciliat: boolean) => {
                             <button
                                 @click="clearFilters"
                                 type="button"
-                                class="inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600"
+                                class="inline-flex items-center gap-1.5 justify-center rounded-md border border-transparent bg-amber-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-600 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                             >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
                                 Netejar filtres
                             </button>
                         </div>
