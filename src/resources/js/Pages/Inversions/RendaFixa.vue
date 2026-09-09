@@ -100,27 +100,28 @@ function obreDetall(contracte: Contracte) {
 }
 
 // ---- Títols ----
+// El catàleg només s'edita: els títols nous es creen des del formulari del contracte, que
+// és quan se saben (l'ISIN arriba amb la compra, no abans).
 const showTitol = ref(false);
 const titolEditat = ref<Titol | null>(null);
 const titolForm = useForm({ isin: '', nom: '', emissor: '', notes: '' });
 
-function obreTitol(titol: Titol | null) {
+function obreTitol(titol: Titol) {
     titolEditat.value = titol;
     titolForm.clearErrors();
-    titolForm.isin = titol?.isin ?? '';
-    titolForm.nom = titol?.nom ?? '';
-    titolForm.emissor = titol?.emissor ?? '';
+    titolForm.isin = titol.isin;
+    titolForm.nom = titol.nom;
+    titolForm.emissor = titol.emissor ?? '';
     titolForm.notes = '';
     showTitol.value = true;
 }
 
 function desaTitol() {
-    const opcions = { preserveScroll: true, onSuccess: () => (showTitol.value = false) };
-    if (titolEditat.value) {
-        titolForm.put(route('renda-fixa.titols.update', titolEditat.value.id), opcions);
-        return;
-    }
-    titolForm.post(route('renda-fixa.titols.store'), opcions);
+    if (!titolEditat.value) return;
+    titolForm.put(route('renda-fixa.titols.update', titolEditat.value.id), {
+        preserveScroll: true,
+        onSuccess: () => (showTitol.value = false),
+    });
 }
 
 // ---- Contractes ----
@@ -128,6 +129,9 @@ const showContracte = ref(false);
 const contracteEditat = ref<Contracte | null>(null);
 const contracteForm = useForm({
     titol_id: null as number | null,
+    isin: '',
+    nom: '',
+    emissor: '',
     compte_corrent_id: null as number | null,
     compte_rendibilitat_id: null as number | null,
     nominal: null as number | null,
@@ -136,10 +140,32 @@ const contracteForm = useForm({
     notes: '',
 });
 
+/** El títol del contracte: un del catàleg, o un de nou escrit aquí mateix. */
+const titolNou = computed({
+    get: () => contracteForm.titol_id === null,
+    set: (nou: boolean) => {
+        contracteForm.titol_id = nou ? null : (props.titols[0]?.id ?? null);
+        if (nou) contracteForm.clearErrors('titol_id');
+    },
+});
+
+/**
+ * Si l'ISIN escrit ja és al catàleg, no és cap error: s'hi reaprofitarà aquell títol.
+ * Dir-ho abans de desar estalvia la sorpresa de veure un nom que no és el que s'ha escrit.
+ */
+const titolExistent = computed(() => {
+    const isin = contracteForm.isin.trim().toUpperCase();
+    return isin.length === 12 ? (props.titols.find(t => t.isin === isin) ?? null) : null;
+});
+
 function obreContracte(contracte: Contracte | null) {
     contracteEditat.value = contracte;
     contracteForm.clearErrors();
+    // Amb el catàleg buit no hi ha res a triar: el títol s'escriu
     contracteForm.titol_id = contracte?.titol_id ?? props.titols[0]?.id ?? null;
+    contracteForm.isin = '';
+    contracteForm.nom = '';
+    contracteForm.emissor = '';
     contracteForm.compte_corrent_id = contracte?.compte_corrent_id ?? props.comptesTitol[0]?.id ?? null;
     contracteForm.compte_rendibilitat_id = contracte?.compte_rendibilitat_id ?? null;
     contracteForm.nominal = contracte?.nominal ?? null;
@@ -214,11 +240,7 @@ function obreDetallTitular(t: TotalTitular) {
                         class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600">
                         Totals per titular
                     </button>
-                    <button @click="obreTitol(null)"
-                        class="inline-flex items-center rounded-md border border-green-600 bg-white px-4 py-2 text-sm font-medium text-green-700 shadow-sm hover:bg-green-50 dark:bg-gray-800 dark:text-green-400 dark:hover:bg-gray-700">
-                        Nou títol
-                    </button>
-                    <button @click="obreContracte(null)" :disabled="!props.titols.length || !props.comptesTitol.length"
+                    <button @click="obreContracte(null)" :disabled="!props.comptesTitol.length"
                         class="inline-flex items-center rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700 disabled:opacity-40">
                         Nou contracte
                     </button>
@@ -391,7 +413,10 @@ function obreDetallTitular(t: TotalTitular) {
                 <!-- Catàleg de títols -->
                 <div v-if="props.titols.length" class="overflow-hidden rounded-lg bg-white shadow-sm dark:bg-gray-800">
                     <div class="p-4">
-                        <h3 class="mb-2 text-xs font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">Títols</h3>
+                        <h3 class="text-xs font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">Títols</h3>
+                        <p class="mb-2 text-xs text-gray-400 dark:text-gray-500">
+                            El catàleg del que s'ha comprat. S'hi apunta sol en donar d'alta un contracte.
+                        </p>
                         <table class="w-full text-sm">
                             <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                                 <tr v-for="t in props.titols" :key="t.id">
@@ -409,12 +434,13 @@ function obreDetallTitular(t: TotalTitular) {
             </div>
         </div>
 
-        <!-- Títol -->
+        <!-- Títol: només s'edita; els nous es creen des del contracte -->
         <Modal :show="showTitol" max-width="lg" @close="showTitol = false">
             <div class="p-6">
-                <h3 class="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
-                    {{ titolEditat ? 'Edita el títol' : 'Nou títol' }}
-                </h3>
+                <h3 class="mb-1 text-lg font-semibold text-gray-900 dark:text-gray-100">Edita el títol</h3>
+                <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
+                    El canvi val per a tots els contractes que tenen aquest títol.
+                </p>
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">ISIN</label>
@@ -448,11 +474,39 @@ function obreDetallTitular(t: TotalTitular) {
                     {{ contracteEditat ? 'Edita el contracte' : 'Nou contracte' }}
                 </h3>
                 <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Títol</label>
-                        <select v-model="contracteForm.titol_id" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                    <div class="rounded-md border border-gray-200 p-3 dark:border-gray-600">
+                        <div class="flex items-baseline justify-between gap-3">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Títol</label>
+                            <button v-if="props.titols.length" type="button" @click="titolNou = !titolNou"
+                                class="text-xs text-green-700 hover:underline dark:text-green-400">
+                                {{ titolNou ? 'Tria\'n un del catàleg' : 'Escriu-ne un de nou' }}
+                            </button>
+                        </div>
+
+                        <select v-if="!titolNou" v-model="contracteForm.titol_id"
+                            class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
                             <option v-for="t in props.titols" :key="t.id" :value="t.id">{{ t.isin }} — {{ t.nom }}</option>
                         </select>
+
+                        <div v-else class="mt-1 space-y-3">
+                            <div>
+                                <input v-model="contracteForm.isin" type="text" maxlength="12" placeholder="ISIN — XS2952043110"
+                                    class="block w-full rounded-md border-gray-300 font-mono text-sm uppercase shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                                <p v-if="contracteForm.errors.isin" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ contracteForm.errors.isin }}</p>
+                                <p v-else-if="titolExistent" class="mt-1 text-xs text-green-700 dark:text-green-400">
+                                    Aquest ISIN ja és al catàleg: «{{ titolExistent.nom }}». S'hi afegirà el contracte.
+                                </p>
+                            </div>
+                            <div v-if="!titolExistent">
+                                <input v-model="contracteForm.nom" type="text" placeholder="Nom del valor — BNP ESTRUCT EUROSTOXX 50 3A"
+                                    class="block w-full rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                                <p v-if="contracteForm.errors.nom" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ contracteForm.errors.nom }}</p>
+                            </div>
+                            <input v-if="!titolExistent" v-model="contracteForm.emissor" type="text" placeholder="Emissor (opcional)"
+                                class="block w-full rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                        </div>
+
+                        <p v-if="contracteForm.errors.titol_id" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ contracteForm.errors.titol_id }}</p>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Contracte (compte del títol)</label>

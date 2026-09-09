@@ -103,7 +103,6 @@ Route::middleware('auth')->group(function () {
 
     // Renda fixa
     Route::get('/renda-fixa', [RendaFixaController::class, 'index'])->name('renda-fixa.index');
-    Route::post('/renda-fixa/titols', [RendaFixaController::class, 'storeTitol'])->name('renda-fixa.titols.store');
     Route::put('/renda-fixa/titols/{titol}', [RendaFixaController::class, 'updateTitol'])->name('renda-fixa.titols.update');
     Route::delete('/renda-fixa/titols/{titol}', [RendaFixaController::class, 'destroyTitol'])->name('renda-fixa.titols.destroy');
     Route::post('/renda-fixa/contractes', [RendaFixaController::class, 'storeContracte'])->name('renda-fixa.contractes.store');

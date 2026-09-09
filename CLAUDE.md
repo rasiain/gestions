@@ -135,6 +135,12 @@ La pantalla avisa del que cal repassar abans de declarar: quotes que no sumen 10
 
 Pendent: el fitxer de presentació de l'AEAT, els dies d'arrendament i la casella 3 (interessos i despeses de reparació pendents), que no s'ha fet servir mai.
 
+### Renda fixa
+
+**El títol és el producte, el contracte és el que en tens tu** (`g_rf_titols` / `g_rf_contractes`), com el fons i el seu contracte. L'analogia, però, es trenca en el que importa: la cotització d'un fons viu al *fons* perquè és compartida, mentre que el valor patrimonial de la renda fixa es desa **per contracte** i en euros, que és com ve a l'extracte. El títol, doncs, no entra en cap càlcul: només hi posa l'ISIN, el nom i l'emissor, i permet que el mateix producte en dos comptes surti amb el mateix nom.
+
+Per això **no hi ha formulari de títol nou**: es crea des del formulari del contracte, que és quan se sap l'ISIN. Un ISIN que ja és al catàleg no és cap error de duplicat sinó el mateix producte comprat un altre cop, i s'hi reaprofita el títol **sense tocar-ne el nom** —el nom el comparteixen tots els seus contractes i s'edita al catàleg, que queda només per consultar i corregir. La pantalla avisa abans de desar quan l'ISIN escrit ja hi és.
+
 ### Totals mobiliaris
 
 `/inversions/totals-mobiliaris` suma en una sola taula el que les quatre pantalles d'inversions diuen per separat: comptes corrents, fons, plans de pensions i renda fixa. `PatrimoniMobiliariService` posa les quatre en la mateixa forma —un nom, un valor i com es reparteix— i cadascuna es valora **com a la seva pantalla**: el compte pel saldo, el fons i el pla per participacions × darrera cotització, la renda fixa per `valorAData()` (i si no hi ha valor declarat, pel nominal). Els comptes de tipus `fons_inversio`, `pla_pensions` i `renda_fixa` **no hi entren com a comptes**: el que valen són els contractes que hi pengen, i comptar-los tots dos els doblaria.

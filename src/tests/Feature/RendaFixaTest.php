@@ -130,23 +130,67 @@ class RendaFixaTest extends TestCase
         $this->assertSame(12500.0, $totals['Bru Segon']['total']);
     }
 
-    public function test_lisin_ha_de_tenir_forma_disin_i_no_es_pot_repetir(): void
+    /**
+     * @param  array<string, mixed>  $dades
+     * @return array<string, mixed>
+     */
+    private function contracteNou(array $dades): array
+    {
+        return [
+            'compte_corrent_id' => $this->compte('De títols ' . $this->seq)->id,
+            'nominal'           => 10000,
+            'data_compra'       => '2026-01-01',
+            ...$dades,
+        ];
+    }
+
+    public function test_el_titol_es_pot_escriure_al_mateix_formulari_del_contracte(): void
+    {
+        $this->actingAs(User::factory()->create())
+            ->post(route('renda-fixa.contractes.store'), $this->contracteNou([
+                'isin'    => 'XS2952043110',
+                'nom'     => 'BNP ESTRUCT EUROSTOXX 50 3A',
+                'emissor' => 'BNP',
+            ]))
+            ->assertRedirect();
+
+        $this->assertSame(1, RendaFixaTitol::count());
+        $this->assertSame('BNP', RendaFixaTitol::first()->emissor);
+        $this->assertSame(RendaFixaTitol::first()->id, RendaFixaContracte::first()->titol_id);
+    }
+
+    public function test_un_isin_que_ja_hi_es_reaprofita_el_titol_en_comptes_de_fallar(): void
+    {
+        $titol = $this->titol();
+
+        // El mateix producte, comprat un altre cop: en minúscules i sense repetir-ne el nom
+        $this->actingAs(User::factory()->create())
+            ->post(route('renda-fixa.contractes.store'), $this->contracteNou(['isin' => 'xs2952043110']))
+            ->assertRedirect();
+
+        $this->assertSame(1, RendaFixaTitol::count());
+        $this->assertSame($titol->id, RendaFixaContracte::first()->titol_id);
+        $this->assertSame('BNP ESTRUCT EUROSTOXX 50 3A', $titol->fresh()->nom);
+    }
+
+    public function test_el_contracte_necessita_un_titol_del_cataleg_o_un_isin_valid(): void
     {
         $usuari = User::factory()->create();
 
         $this->actingAs($usuari)
-            ->post(route('renda-fixa.titols.store'), ['isin' => 'AIXO NO VAL', 'nom' => 'Prova'])
-            ->assertSessionHasErrors('isin');
+            ->post(route('renda-fixa.contractes.store'), $this->contracteNou([]))
+            ->assertSessionHasErrors('titol_id');
 
         $this->actingAs($usuari)
-            ->post(route('renda-fixa.titols.store'), ['isin' => 'XS2952043110', 'nom' => 'Prova'])
-            ->assertRedirect();
-
-        $this->actingAs($usuari)
-            ->post(route('renda-fixa.titols.store'), ['isin' => 'xs2952043110', 'nom' => 'Repetit'])
+            ->post(route('renda-fixa.contractes.store'), $this->contracteNou(['isin' => 'AIXO NO VAL', 'nom' => 'Prova']))
             ->assertSessionHasErrors('isin');
 
-        $this->assertSame(1, RendaFixaTitol::count());
+        // Un ISIN que no és al catàleg sí que necessita nom
+        $this->actingAs($usuari)
+            ->post(route('renda-fixa.contractes.store'), $this->contracteNou(['isin' => 'XS2952043110']))
+            ->assertSessionHasErrors('nom');
+
+        $this->assertSame(0, RendaFixaContracte::count());
     }
 
     public function test_nomes_sofereixen_els_comptes_de_renda_fixa_per_al_titol(): void

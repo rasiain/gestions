@@ -159,13 +159,6 @@ class RendaFixaController extends Controller
 
     // ---- Títols ----
 
-    public function storeTitol(RendaFixaTitolRequest $request)
-    {
-        RendaFixaTitol::create($request->validated());
-
-        return back();
-    }
-
     public function updateTitol(RendaFixaTitolRequest $request, RendaFixaTitol $titol)
     {
         $titol->update($request->validated());
@@ -184,16 +177,44 @@ class RendaFixaController extends Controller
 
     public function storeContracte(RendaFixaContracteRequest $request)
     {
-        RendaFixaContracte::create($request->validated());
+        RendaFixaContracte::create([
+            ...$request->dadesDelContracte(),
+            'titol_id' => $this->titolDe($request)->id,
+        ]);
 
         return back();
     }
 
     public function updateContracte(RendaFixaContracteRequest $request, RendaFixaContracte $contracte)
     {
-        $contracte->update($request->validated());
+        $contracte->update([
+            ...$request->dadesDelContracte(),
+            'titol_id' => $this->titolDe($request)->id,
+        ]);
 
         return back();
+    }
+
+    /**
+     * El títol del contracte: el del catàleg, o el que s'ha escrit al mateix formulari.
+     *
+     * Un ISIN que ja hi és no és cap error —és el mateix producte, comprat un altre cop o
+     * en un altre compte—: s'hi reaprofita el títol i no se'n toca el nom, que s'edita al
+     * catàleg i el comparteixen tots els contractes que el tenen.
+     */
+    private function titolDe(RendaFixaContracteRequest $request): RendaFixaTitol
+    {
+        if ($request->filled('titol_id')) {
+            return RendaFixaTitol::findOrFail($request->integer('titol_id'));
+        }
+
+        return RendaFixaTitol::firstOrCreate(
+            ['isin' => $request->string('isin')->toString()],
+            [
+                'nom'     => $request->string('nom')->toString(),
+                'emissor' => $request->input('emissor'),
+            ],
+        );
     }
 
     public function destroyContracte(RendaFixaContracte $contracte)
