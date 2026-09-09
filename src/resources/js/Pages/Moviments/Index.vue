@@ -5,6 +5,7 @@ import BulkEditModal from '@/Components/BulkEditModal.vue';
 import CategoriaCell from '@/Components/CategoriaCell.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch, onUnmounted } from 'vue';
+import { esInversio, perEntitatINom } from '@/comptes';
 
 interface CompteCorrent {
     id: number;
@@ -211,13 +212,12 @@ const selectedCompte = computed(() => {
     return props.comptesCorrents.find(c => c.id === props.selectedCompteCorrentId);
 });
 
-// Els mateixos tres grups que la llista de comptes corrents: barrejar les
-// inversions amb els comptes del dia a dia obliga a llegir-se la llista sencera.
-const esInversio = (c: CompteCorrent) => c.tipus === 'fons_inversio' || c.tipus === 'pla_pensions' || c.tipus === 'renda_fixa';
-
-const comptesCorrents = computed(() => props.comptesCorrents.filter(c => !c.lloguer_nom && !esInversio(c)));
-const comptesLloguers = computed(() => props.comptesCorrents.filter(c => !!c.lloguer_nom));
-const comptesInversions = computed(() => props.comptesCorrents.filter(esInversio));
+// Els mateixos tres grups que la llista de comptes corrents, i amb el mateix
+// ordre: barrejar les inversions amb els comptes del dia a dia obliga a
+// llegir-se la llista sencera, i dos ordres diferents, a buscar dues vegades.
+const comptesCorrents = computed(() => props.comptesCorrents.filter(c => !c.lloguer_nom && !esInversio(c)).sort(perEntitatINom));
+const comptesLloguers = computed(() => props.comptesCorrents.filter(c => !!c.lloguer_nom).sort(perEntitatINom));
+const comptesInversions = computed(() => props.comptesCorrents.filter(esInversio).sort(perEntitatINom));
 
 const onCompteCorrentChange = () => {
     router.get('/moviments', {

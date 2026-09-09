@@ -4,6 +4,7 @@ import BalancCompteModal from '@/Components/BalancCompteModal.vue';
 import Modal from '@/Components/Modal.vue';
 import { Head, useForm, router, Link } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
+import { esInversio, perEntitatINom } from '@/comptes';
 
 interface Titular {
     id: number;
@@ -152,12 +153,11 @@ const formatSaldo = (saldo: number | null): string => {
     }).format(saldo);
 };
 
-/** Fons d'inversió i plans de pensions: dues coses diferents, un sol grup. */
-const esInversio = (c: CompteCorrent) => c.tipus === 'fons_inversio' || c.tipus === 'pla_pensions' || c.tipus === 'renda_fixa';
-
-const comptesCorrents = computed(() => props.comptesCorrents.filter(c => !c.lloguer_nom && !esInversio(c)));
-const comptesLloguers = computed(() => props.comptesCorrents.filter(c => !!c.lloguer_nom));
-const comptesInversions = computed(() => props.comptesCorrents.filter(esInversio));
+// El camp `ordre` només decideix quins comptes hi ha; dins de cada grup la
+// llista es llegeix buscant primer el banc, i per això mana l'entitat.
+const comptesCorrents = computed(() => props.comptesCorrents.filter(c => !c.lloguer_nom && !esInversio(c)).sort(perEntitatINom));
+const comptesLloguers = computed(() => props.comptesCorrents.filter(c => !!c.lloguer_nom).sort(perEntitatINom));
+const comptesInversions = computed(() => props.comptesCorrents.filter(esInversio).sort(perEntitatINom));
 
 // Clicar la fila obre els moviments del compte, com a la llista de lloguers
 const obrirMoviments = (compte: CompteCorrent) => {
