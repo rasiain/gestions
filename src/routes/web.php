@@ -29,6 +29,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PersonaController;
 use App\Http\Controllers\ProveidorController;
 use App\Http\Controllers\RendaFixaController;
+use App\Http\Controllers\TotalsMobiliarisController;
 use App\Http\Controllers\VehicleController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -112,6 +113,9 @@ Route::middleware('auth')->group(function () {
     Route::delete('/renda-fixa/valors/{valor}', [RendaFixaController::class, 'destroyValor'])->name('renda-fixa.valors.destroy');
     Route::post('/renda-fixa/rendibilitats', [RendaFixaController::class, 'storeRendibilitat'])->name('renda-fixa.rendibilitats.store');
     Route::delete('/renda-fixa/rendibilitats/{rendibilitat}', [RendaFixaController::class, 'destroyRendibilitat'])->name('renda-fixa.rendibilitats.destroy');
+
+    // Els totals mobiliaris sumen les quatre pantalles d'inversions alhora
+    Route::get('/inversions/totals-mobiliaris', [TotalsMobiliarisController::class, 'index'])->name('inversions.totals-mobiliaris');
 
     // Vehicles: dues llistes (els de motor, les bicis) sobre el mateix catàleg
     Route::get('/vehicles-motor', [VehicleController::class, 'vehiclesMotor'])->name('vehicles-motor.index');
