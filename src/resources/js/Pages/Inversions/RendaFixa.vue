@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import { num, perAlServidor, queFalta } from '@/formularis';
 
 interface Titol {
     id: number;
@@ -190,16 +191,32 @@ function eliminaContracte(contracte: Contracte) {
 }
 
 // ---- Valors i cupons ----
-const valorForm = useForm({ contracte_id: 0, dia: '', valor_patrimonial: null as number | null });
-const rendibilitatForm = useForm({ contracte_id: 0, dia: '', import: null as number | null, notes: '' });
+// Els imports són camps de text i es llegeixen amb num(): «1.100,50» i «1100.5» valen igual
+const valorForm = useForm({ contracte_id: 0, dia: '', valor_patrimonial: null as number | string | null });
+const rendibilitatForm = useForm({ contracte_id: 0, dia: '', import: null as number | string | null, notes: '' });
+
+const valorEscrit = computed(() => num(valorForm.valor_patrimonial));
+const importEscrit = computed(() => num(rendibilitatForm.import));
+
+// El que falta per poder desar, dit en veu alta: el botó no es deshabilita mai
+const avisValor = ref<string | null>(null);
+const avisRendibilitat = ref<string | null>(null);
+
+/** L'avís d'aquí o el que hagi tornat el servidor: mai no es desa en silenci. */
+const errorValor = computed(() => avisValor.value ?? Object.values(valorForm.errors)[0] ?? null);
+const errorRendibilitat = computed(() => avisRendibilitat.value ?? Object.values(rendibilitatForm.errors)[0] ?? null);
 
 function afegeixValor(contracte: Contracte) {
+    avisValor.value = queFalta(valorForm.dia, [[valorEscrit.value, 'el valor']]);
+    if (avisValor.value) return;
+
     valorForm.contracte_id = contracte.id;
-    // `dia` viatja com a `data`: al formulari no s'hi pot dir així, al servidor sí
-    valorForm.transform(({ dia, ...dades }) => ({ ...dades, data: dia })).post(route('renda-fixa.valors.store'), {
-        preserveScroll: true,
-        onSuccess: () => valorForm.reset('dia', 'valor_patrimonial'),
-    });
+    valorForm
+        .transform(dades => ({ ...perAlServidor(dades), valor_patrimonial: valorEscrit.value }))
+        .post(route('renda-fixa.valors.store'), {
+            preserveScroll: true,
+            onSuccess: () => valorForm.reset('dia', 'valor_patrimonial'),
+        });
 }
 
 function eliminaValor(id: number) {
@@ -207,11 +224,16 @@ function eliminaValor(id: number) {
 }
 
 function afegeixRendibilitat(contracte: Contracte) {
+    avisRendibilitat.value = queFalta(rendibilitatForm.dia, [[importEscrit.value, "l'import"]]);
+    if (avisRendibilitat.value) return;
+
     rendibilitatForm.contracte_id = contracte.id;
-    rendibilitatForm.transform(({ dia, ...dades }) => ({ ...dades, data: dia })).post(route('renda-fixa.rendibilitats.store'), {
-        preserveScroll: true,
-        onSuccess: () => rendibilitatForm.reset('dia', 'import', 'notes'),
-    });
+    rendibilitatForm
+        .transform(dades => ({ ...perAlServidor(dades), import: importEscrit.value }))
+        .post(route('renda-fixa.rendibilitats.store'), {
+            preserveScroll: true,
+            onSuccess: () => rendibilitatForm.reset('dia', 'import', 'notes'),
+        });
 }
 
 function eliminaRendibilitat(id: number) {
@@ -339,13 +361,14 @@ function obreDetallTitular(t: TotalTitular) {
                             <div class="mt-2 flex gap-2">
                                 <input v-model="valorForm.dia" type="date"
                                     class="w-40 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
-                                <input v-model.number="valorForm.valor_patrimonial" type="number" step="0.01" placeholder="Valor"
+                                <input v-model="valorForm.valor_patrimonial" type="text" inputmode="decimal" placeholder="Valor"
                                     class="w-32 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
-                                <button @click="afegeixValor(c)" :disabled="!valorForm.dia || valorForm.valor_patrimonial === null"
+                                <button @click="afegeixValor(c)" :disabled="valorForm.processing"
                                     class="rounded-md bg-green-600 px-3 py-1 text-sm text-white hover:bg-green-700 disabled:opacity-40">
                                     Afegeix
                                 </button>
                             </div>
+                            <p v-if="errorValor" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ errorValor }}</p>
                         </div>
 
                         <!-- Cupons -->
@@ -382,15 +405,16 @@ function obreDetallTitular(t: TotalTitular) {
                             <div class="mt-2 flex gap-2">
                                 <input v-model="rendibilitatForm.dia" type="date"
                                     class="w-36 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
-                                <input v-model.number="rendibilitatForm.import" type="number" step="0.01" placeholder="Import"
+                                <input v-model="rendibilitatForm.import" type="text" inputmode="decimal" placeholder="Import"
                                     class="w-28 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
                                 <input v-model="rendibilitatForm.notes" type="text" placeholder="Notes"
                                     class="min-w-0 flex-1 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
-                                <button @click="afegeixRendibilitat(c)" :disabled="!rendibilitatForm.dia || rendibilitatForm.import === null"
+                                <button @click="afegeixRendibilitat(c)" :disabled="rendibilitatForm.processing"
                                     class="shrink-0 rounded-md bg-green-600 px-3 py-1 text-sm text-white hover:bg-green-700 disabled:opacity-40">
                                     Afegeix
                                 </button>
                             </div>
+                            <p v-if="errorRendibilitat" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ errorRendibilitat }}</p>
                         </div>
 
                         <div class="lg:col-span-2 flex items-center justify-between border-t border-gray-100 pt-3 text-xs text-gray-400 dark:border-gray-700 dark:text-gray-500">

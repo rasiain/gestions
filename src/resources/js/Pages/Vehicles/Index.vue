@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { perAlServidor } from '@/formularis';
 import { Line } from 'vue-chartjs';
 import { Chart as ChartJS, registerables } from 'chart.js';
 import type { ChartData, ChartOptions } from 'chart.js';
@@ -96,16 +97,6 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
-/**
- * Al formulari el camp de la data es diu `dia`, i al servidor `data`.
- *
- * `data` és un mètode d'`useForm` —`form.data()` són els camps— i un camp que es digui
- * així el trepitja: l'input rep la funció com a valor i l'enviament peta amb «data is not
- * a function», sense que arribi cap petició al servidor.
- */
-const perAlServidor = <T extends { dia: string }>({ dia, ...dades }: T) => ({ ...dades, data: dia });
-
 const etiquetaTipus: Record<string, string> = {
     cotxe: 'Cotxe',
     moto: 'Moto',
