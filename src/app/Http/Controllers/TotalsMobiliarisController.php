@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\PatrimoniNotaRequest;
 use App\Models\PatrimoniNota;
+use App\Services\FluxosPatrimoniService;
 use App\Services\NotesPatrimoniService;
 use App\Services\PatrimoniMobiliariService;
 use Inertia\Inertia;
@@ -14,6 +15,7 @@ class TotalsMobiliarisController extends Controller
     public function __construct(
         private PatrimoniMobiliariService $patrimoni,
         private NotesPatrimoniService $notes,
+        private FluxosPatrimoniService $fluxos,
     ) {}
 
     /**
@@ -39,6 +41,8 @@ class TotalsMobiliarisController extends Controller
                 'minim'       => NotesPatrimoniService::MINIM,
                 'per_defecte' => NotesPatrimoniService::PER_DEFECTE,
             ],
+            // Quants diners entren i en surten, i quins traspassos podrien ser interns
+            ...$this->fluxos->calcula(),
         ]);
     }
 

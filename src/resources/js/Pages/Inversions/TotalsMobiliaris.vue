@@ -64,6 +64,10 @@ interface Props {
     mesos: string[];
     notes: Nota[];
     llindar: { minim: number; per_defecte: number };
+    /** Quant entra i quant surt de cada compte, mes a mes. */
+    fluxos: Array<{ posicio: string; mes: string; entrades: number; sortides: number }>;
+    /** Moviments que semblen el mateix traspàs: si les dues bandes es compten, s'anul·len. */
+    traspassos: Array<{ origen: string; desti: string; mes: string; import: number }>;
 }
 
 const props = defineProps<Props>();
@@ -397,6 +401,129 @@ const notesDe = (clau: string) => notesPerTall.value.get(clau) ?? [];
 const explicatDe = (clau: string) =>
     round2(notesDe(clau).reduce((suma, n) => suma + (n.import ?? 0), 0));
 
+// ── Els fluxos ───────────────────────────────────────────────────────────
+// El total és un estoc i això són fluxos: van a part perquè vuit-cents mil euros de total
+// no deixarien veure els cinquanta mil d'un mes.
+const senseTraspassos = ref(true);
+
+/** A quin tall del rang cau un mes, o null si en queda fora. */
+const tallDelMes = (mes: string): string | null => {
+    const clau = granularitat.value === 'mes' ? mes : mes.slice(0, 4);
+
+    return tallsDelRang.value.some(t => t.clau === clau) ? clau : null;
+};
+
+/**
+ * Quina part d'una posició és dels titulars marcats.
+ *
+ * Els fluxos es reparteixen com el patrimoni: a parts iguals entre els titulars del compte.
+ */
+const fraccioDe = (clauPosicio: string) => {
+    const posicio = props.posicions.find(p => p.clau === clauPosicio);
+    if (!posicio || !posicio.parts.length) return 0;
+
+    const marcats = posicio.parts.filter(part => titularsTriats.value.has(clauTitular(part.titular_id))).length;
+
+    return marcats / posicio.parts.length;
+};
+
+interface Flux {
+    entrades: number;
+    sortides: number;
+}
+
+const fluxosPerTall = computed(() => {
+    const perTall = new Map<string, Flux>();
+    const suma = (clau: string, entrades: number, sortides: number) => {
+        const flux = perTall.get(clau) ?? { entrades: 0, sortides: 0 };
+        perTall.set(clau, { entrades: flux.entrades + entrades, sortides: flux.sortides + sortides });
+    };
+
+    for (const f of props.fluxos) {
+        if (!posicionsTriades.value.has(f.posicio)) continue;
+
+        const clau = tallDelMes(f.mes);
+        if (clau === null) continue;
+
+        const fraccio = fraccioDe(f.posicio);
+        suma(clau, f.entrades * fraccio, f.sortides * fraccio);
+    }
+
+    // Un traspàs entre dues posicions marcades no creua la frontera: no és ni ingrés ni despesa
+    if (senseTraspassos.value) {
+        for (const t of props.traspassos) {
+            if (!posicionsTriades.value.has(t.origen) || !posicionsTriades.value.has(t.desti)) continue;
+
+            const clau = tallDelMes(t.mes);
+            if (clau === null) continue;
+
+            // El destí només té flux si és un compte: un fons no té moviments bancaris
+            const entrades = t.desti.startsWith('comptes-') ? t.import * fraccioDe(t.desti) : 0;
+
+            suma(clau, -entrades, -t.import * fraccioDe(t.origen));
+        }
+    }
+
+    return perTall;
+});
+
+const fluxos = computed(() =>
+    tallsDelRang.value.map(t => {
+        const flux = fluxosPerTall.value.get(t.clau) ?? { entrades: 0, sortides: 0 };
+
+        return {
+            tall: t,
+            entrades: round2(flux.entrades),
+            sortides: round2(flux.sortides),
+            net: round2(flux.entrades - flux.sortides),
+        };
+    }),
+);
+
+const totalEntrades = computed(() => round2(fluxos.value.reduce((s, f) => s + f.entrades, 0)));
+const totalSortides = computed(() => round2(fluxos.value.reduce((s, f) => s + f.sortides, 0)));
+const totalNet = computed(() => round2(totalEntrades.value - totalSortides.value));
+
+/**
+ * D'on partia el patrimoni just abans del rang.
+ *
+ * Demanant de gener a setembre, el punt de partida és el 31 de desembre: així el tram del
+ * mercat és el rang que s'ha demanat i no un període menys. Quan el rang arrenca al
+ * principi de tot no hi ha res abans, i aleshores la base és el primer període i el tram
+ * comença al segon.
+ */
+const tallAnterior = computed(() => {
+    const inici = talls.value.findIndex(t => t.clau === desDe.value);
+
+    return inici > 0 ? talls.value[inici - 1] : null;
+});
+
+const totalDePartida = computed(() =>
+    tallAnterior.value === null ? primerTotal.value : totalsAlMes(tallAnterior.value.mes).total,
+);
+
+/** Els períodes que van del punt de partida fins al final: els que el mercat ha de cobrir. */
+const fluxosDelTram = computed(() => (tallAnterior.value === null ? fluxos.value.slice(1) : fluxos.value));
+
+const netDelTram = computed(() => round2(fluxosDelTram.value.reduce((s, f) => s + f.net, 0)));
+
+/**
+ * El que no expliquen els diners que entren i surten: el mercat.
+ *
+ * Si el patrimoni ha pujat més del que hi ha entrat, la diferència l'han posada les
+ * cotitzacions; si ha baixat més del que n'ha sortit, se l'han endut.
+ */
+const rendimentDeMercat = computed(() =>
+    fluxosDelTram.value.length === 0 ? null : round2(ultimTotal.value - totalDePartida.value - netDelTram.value),
+);
+
+/** El tram que cobreix el mercat, per dir-ho al costat del número. */
+const tramDelMercat = computed(() => {
+    const tram = fluxosDelTram.value;
+
+    return tram.length === 0 ? null : tram[0].tall.etiqueta + '–' + tram[tram.length - 1].tall.etiqueta;
+});
+
 // ── La gràfica ───────────────────────────────────────────────────────────
 /**
  * Una barra per tall del rang, amb el total dels titulars marcats.
@@ -421,10 +548,17 @@ const evolucioDetall = computed(() =>
     evolucio.value.map((e, i) => {
         const anterior = i > 0 ? evolucio.value[i - 1].total : null;
 
+        const flux = fluxosPerTall.value.get(e.tall.clau);
+        const net = flux === undefined ? 0 : round2(flux.entrades - flux.sortides);
+        const variacio = anterior === null ? null : round2(e.total - anterior);
+
         return {
             ...e,
-            variacio: anterior === null ? null : round2(e.total - anterior),
+            variacio,
             percent: anterior === null || anterior === 0 ? null : ((e.total - anterior) / Math.abs(anterior)) * 100,
+            net,
+            // El que ha canviat el total sense que hi entressin ni en sortissin diners
+            mercat: variacio === null ? null : round2(variacio - net),
         };
     }),
 );
@@ -500,6 +634,76 @@ const dadesEvolucio = computed<ChartData<'bar'>>(() => ({
             borderColor: SERIE_AMBRE,
         } as unknown as ChartDataset<'bar'>,
     ],
+}));
+
+/**
+ * Entrades i sortides de cada període, amb el net a sobre.
+ *
+ * Verd i vermell són la convenció que ja fa servir la taula per a les variacions, i aquí
+ * les barres van **agrupades i amb llegenda**: qui no distingeixi els dos colors les
+ * distingeix igualment per la posició.
+ */
+const ENTRADES = '#15803d';
+const SORTIDES = '#b91c1c';
+
+const dadesFluxos = computed<ChartData<'bar'>>(() => ({
+    labels: fluxos.value.map(f => f.tall.etiqueta),
+    datasets: [
+        {
+            label: 'Entrades',
+            data: fluxos.value.map(f => f.entrades),
+            backgroundColor: ENTRADES,
+            borderWidth: 0,
+            maxBarThickness: 28,
+        },
+        {
+            label: 'Sortides',
+            data: fluxos.value.map(f => f.sortides),
+            backgroundColor: SORTIDES,
+            borderWidth: 0,
+            maxBarThickness: 28,
+        },
+        {
+            type: 'line' as const,
+            label: 'Net',
+            data: fluxos.value.map(f => f.net),
+            borderColor: tinta.value,
+            backgroundColor: tinta.value,
+            borderWidth: 2,
+            borderDash: [5, 4],
+            pointRadius: 2,
+            pointHitRadius: 8,
+        } as unknown as ChartDataset<'bar'>,
+    ],
+}));
+
+const opcionsFluxos = computed<ChartOptions<'bar'>>(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    // El mateix gest que a la gràfica de dalt: clicar un període el tria
+    onClick: (_e, elements) => {
+        const punt = elements[0];
+        if (punt) tallTriat.value = fluxos.value[punt.index]?.tall.clau ?? tallTriat.value;
+    },
+    plugins: {
+        legend: {
+            display: true,
+            position: 'top' as const,
+            align: 'end' as const,
+            labels: { color: tinta.value, boxWidth: 12, usePointStyle: true, pointStyle: 'rect' as const },
+        },
+        tooltip: {
+            callbacks: { label: (ctx) => ctx.dataset.label + ': ' + formatEur(ctx.parsed.y ?? 0) },
+        },
+    },
+    scales: {
+        x: { ticks: { color: tinta.value, maxRotation: 0, autoSkipPadding: 12 }, grid: { display: false } },
+        y: {
+            beginAtZero: true,
+            ticks: { color: tinta.value, callback: (v) => formatEurCurt(Number(v)) },
+            grid: { color: quadricula.value },
+        },
+    },
 }));
 
 const opcionsEvolucio = computed<ChartOptions<'bar'>>(() => ({
@@ -902,6 +1106,8 @@ const obreDetall = (fila: FilaTitular) => {
                                             <th v-for="f in fontsVisibles" :key="f.clau" class="w-44 whitespace-nowrap px-3 pb-2 text-right font-medium">{{ f.titol }}</th>
                                             <th class="w-44 whitespace-nowrap px-3 pb-2 text-right font-medium">Total</th>
                                             <th class="w-44 whitespace-nowrap px-3 pb-2 text-right font-medium">Variació</th>
+                                            <th class="w-36 whitespace-nowrap px-3 pb-2 text-right font-medium" title="Diners que han entrat menys els que han sortit">Fluxos</th>
+                                            <th class="w-36 whitespace-nowrap px-3 pb-2 text-right font-medium" title="El que ha canviat el total sense que hi entressin ni en sortissin diners">Mercat</th>
                                             <th class="w-28 whitespace-nowrap pb-2 pl-3 text-right font-medium">%</th>
                                             <th class="w-24 whitespace-nowrap pb-2 pl-3 text-right font-medium">Notes</th>
                                         </tr>
@@ -932,6 +1138,16 @@ const obreDetall = (fila: FilaTitular) => {
                                             >
                                                 {{ e.variacio === null ? '—' : (e.variacio > 0 ? '+' : '') + formatEur(e.variacio) }}
                                             </td>
+                                            <td class="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-gray-600 dark:text-gray-400">
+                                                {{ e.net === 0 ? '—' : (e.net > 0 ? '+' : '') + formatEur(e.net) }}
+                                            </td>
+                                            <td
+                                                class="whitespace-nowrap px-3 py-1.5 text-right tabular-nums"
+                                                :class="e.mercat === null ? 'text-gray-300 dark:text-gray-600'
+                                                    : e.mercat >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'"
+                                            >
+                                                {{ e.mercat === null ? '—' : (e.mercat > 0 ? '+' : '') + formatEur(e.mercat) }}
+                                            </td>
                                             <td
                                                 class="whitespace-nowrap py-1.5 pl-3 text-right tabular-nums"
                                                 :class="e.percent === null ? 'text-gray-300 dark:text-gray-600'
@@ -954,7 +1170,7 @@ const obreDetall = (fila: FilaTitular) => {
 
                                         <!-- Les notes del període: què té nom, d'aquest salt -->
                                         <tr v-if="notesObertes === e.tall.clau" class="bg-amber-50/60 dark:bg-amber-900/10">
-                                            <td :colspan="fontsVisibles.length + 4" class="px-3 py-2">
+                                            <td :colspan="fontsVisibles.length + 6" class="px-3 py-2">
                                                 <div
                                                     v-for="n in notesDe(e.tall.clau)"
                                                     :key="n.clau"
@@ -1004,6 +1220,71 @@ const obreDetall = (fila: FilaTitular) => {
 
                     <p v-else class="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                         El rang triat no té cap període. Comprova que «Des de» va abans de «Fins a».
+                    </p>
+                </div>
+
+                <!-- Els fluxos: què entra i què surt -->
+                <div class="rounded-lg bg-white shadow-sm dark:bg-gray-800">
+                    <div class="flex flex-wrap items-end justify-between gap-4 border-b border-gray-200 px-6 py-4 dark:border-gray-700">
+                        <div>
+                            <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Què entra i què surt</h3>
+                            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                Els mateixos períodes i la mateixa tria que a dalt, però en comptes del que es té, el que
+                                es mou. Un traspàs entre dues coses marcades no compta: surt d'un lloc teu i entra en un altre.
+                            </p>
+                        </div>
+
+                        <label class="flex cursor-pointer items-center gap-1.5 pb-2 text-xs text-gray-500 dark:text-gray-400">
+                            <input type="checkbox" v-model="senseTraspassos"
+                                class="rounded border-gray-300 text-green-600 focus:ring-green-500 dark:border-gray-600" />
+                            sense traspassos interns
+                        </label>
+                    </div>
+
+                    <div v-if="fluxos.length" class="px-6 py-4">
+                        <div class="h-64">
+                            <Bar :data="dadesFluxos" :options="opcionsFluxos" />
+                        </div>
+
+                        <p class="mt-4 border-t border-gray-100 pt-3 text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                            El <strong>net</strong> és el que has estalviat: el que ha entrat menys el que ha sortit.
+                            El <strong>mercat</strong> és el que ha canviat de valor tot sol, sense que entrés ni sortís res
+                            —les cotitzacions dels fons i dels plans—, i no es compta: es dedueix del que no expliquen els
+                            diners que s'han mogut. Els dos sumats són el que ha canviat el patrimoni.
+                        </p>
+
+                        <div class="mt-3 flex flex-wrap items-baseline gap-x-8 gap-y-2 text-sm">
+                            <span class="text-gray-500 dark:text-gray-400">
+                                Entrades:
+                                <span class="font-medium tabular-nums text-green-700 dark:text-green-400">{{ formatEur(totalEntrades) }}</span>
+                            </span>
+                            <span class="text-gray-500 dark:text-gray-400">
+                                Sortides:
+                                <span class="font-medium tabular-nums text-red-700 dark:text-red-400">{{ formatEur(totalSortides) }}</span>
+                            </span>
+                            <span class="text-gray-500 dark:text-gray-400">
+                                Net:
+                                <span class="font-semibold tabular-nums" :class="totalNet >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'">
+                                    {{ totalNet >= 0 ? '+' : '' }}{{ formatEur(totalNet) }}
+                                </span>
+                            </span>
+
+                            <!-- El que no expliquen els diners que es mouen l'han posat (o endut) les cotitzacions -->
+                            <span v-if="rendimentDeMercat !== null" class="text-gray-500 dark:text-gray-400"
+                                title="El que ha canviat el total sense que hi entressin ni en sortissin diners">
+                                Mercat {{ tramDelMercat }}:
+                                <span class="font-semibold tabular-nums" :class="rendimentDeMercat >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'">
+                                    {{ rendimentDeMercat >= 0 ? '+' : '' }}{{ formatEur(rendimentDeMercat) }}
+                                </span>
+                                <span class="ml-1 text-xs text-gray-400 dark:text-gray-500">
+                                    ({{ formatEur(round2(ultimTotal - totalDePartida)) }} de total − {{ formatEur(netDelTram) }} de fluxos)
+                                </span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <p v-else class="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                        El rang triat no té cap període.
                     </p>
                 </div>
 
