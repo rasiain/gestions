@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import { num, perAlServidor, queFalta } from '@/formularis';
 
 interface CompteOpcio {
     id: number;
@@ -16,8 +17,9 @@ interface CompteOpcio {
 interface Valor {
     id: number;
     data: string;
-    titols: number;
-    valor_unitari: number;
+    /** Null quan el certificat només dona el saldo, sense desglossar-lo. */
+    titols: number | null;
+    valor_unitari: number | null;
     total: number;
     /** Títols nous al preu que hi havia. Null al primer valor, que no té amb què comparar-se. */
     aportacio: number | null;
@@ -28,13 +30,20 @@ interface Valor {
 interface Rendiment {
     id: number;
     data: string;
+    /** El brut; la retenció va a part, que és com ve al certificat. */
     import: number;
+    retencio: number | null;
+    net: number;
     notes: string | null;
 }
 
 interface Contracte {
     id: number;
-    compte_corrent_id: number;
+    /** El del compte, o el de la cooperativa que emet l'aportació. */
+    nom: string;
+    emissor: string | null;
+    nif: string | null;
+    compte_corrent_id: number | null;
     compte_nom: string;
     compte_referencia: string;
     entitat: string | null;
@@ -48,6 +57,8 @@ interface Contracte {
     data_alta: string | null;
     notes: string | null;
     titulars: Array<{ id: number; nom: string }>;
+    /** Els triats a mà, que només tenen les aportacions sense compte. */
+    titulars_propis: number[];
     valors: Valor[];
     rendiments: Rendiment[];
     rendiment_per_any: Record<string, number>;
@@ -65,6 +76,7 @@ interface Props {
     totalsPerTitular: TotalTitular[];
     comptesCapital: CompteOpcio[];
     comptesRendiment: CompteOpcio[];
+    persones: Array<{ id: number; nom: string }>;
 }
 
 const props = defineProps<Props>();
@@ -79,6 +91,21 @@ function formatData(iso: string | null): string {
 
 const totalValor = computed(() => props.contractes.reduce((s, c) => s + c.valor, 0));
 const totalTitols = computed(() => props.contractes.reduce((s, c) => s + (c.titols ?? 0), 0));
+
+/** La retenció de l'any més recent, que és el que es declara. */
+const retencioPerAny = computed(() => {
+    const anys: Record<string, number> = {};
+
+    for (const contracte of props.contractes) {
+        for (const r of contracte.rendiments) {
+            if (!r.retencio) continue;
+            const any = r.data.slice(0, 4);
+            anys[any] = Math.round(((anys[any] ?? 0) + r.retencio) * 100) / 100;
+        }
+    }
+
+    return Object.entries(anys).sort(([a], [b]) => b.localeCompare(a));
+});
 
 /** El que han pujat de preu els títols des que se'n té constància, sumant tots els contractes. */
 const totalRevaloracio = computed(() =>
@@ -114,15 +141,43 @@ const showContracte = ref(false);
 const contracteEditat = ref<Contracte | null>(null);
 const contracteForm = useForm({
     compte_corrent_id: null as number | null,
+    emissor: '',
+    nif: '',
+    titulars: [] as number[],
     compte_rendiment_id: null as number | null,
     data_alta: '',
     notes: '',
 });
 
+/**
+ * Una aportació té compte o no en té.
+ *
+ * Amb compte —una cooperativa de crèdit— els titulars surten d'ell. Sense —una cooperativa
+ * de consum, que no és cap compte— cal dir qui l'emet i qui en són els titulars.
+ */
+const senseCompte = computed({
+    get: () => contracteForm.compte_corrent_id === null,
+    set: (sense: boolean) => {
+        contracteForm.compte_corrent_id = sense ? null : (props.comptesCapital[0]?.id ?? null);
+        if (!sense) contracteForm.titulars = [];
+    },
+});
+
+const alternaTitular = (id: number) => {
+    contracteForm.titulars = contracteForm.titulars.includes(id)
+        ? contracteForm.titulars.filter(t => t !== id)
+        : [...contracteForm.titulars, id];
+};
+
 function obreContracte(contracte: Contracte | null) {
     contracteEditat.value = contracte;
     contracteForm.clearErrors();
-    contracteForm.compte_corrent_id = contracte?.compte_corrent_id ?? props.comptesCapital[0]?.id ?? null;
+    contracteForm.compte_corrent_id = contracte
+        ? contracte.compte_corrent_id
+        : (props.comptesCapital[0]?.id ?? null);
+    contracteForm.emissor = contracte?.emissor ?? '';
+    contracteForm.nif = contracte?.nif ?? '';
+    contracteForm.titulars = [...(contracte?.titulars_propis ?? [])];
     contracteForm.compte_rendiment_id = contracte?.compte_rendiment_id ?? null;
     contracteForm.data_alta = contracte?.data_alta ?? '';
     contracteForm.notes = contracte?.notes ?? '';
@@ -149,31 +204,22 @@ const valorForm = useForm({
     dia: '',
     titols: null as number | string | null,
     valor_unitari: null as number | string | null,
+    import: null as number | string | null,
 });
-const rendimentForm = useForm({ contracte_id: 0, dia: '', import: null as number | string | null, notes: '' });
+const rendimentForm = useForm({
+    contracte_id: 0,
+    dia: '',
+    import: null as number | string | null,
+    retencio: null as number | string | null,
+    notes: '',
+});
 
-/**
- * El número que s'ha escrit, tal com s'escriu aquí.
- *
- * Els camps són de text a posta: un `input type=number` rebutja en silenci el que no entén
- * —«100,00» amb coma, segons el navegador i el seu idioma— i el deixa buit per dins encara
- * que a la pantalla s'hi vegi el text, de manera que el botó no s'activava mai i no hi
- * havia manera de saber per què. Aquí s'accepta la coma decimal i el punt de milers.
- */
-const num = (v: number | string | null): number | null => {
-    if (v === null) return null;
-
-    const text = String(v).trim().replace(/\s/g, '');
-    if (text === '') return null;
-
-    // Amb coma, el punt només pot ser separador de milers: «1.100,50»
-    const n = Number(text.includes(',') ? text.replace(/\./g, '').replace(',', '.') : text);
-
-    return Number.isFinite(n) ? n : null;
-};
+/** Quin dels dos formats de valor s'està escrivint, per contracte. */
+const perTitols = ref(true);
 
 const titolsEscrits = computed(() => num(valorForm.titols));
 const unitariEscrit = computed(() => num(valorForm.valor_unitari));
+const saldoEscrit = computed(() => num(valorForm.import));
 
 /** El total que sortirà del que s'està escrivint: els dos números són fàcils de confondre. */
 const previsualitzaTotal = computed(() =>
@@ -192,37 +238,27 @@ const errorValor = computed(() => avisValor.value ?? Object.values(valorForm.err
 const errorRendiment = computed(() => avisRendiment.value ?? Object.values(rendimentForm.errors)[0] ?? null);
 
 function afegeixValor(contracte: Contracte) {
-    avisValor.value = queFalta(valorForm.dia, [
-        [titolsEscrits.value, 'els títols'],
-        [unitariEscrit.value, 'el nominal unitari'],
-    ]);
+    avisValor.value = perTitols.value
+        ? queFalta(valorForm.dia, [
+            [titolsEscrits.value, 'els títols'],
+            [unitariEscrit.value, 'el nominal unitari'],
+        ])
+        : queFalta(valorForm.dia, [[saldoEscrit.value, 'el saldo']]);
     if (avisValor.value) return;
 
     valorForm.contracte_id = contracte.id;
     valorForm
-        // `dia` viatja com a `data`: al formulari no s'hi pot dir així, al servidor sí
-        .transform(({ dia, ...dades }) => ({
-            ...dades,
-            data: dia,
-            titols: titolsEscrits.value,
-            valor_unitari: unitariEscrit.value,
+        // O el desglossament, o el saldo: enviar els dos deixaria dues respostes al mateix
+        .transform(dades => ({
+            ...perAlServidor(dades),
+            titols: perTitols.value ? titolsEscrits.value : null,
+            valor_unitari: perTitols.value ? unitariEscrit.value : null,
+            import: perTitols.value ? null : saldoEscrit.value,
         }))
         .post(route('capital-social.valors.store'), {
             preserveScroll: true,
-            onSuccess: () => valorForm.reset('dia', 'titols', 'valor_unitari'),
+            onSuccess: () => valorForm.reset('dia', 'titols', 'valor_unitari', 'import'),
         });
-}
-
-/**
- * Què falta d'omplir, o null si no falta res.
- *
- * @param  camps  el número llegit i com se'n diu a la pantalla
- */
-function queFalta(data: string, camps: Array<[number | null, string]>): string | null {
-    const buits = camps.filter(([valor]) => valor === null).map(([, nom]) => nom);
-    if (!data) buits.unshift('la data');
-
-    return buits.length ? 'Falta ' + buits.join(' i ') + '.' : null;
 }
 
 function eliminaValor(id: number) {
@@ -230,6 +266,7 @@ function eliminaValor(id: number) {
 }
 
 const importEscrit = computed(() => num(rendimentForm.import));
+const retencioEscrita = computed(() => num(rendimentForm.retencio));
 
 function afegeixRendiment(contracte: Contracte) {
     avisRendiment.value = queFalta(rendimentForm.dia, [[importEscrit.value, "l'import"]]);
@@ -237,10 +274,10 @@ function afegeixRendiment(contracte: Contracte) {
 
     rendimentForm.contracte_id = contracte.id;
     rendimentForm
-        .transform(({ dia, ...dades }) => ({ ...dades, data: dia, import: importEscrit.value }))
+        .transform(dades => ({ ...perAlServidor(dades), import: importEscrit.value, retencio: retencioEscrita.value }))
         .post(route('capital-social.rendiments.store'), {
             preserveScroll: true,
-            onSuccess: () => rendimentForm.reset('dia', 'import', 'notes'),
+            onSuccess: () => rendimentForm.reset('dia', 'import', 'retencio', 'notes'),
         });
 }
 
@@ -271,7 +308,7 @@ function obreDetallTitular(t: TotalTitular) {
                         class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600">
                         Totals per titular
                     </button>
-                    <button @click="obreContracte(null)" :disabled="!props.comptesCapital.length"
+                    <button @click="obreContracte(null)"
                         class="inline-flex items-center rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700 disabled:opacity-40">
                         Nou contracte
                     </button>
@@ -281,16 +318,17 @@ function obreDetallTitular(t: TotalTitular) {
 
         <div class="py-12">
             <div class="mx-auto max-w-screen-xl space-y-6 sm:px-6 lg:px-8">
-                <p v-if="!props.comptesCapital.length" class="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
-                    No hi ha cap compte de tipus <strong>capital social</strong>. Dona'l d'alta a Comptes Corrents amb el
-                    número del contracte que et diu l'extracte: d'ell en sortiran els titulars.
+                <p v-if="!props.comptesCapital.length && !props.contractes.length" class="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                    Les aportacions a una cooperativa de crèdit van en un compte de tipus <strong>capital social</strong>,
+                    que es dona d'alta a Comptes Corrents amb el número que diu l'extracte i d'on surten els titulars.
+                    Les que no són cap compte —una cooperativa de consum— es poden apuntar aquí mateix.
                 </p>
 
                 <!-- Resum -->
                 <div v-if="props.contractes.length" class="grid grid-cols-3 gap-4">
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm dark:bg-gray-800">
                         <p class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Títols</p>
-                        <p class="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100">{{ totalTitols }}</p>
+                        <p class="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100">{{ totalTitols || '—' }}</p>
                     </div>
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm dark:bg-gray-800">
                         <p class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Valor nominal</p>
@@ -301,6 +339,9 @@ function obreDetallTitular(t: TotalTitular) {
                     </div>
                     <div class="rounded-lg bg-white p-4 text-center shadow-sm dark:bg-gray-800">
                         <p class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Rendiments</p>
+                        <p v-if="retencioPerAny.length" class="float-right text-xs text-gray-400 dark:text-gray-500">
+                            retenció {{ formatEur(retencioPerAny[0][1]) }}
+                        </p>
                         <p v-if="rendimentPerAny.length" class="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100">
                             {{ formatEur(rendimentPerAny[0][1]) }}
                             <span class="text-xs font-normal text-gray-400 dark:text-gray-500">el {{ rendimentPerAny[0][0] }}</span>
@@ -314,19 +355,21 @@ function obreDetallTitular(t: TotalTitular) {
                     <div class="flex flex-wrap items-center justify-between gap-3 border-l-4 border-green-500 bg-gray-50 px-4 py-3 dark:bg-gray-700/50">
                         <div class="min-w-0">
                             <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                {{ c.compte_nom }}
-                                <span v-if="c.entitat" class="ml-1 font-normal text-gray-500 dark:text-gray-400">· {{ c.entitat }}</span>
+                                {{ c.nom }}
+                                <span v-if="c.entitat && c.entitat !== c.nom" class="ml-1 font-normal text-gray-500 dark:text-gray-400">· {{ c.entitat }}</span>
                             </h3>
                             <p class="text-xs text-gray-500 dark:text-gray-400">
-                                <span class="font-mono">{{ c.compte_referencia }}</span>
+                                <span v-if="c.compte_referencia" class="font-mono">{{ c.compte_referencia }}</span>
+                                <span v-else-if="c.nif" class="font-mono">{{ c.nif }}</span>
+                                <span v-else class="italic">sense compte</span>
                                 <span v-if="c.titulars.length" class="ml-2">· {{ c.titulars.map(t => t.nom).join(', ') }}</span>
                                 <span v-if="c.data_valor" class="ml-2">· a {{ formatData(c.data_valor) }}</span>
                             </p>
                         </div>
                         <div class="flex items-center gap-6 text-sm">
-                            <span v-if="c.titols !== null" class="text-gray-500 dark:text-gray-400">
+                            <span v-if="c.titols !== null && c.valor_unitari !== null" class="text-gray-500 dark:text-gray-400">
                                 {{ c.titols }} títols ×
-                                <span class="font-medium text-gray-700 dark:text-gray-300">{{ formatEur(c.valor_unitari ?? 0) }}</span>
+                                <span class="font-medium text-gray-700 dark:text-gray-300">{{ formatEur(c.valor_unitari) }}</span>
                             </span>
                             <span class="text-gray-500 dark:text-gray-400">
                                 Valor: <span class="font-semibold text-gray-900 dark:text-gray-100">{{ formatEur(c.valor) }}</span>
@@ -357,8 +400,10 @@ function obreDetallTitular(t: TotalTitular) {
                                 <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                                     <tr v-for="v in c.valors" :key="v.id">
                                         <td class="py-1.5 text-gray-600 dark:text-gray-400">{{ formatData(v.data) }}</td>
-                                        <td class="py-1.5 text-right tabular-nums text-gray-600 dark:text-gray-400">{{ v.titols }}</td>
-                                        <td class="py-1.5 text-right tabular-nums text-gray-600 dark:text-gray-400">{{ formatEur(v.valor_unitari) }}</td>
+                                        <td class="py-1.5 text-right tabular-nums text-gray-600 dark:text-gray-400">{{ v.titols ?? '—' }}</td>
+                                        <td class="py-1.5 text-right tabular-nums text-gray-600 dark:text-gray-400">
+                                            {{ v.valor_unitari === null ? '—' : formatEur(v.valor_unitari) }}
+                                        </td>
                                         <td class="py-1.5 text-right font-medium tabular-nums text-gray-900 dark:text-gray-100">{{ formatEur(v.total) }}</td>
                                         <td class="whitespace-nowrap py-1.5 text-right text-xs">
                                             <span v-if="v.revaloracio" class="text-green-700 dark:text-green-400">
@@ -369,7 +414,7 @@ function obreDetallTitular(t: TotalTitular) {
                                                 {{ v.aportacio > 0 ? '+' : '' }}{{ formatEur(v.aportacio) }} d'aportació
                                             </span>
                                             <span v-if="!v.revaloracio && !v.aportacio" class="text-gray-300 dark:text-gray-600">
-                                                {{ v.aportacio === null ? 'primer valor' : 'sense canvis' }}
+                                                {{ v.aportacio === null ? (v.titols === null ? 'només el saldo' : 'primer valor') : 'sense canvis' }}
                                             </span>
                                         </td>
                                         <td class="py-1.5 text-right">
@@ -386,16 +431,24 @@ function obreDetallTitular(t: TotalTitular) {
                             <div class="mt-2 flex flex-wrap items-center gap-2">
                                 <input v-model="valorForm.dia" type="date"
                                     class="w-36 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
-                                <input v-model="valorForm.titols" type="text" inputmode="numeric" placeholder="Títols"
-                                    class="w-24 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
-                                <input v-model="valorForm.valor_unitari" type="text" inputmode="decimal" placeholder="Unitari"
-                                    class="w-28 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
-                                <span v-if="previsualitzaTotal !== null" class="text-xs text-gray-500 dark:text-gray-400">
-                                    = {{ formatEur(previsualitzaTotal) }}
-                                </span>
+                                <template v-if="perTitols">
+                                    <input v-model="valorForm.titols" type="text" inputmode="numeric" placeholder="Títols"
+                                        class="w-24 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                                    <input v-model="valorForm.valor_unitari" type="text" inputmode="decimal" placeholder="Unitari"
+                                        class="w-28 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                                    <span v-if="previsualitzaTotal !== null" class="text-xs text-gray-500 dark:text-gray-400">
+                                        = {{ formatEur(previsualitzaTotal) }}
+                                    </span>
+                                </template>
+                                <input v-else v-model="valorForm.import" type="text" inputmode="decimal" placeholder="Saldo"
+                                    class="w-32 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
                                 <button @click="afegeixValor(c)" :disabled="valorForm.processing"
                                     class="rounded-md bg-green-600 px-3 py-1 text-sm text-white hover:bg-green-700 disabled:opacity-40">
                                     Afegeix
+                                </button>
+                                <button type="button" @click="perTitols = !perTitols"
+                                    class="text-xs text-green-700 hover:underline dark:text-green-400">
+                                    {{ perTitols ? 'només el saldo' : 'per títols' }}
                                 </button>
                             </div>
                             <p v-if="errorValor" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ errorValor }}</p>
@@ -421,7 +474,10 @@ function obreDetallTitular(t: TotalTitular) {
                                 <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                                     <tr v-for="r in c.rendiments" :key="r.id">
                                         <td class="py-1.5 text-gray-600 dark:text-gray-400">{{ formatData(r.data) }}</td>
-                                        <td class="py-1.5 text-xs text-gray-400 dark:text-gray-500">{{ r.notes }}</td>
+                                        <td class="py-1.5 text-xs text-gray-400 dark:text-gray-500">
+                                            {{ r.notes }}
+                                            <span v-if="r.retencio" class="ml-1">retenció {{ formatEur(r.retencio) }} · net {{ formatEur(r.net) }}</span>
+                                        </td>
                                         <td class="py-1.5 text-right tabular-nums text-gray-900 dark:text-gray-100">{{ formatEur(r.import) }}</td>
                                         <td class="w-8 py-1.5 text-right">
                                             <button @click="eliminaRendiment(r.id)" class="text-xs text-red-500 hover:text-red-700">×</button>
@@ -435,8 +491,10 @@ function obreDetallTitular(t: TotalTitular) {
                             <div class="mt-2 flex gap-2">
                                 <input v-model="rendimentForm.dia" type="date"
                                     class="w-36 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
-                                <input v-model="rendimentForm.import" type="text" inputmode="decimal" placeholder="Import"
-                                    class="w-28 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                                <input v-model="rendimentForm.import" type="text" inputmode="decimal" placeholder="Brut"
+                                    class="w-24 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                                <input v-model="rendimentForm.retencio" type="text" inputmode="decimal" placeholder="Retenció"
+                                    class="w-24 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
                                 <input v-model="rendimentForm.notes" type="text" placeholder="Notes"
                                     class="min-w-0 flex-1 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
                                 <button @click="afegeixRendiment(c)"
@@ -475,12 +533,55 @@ function obreDetallTitular(t: TotalTitular) {
                     {{ contracteEditat ? 'Edita el contracte' : 'Nou contracte' }}
                 </h3>
                 <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Contracte (compte del capital social)</label>
-                        <select v-model="contracteForm.compte_corrent_id" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
-                            <option v-for="c in props.comptesCapital" :key="c.id" :value="c.id">{{ c.compte }} — {{ c.nom }}</option>
-                        </select>
-                        <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">D'aquest compte en surten els titulars.</p>
+                    <div class="rounded-md border border-gray-200 p-3 dark:border-gray-600">
+                        <div class="flex items-baseline justify-between gap-3">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">On és l'aportació</label>
+                            <button v-if="props.comptesCapital.length" type="button" @click="senseCompte = !senseCompte"
+                                class="text-xs text-green-700 hover:underline dark:text-green-400">
+                                {{ senseCompte ? 'és en un compte' : 'no té compte' }}
+                            </button>
+                        </div>
+
+                        <template v-if="!senseCompte">
+                            <select v-model="contracteForm.compte_corrent_id" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                                <option v-for="c in props.comptesCapital" :key="c.id" :value="c.id">{{ c.compte }} — {{ c.nom }}</option>
+                            </select>
+                            <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">D'aquest compte en surten els titulars.</p>
+                        </template>
+
+                        <div v-else class="mt-1 space-y-3">
+                            <!-- Una cooperativa de consum no és cap compte: no té número ni titulars propis -->
+                            <div class="flex gap-2">
+                                <input v-model="contracteForm.emissor" type="text" placeholder="Qui l'emet — Som Energia, SCCL"
+                                    class="min-w-0 flex-1 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                                <input v-model="contracteForm.nif" type="text" placeholder="NIF"
+                                    class="w-32 rounded-md border-gray-300 font-mono text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                            </div>
+                            <p v-if="contracteForm.errors.emissor" class="text-sm text-red-600 dark:text-red-400">{{ contracteForm.errors.emissor }}</p>
+
+                            <div>
+                                <span class="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">Titulars</span>
+                                <div class="flex flex-wrap gap-2">
+                                    <button
+                                        v-for="p in props.persones"
+                                        :key="p.id"
+                                        type="button"
+                                        @click="alternaTitular(p.id)"
+                                        :class="[
+                                            'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors',
+                                            contracteForm.titulars.includes(p.id)
+                                                ? 'border-green-600 bg-green-50 font-medium text-green-800 dark:border-green-500 dark:bg-green-900/30 dark:text-green-200'
+                                                : 'border-gray-300 bg-white text-gray-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400',
+                                        ]"
+                                    >
+                                        <span class="w-3 text-center">{{ contracteForm.titulars.includes(p.id) ? '✓' : '' }}</span>
+                                        {{ p.nom }}
+                                    </button>
+                                </div>
+                                <p v-if="contracteForm.errors.titulars" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ contracteForm.errors.titulars }}</p>
+                            </div>
+                        </div>
+
                         <p v-if="contracteForm.errors.compte_corrent_id" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ contracteForm.errors.compte_corrent_id }}</p>
                     </div>
                     <div>

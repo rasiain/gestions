@@ -240,26 +240,32 @@ class PatrimoniMobiliariService
     }
 
     /**
-     * El capital social: títols per nominal unitari, com ho diu l'extracte.
+     * El capital social: títols per nominal unitari, o el saldo quan no ve desglossat.
      *
      * El nom de la posició és el del compte, que és on hi ha l'entitat i el número de
-     * contracte: aquí no hi ha cap catàleg de producte del qual prendre'l.
+     * contracte; les aportacions que no tenen compte —una cooperativa de consum— porten el
+     * nom de qui les emet i els seus propis titulars.
      *
      * @param  array<int, string>  $mesos
      * @return array<int, array<string, mixed>>
      */
     private function capitalSocial(array $mesos): array
     {
-        return CapitalSocialContracte::with(['valors', 'compteCorrent.titulars', 'compteCorrent.entitatRelacio'])
+        return CapitalSocialContracte::with([
+                'valors',
+                'compteCorrent.titulars',
+                'compteCorrent.entitatRelacio',
+                'titularsPropis',
+            ])
             ->get()
             ->map(fn (CapitalSocialContracte $c) => $this->posicio(
                 font: 'capital_social',
                 id: $c->id,
-                nom: $c->compteCorrent?->nom ?? $c->compteCorrent?->compte_corrent ?? 'Capital social',
-                detall: $c->compteCorrent?->entitat,
+                nom: $c->compteCorrent?->nom ?? $c->compteCorrent?->compte_corrent ?? $c->emissor ?? 'Capital social',
+                detall: $c->emissor_visible,
                 etiqueta: null,
                 valor: $c->valorAData(),
-                titulars: $c->compteCorrent?->titulars ?? collect(),
+                titulars: $c->titulars(),
                 serie: $this->serieCapitalSocial($c, $mesos),
             ))
             ->all();
@@ -279,7 +285,7 @@ class PatrimoniMobiliariService
         $perMes = [];
 
         foreach ($c->valors->sortBy(fn ($v) => $v->data->timestamp) as $valor) {
-            $perMes[$valor->data->format('Y-m')] = round($valor->titols * (float) $valor->valor_unitari, 2);
+            $perMes[$valor->data->format('Y-m')] = $valor->total;
         }
 
         return $this->arrossega($perMes, $mesos);

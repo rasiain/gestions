@@ -185,6 +185,80 @@ class CapitalSocialTest extends TestCase
         );
     }
 
+    public function test_una_aportacio_sense_compte_val_el_saldo_i_te_titulars_propis(): void
+    {
+        $marta  = Persona::create(['nom' => 'Marta', 'cognoms' => 'Peracaula']);
+        $usuari = User::factory()->create();
+
+        // Som Energia: cap compte, cap títol, només el saldo del certificat
+        $this->actingAs($usuari)->post(route('capital-social.contractes.store'), [
+            'emissor'  => 'Som Energia, SCCL',
+            'nif'      => 'F55091367',
+            'titulars' => [$marta->id],
+        ])->assertRedirect();
+
+        $contracte = CapitalSocialContracte::firstOrFail();
+        $this->assertNull($contracte->compte_corrent_id);
+
+        $this->actingAs($usuari)->post(route('capital-social.valors.store'), [
+            'contracte_id' => $contracte->id,
+            'data'         => '2025-12-31',
+            'import'       => 15000,
+        ])->assertRedirect();
+
+        $props = $this->props();
+
+        $this->assertSame(15000.0, $props['contractes'][0]['valor']);
+        $this->assertNull($props['contractes'][0]['titols']);
+        $this->assertSame('Som Energia, SCCL', $props['contractes'][0]['nom']);
+        $this->assertSame(['Marta Peracaula'], collect($props['contractes'][0]['titulars'])->pluck('nom')->all());
+        $this->assertSame(15000.0, collect($props['totalsPerTitular'])->firstWhere('nom', 'Marta Peracaula')['total']);
+    }
+
+    public function test_una_aportacio_sense_compte_necessita_emissor_i_titulars(): void
+    {
+        $usuari = User::factory()->create();
+
+        $this->actingAs($usuari)
+            ->post(route('capital-social.contractes.store'), [])
+            ->assertSessionHasErrors(['compte_corrent_id', 'emissor', 'titulars']);
+
+        $this->actingAs($usuari)
+            ->post(route('capital-social.contractes.store'), ['emissor' => 'Som Energia, SCCL'])
+            ->assertSessionHasErrors('titulars');
+
+        $this->assertSame(0, CapitalSocialContracte::count());
+    }
+
+    public function test_un_valor_necessita_o_els_titols_o_el_saldo(): void
+    {
+        $contracte = $this->contracte();
+
+        $this->actingAs(User::factory()->create())
+            ->post(route('capital-social.valors.store'), ['contracte_id' => $contracte->id, 'data' => '2025-12-31'])
+            ->assertSessionHasErrors('import');
+
+        $this->assertSame(0, CapitalSocialValor::count());
+    }
+
+    public function test_el_rendiment_desa_el_brut_i_la_retencio_a_part(): void
+    {
+        $contracte = $this->contracte();
+
+        $this->actingAs(User::factory()->create())->post(route('capital-social.rendiments.store'), [
+            'contracte_id' => $contracte->id,
+            'data'         => '2025-12-31',
+            'import'       => 299.59,
+            'retencio'     => 56.92,
+        ])->assertRedirect();
+
+        $rendiment = $this->props()['contractes'][0]['rendiments'][0];
+
+        $this->assertSame(299.59, $rendiment['import']);
+        $this->assertSame(56.92, $rendiment['retencio']);
+        $this->assertSame(242.67, $rendiment['net']);
+    }
+
     public function test_el_capital_social_compta_als_totals_mobiliaris(): void
     {
         $ana = Persona::create(['nom' => 'Ana', 'cognoms' => 'Primera']);

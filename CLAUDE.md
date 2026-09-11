@@ -143,12 +143,16 @@ Per això **no hi ha formulari de títol nou**: es crea des del formulari del co
 
 ### Capital social
 
-Les aportacions que fan soci d'una cooperativa de crèdit (`/capital-social`). Va com la renda fixa —un contracte per compte, una sèrie de valors per data i els rendiments cobrats— amb dues diferències que imposa l'extracte:
+Les aportacions que fan soci d'una cooperativa (`/capital-social`). Va com la renda fixa —un contracte, una sèrie de valors per data i els rendiments cobrats— amb dues diferències que imposa l'extracte:
 
 - **No hi ha catàleg de productes.** El capital social no és cap valor de mercat amb ISIN: és de l'entitat del compte, i el «Contracte» que diu l'extracte és el número del compte mateix. Per això el compte és de tipus `capital_social` i el nom de la posició surt d'ell.
 - **El valor són dos números, no un import**: `titols` i `valor_unitari`, tal com ve l'extracte («Nre. títols 11 · Valor Nominal Unitari 100,00»). El total **no es desa**, que és el producte dels dos i desat només podria contradir-los. El «N. titulars» tampoc: els titulars surten del compte, com a tot el grup d'inversions.
 
 Sense cap valor declarat no val res —aquí no hi ha cap nominal de contracte que serveixi de mínim, com sí que en té la renda fixa— i per això la seva sèrie als totals mobiliaris comença a zero fins al primer valor.
+
+**N'hi ha de dues menes, i la segona no és cap compte.** Les aportacions a una cooperativa de **crèdit** viuen en un compte (de tipus `capital_social`) i d'ell en surten els titulars. Les d'una cooperativa de **consum** —Som Energia— no són cap compte: no tenen número ni entitat, el certificat anual només diu el **saldo a 31 de desembre**, i el nombre de títols no existeix ni fa falta (ni a patrimoni ni a l'IRPF s'hi declara). Per això el compte és opcional i, quan no n'hi ha, el contracte porta l'`emissor` (nom i NIF) i els seus **titulars propis** (`g_cs_contracte_titular`); i per això `titols` i `valor_unitari` són opcionals i hi ha `import`, el saldo tal qual. Sempre n'hi ha d'haver un dels dos, mai els dos alhora: el total es multiplica quan hi ha títols, i desar-lo a més seria una tercera dada que pot contradir les altres. Sense títols no es pot dir d'on ve un canvi de saldo, i la columna ho diu així.
+
+**Els rendiments porten retenció** (`g_cs_rendiments.retencio`), que és el que es declara a l'IRPF: l'`import` és sempre el **brut**, com ve al certificat, i el net es calcula.
 
 **El nominal es revaloritza.** Entre dos valors seguits el total pot pujar per dues raons ben diferents: perquè hi ha **títols nous** (una aportació) o perquè els que ja hi eren **valen més** (una revaloració, que al banc arriba com un moviment «REVALORACIO TITOLS»: 11 títols de 100 que passen a 102 són 22 €). Les dues es **dedueixen dels valors** i no es desen —els títols nous al preu que hi havia, el canvi de preu a tots els títols—, i per construcció sumen exactament la diferència de total, cosa que és un test. Un capital social que només creix per revaloració i un que creix perquè s'hi ha aportat diners són coses diferents, i la pantalla les separa.
 
