@@ -126,6 +126,9 @@ Route::middleware('auth')->group(function () {
 
     // Els totals mobiliaris sumen les pantalles d'inversions alhora
     Route::get('/inversions/totals-mobiliaris', [TotalsMobiliarisController::class, 'index'])->name('inversions.totals-mobiliaris');
+    Route::post('/inversions/notes', [TotalsMobiliarisController::class, 'storeNota'])->name('inversions.notes.store');
+    Route::put('/inversions/notes/{nota}', [TotalsMobiliarisController::class, 'updateNota'])->name('inversions.notes.update');
+    Route::delete('/inversions/notes/{nota}', [TotalsMobiliarisController::class, 'destroyNota'])->name('inversions.notes.destroy');
 
     // Vehicles: dues llistes (els de motor, les bicis) sobre el mateix catàleg
     Route::get('/vehicles-motor', [VehicleController::class, 'vehiclesMotor'])->name('vehicles-motor.index');
