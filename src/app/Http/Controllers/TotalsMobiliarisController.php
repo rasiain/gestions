@@ -7,6 +7,10 @@ use App\Models\PatrimoniNota;
 use App\Services\FluxosPatrimoniService;
 use App\Services\NotesPatrimoniService;
 use App\Services\PatrimoniMobiliariService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -44,6 +48,50 @@ class TotalsMobiliarisController extends Controller
             // Quants diners entren i en surten, i quins traspassos podrien ser interns
             ...$this->fluxos->calcula(),
         ]);
+    }
+
+    /**
+     * Els moviments d'un tram, per veure què hi ha darrere d'una barra de fluxos.
+     *
+     * Es demanen en clicar i no van amb la pàgina: són milers i la majoria de vegades no
+     * es miren. Tornen sencers i sense ordenar —amb el compte i la categoria— perquè qui
+     * els reparteix entre titulars i els ordena és la pantalla, que és qui sap la tria.
+     */
+    public function movimentsDelTram(Request $request): JsonResponse
+    {
+        $dades = $request->validate([
+            'des_de'     => ['required', 'date_format:Y-m'],
+            'fins_a'     => ['required', 'date_format:Y-m'],
+            'comptes'    => ['required', 'array'],
+            'comptes.*'  => ['integer'],
+        ]);
+
+        $moviments = DB::table('g_moviments_comptes_corrents as m')
+            ->leftJoin('g_moviments_conceptes as k', 'k.id', '=', 'm.concepte_id')
+            ->leftJoin('g_categories as c', 'c.id', '=', 'm.categoria_id')
+            ->whereIn('m.compte_corrent_id', $dades['comptes'])
+            ->where('m.data_moviment', '>=', $dades['des_de'] . '-01')
+            ->where('m.data_moviment', '<', Carbon::parse($dades['fins_a'] . '-01')->addMonth()->format('Y-m-d'))
+            ->select(
+                'm.id',
+                'm.data_moviment',
+                'm.import',
+                'm.compte_corrent_id',
+                'm.concepte_original',
+                'k.concepte',
+                'c.nom as categoria',
+            )
+            ->get()
+            ->map(fn (object $m) => [
+                'id'         => $m->id,
+                'data'       => substr((string) $m->data_moviment, 0, 10),
+                'import'     => (float) $m->import,
+                'compte_id'  => $m->compte_corrent_id,
+                'concepte'   => $m->concepte ?? $m->concepte_original,
+                'categoria'  => $m->categoria,
+            ]);
+
+        return response()->json(['moviments' => $moviments]);
     }
 
     /**

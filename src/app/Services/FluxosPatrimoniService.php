@@ -121,6 +121,8 @@ class FluxosPatrimoniService
                         // El mes és el de la sortida: és quan els diners es mouen
                         'mes'    => substr((string) $sortida->data_moviment, 0, 7),
                         'import' => round(abs((float) $sortida->import), 2),
+                        // Els moviments que l'han format: el detall d'un període els amaga
+                        'moviments' => [$sortida->id, $entrada->id],
                     ];
                     break;
                 }
@@ -166,10 +168,11 @@ class FluxosPatrimoniService
 
                 $usats[$moviment->id] = true;
                 $parells[] = [
-                    'origen' => 'comptes-' . $moviment->compte_corrent_id,
-                    'desti'  => $aportacio['posicio'],
-                    'mes'    => substr((string) $moviment->data_moviment, 0, 7),
-                    'import' => round(abs((float) $moviment->import), 2),
+                    'origen'    => 'comptes-' . $moviment->compte_corrent_id,
+                    'desti'     => $aportacio['posicio'],
+                    'mes'       => substr((string) $moviment->data_moviment, 0, 7),
+                    'import'    => round(abs((float) $moviment->import), 2),
+                    'moviments' => [$moviment->id],
                 ];
                 break;
             }

@@ -155,6 +155,62 @@ class FluxosPatrimoniTest extends TestCase
         $this->assertCount(1, $this->calcula()['traspassos']);
     }
 
+    public function test_el_traspas_diu_quins_moviments_lhan_format(): void
+    {
+        $origen = $this->compte();
+        $desti  = $this->compte();
+
+        $this->moviment($origen, '2026-03-10', -5000);
+        $this->moviment($desti, '2026-03-12', 5000);
+
+        // El detall d'un període els ha de poder amagar: sense els ids no sabria quins són
+        $this->assertCount(2, $this->calcula()['traspassos'][0]['moviments']);
+    }
+
+    public function test_el_detall_dun_tram_torna_els_moviments_dels_comptes_demanats(): void
+    {
+        $compte = $this->compte();
+        $altre  = $this->compte();
+
+        $this->moviment($compte, '2026-03-10', -5000);
+        $this->moviment($compte, '2026-04-10', -300);
+        $this->moviment($altre, '2026-03-15', -999);
+
+        $resposta = $this->actingAs(User::factory()->create())
+            ->getJson(route('inversions.moviments-del-tram', [
+                'des_de'  => '2026-03',
+                'fins_a'  => '2026-03',
+                'comptes' => [$compte->id],
+            ]))
+            ->assertOk()
+            ->json('moviments');
+
+        // Només el compte demanat i només el mes demanat
+        $this->assertCount(1, $resposta);
+        // El JSON torna un enter quan el float no té decimals: el que importa és el valor
+        $this->assertSame(-5000.0, (float) $resposta[0]['import']);
+        $this->assertSame('2026-03-10', $resposta[0]['data']);
+    }
+
+    public function test_el_detall_dun_any_agafa_els_dotze_mesos(): void
+    {
+        $compte = $this->compte();
+        $this->moviment($compte, '2026-01-10', -100);
+        $this->moviment($compte, '2026-12-31', -200);
+        $this->moviment($compte, '2027-01-01', -300);
+
+        $resposta = $this->actingAs(User::factory()->create())
+            ->getJson(route('inversions.moviments-del-tram', [
+                'des_de'  => '2026-01',
+                'fins_a'  => '2026-12',
+                'comptes' => [$compte->id],
+            ]))
+            ->assertOk()
+            ->json('moviments');
+
+        $this->assertSame([-100.0, -200.0], array_map('floatval', array_column($resposta, 'import')));
+    }
+
     public function test_la_pantalla_rep_els_fluxos_i_els_traspassos(): void
     {
         $compte = $this->compte();

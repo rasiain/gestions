@@ -75,7 +75,7 @@ interface Props {
     /** Quant entra i quant surt de cada compte, mes a mes. */
     fluxos: Array<{ posicio: string; mes: string; entrades: number; sortides: number }>;
     /** Moviments que semblen el mateix traspàs: si les dues bandes es compten, s'anul·len. */
-    traspassos: Array<{ origen: string; desti: string; mes: string; import: number }>;
+    traspassos: Array<{ origen: string; desti: string; mes: string; import: number; moviments: number[] }>;
 }
 
 const props = defineProps<Props>();
@@ -719,10 +719,15 @@ const dadesFluxos = computed<ChartData<'bar'>>(() => ({
 const opcionsFluxos = computed<ChartOptions<'bar'>>(() => ({
     responsive: true,
     maintainAspectRatio: false,
-    // El mateix gest que a la gràfica de dalt: clicar un període el tria
+    // Clicar una barra tria el període i obre el que hi ha darrere: les entrades si és la
+    // verda, les sortides si és la vermella
     onClick: (_e, elements) => {
         const punt = elements[0];
-        if (punt) tallTriat.value = fluxos.value[punt.index]?.tall.clau ?? tallTriat.value;
+        const fila = punt ? fluxos.value[punt.index] : undefined;
+        if (!fila) return;
+
+        tallTriat.value = fila.tall.clau;
+        if (punt.datasetIndex < 2) obreDetallDeBarra(fila.tall, punt.datasetIndex === 0 ? 'entrades' : 'sortides');
     },
     plugins: {
         legend: {
@@ -789,6 +794,116 @@ const opcionsEvolucio = computed<ChartOptions<'bar'>>(() => ({
         },
     },
 }));
+
+// ── El detall d'una barra ────────────────────────────────────────────────
+// Els moviments no van amb la pàgina: són milers i la majoria de vegades no es miren.
+// Es demanen en clicar i la pantalla els reparteix, els filtra i els ordena.
+interface MovimentDelTram {
+    id: number;
+    data: string;
+    import: number;
+    compte_id: number;
+    concepte: string | null;
+    categoria: string | null;
+}
+
+const showDetall = ref(false);
+const carregantDetall = ref(false);
+const errorDetall = ref<string | null>(null);
+const movimentsDelTram = ref<MovimentDelTram[]>([]);
+const detallDe = ref<{ tall: Tall; signe: 'entrades' | 'sortides' } | null>(null);
+const quantsEnsenyats = ref(50);
+
+/** Els moviments que la barra no compta perquè són un traspàs entre coses marcades. */
+const movimentsExclosos = computed(() => {
+    const exclosos = new Set<number>();
+    if (!senseTraspassos.value) return exclosos;
+
+    for (const t of props.traspassos) {
+        if (!posicionsTriades.value.has(t.origen) || !posicionsTriades.value.has(t.desti)) continue;
+        for (const id of t.moviments) exclosos.add(id);
+    }
+
+    return exclosos;
+});
+
+const obreDetallDeBarra = async (tall: Tall, signe: 'entrades' | 'sortides') => {
+    detallDe.value = { tall, signe };
+    quantsEnsenyats.value = 50;
+    errorDetall.value = null;
+    showDetall.value = true;
+
+    // El tram d'un tall: el seu mes, o els dotze de l'any
+    const desDeMes = granularitat.value === 'mes' ? tall.mes : tall.clau + '-01';
+    const comptes = props.posicions
+        .filter(p => p.font === 'comptes' && posicionsTriades.value.has(p.clau))
+        .map(p => Number(p.clau.replace('comptes-', '')));
+
+    if (!comptes.length) {
+        movimentsDelTram.value = [];
+        return;
+    }
+
+    carregantDetall.value = true;
+    movimentsDelTram.value = [];
+
+    try {
+        const params = new URLSearchParams({ des_de: desDeMes, fins_a: tall.mes });
+        comptes.forEach(id => params.append('comptes[]', String(id)));
+
+        const resposta = await fetch(route('inversions.moviments-del-tram') + '?' + params.toString(), {
+            headers: { Accept: 'application/json' },
+        });
+        if (!resposta.ok) throw new Error('El servidor ha respost ' + resposta.status);
+
+        movimentsDelTram.value = (await resposta.json()).moviments;
+    } catch (e) {
+        errorDetall.value = e instanceof Error ? e.message : 'No s\'han pogut llegir els moviments.';
+    } finally {
+        carregantDetall.value = false;
+    }
+};
+
+/** El que toca als titulars marcats de cada moviment, del més gros al més petit. */
+const detallRepartit = computed(() => {
+    const signe = detallDe.value?.signe;
+    if (!signe) return [];
+
+    return movimentsDelTram.value
+        .filter(m => (signe === 'sortides' ? m.import < 0 : m.import > 0))
+        .filter(m => !movimentsExclosos.value.has(m.id))
+        .map(m => {
+            const mes = m.data.slice(0, 7);
+            const fraccio = fraccioDe('comptes-' + m.compte_id, mes);
+
+            return {
+                ...m,
+                part: round2(Math.abs(m.import) * fraccio),
+                sencer: round2(Math.abs(m.import)),
+                compartit: fraccio > 0 && fraccio < 1,
+                compte: props.posicions.find(p => p.clau === 'comptes-' + m.compte_id)?.nom ?? '',
+            };
+        })
+        .filter(m => m.part > 0)
+        .sort((a, b) => b.part - a.part);
+});
+
+const totalDetall = computed(() => round2(detallRepartit.value.reduce((s, m) => s + m.part, 0)));
+
+/** En un tall anual el detall són milers de línies: el resum per categoria és el que es llegeix. */
+const detallPerCategoria = computed(() => {
+    const per = new Map<string, { total: number; quants: number }>();
+
+    for (const m of detallRepartit.value) {
+        const clau = m.categoria ?? 'Sense categoria';
+        const fila = per.get(clau) ?? { total: 0, quants: 0 };
+        per.set(clau, { total: round2(fila.total + m.part), quants: fila.quants + 1 });
+    }
+
+    return [...per.entries()]
+        .map(([categoria, fila]) => ({ categoria, ...fila }))
+        .sort((a, b) => b.total - a.total);
+});
 
 // ── Escriure-hi ──────────────────────────────────────────────────────────
 /** El tall que té les notes obertes, a la taula de detall. */
@@ -1500,6 +1615,85 @@ const obreDetall = (fila: FilaTitular) => {
                         <button @click="showNota = false" class="rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200">Cancel·la</button>
                         <button @click="desaNota" :disabled="notaForm.processing" class="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-40">Desa</button>
                     </span>
+                </div>
+            </div>
+        </Modal>
+
+        <!-- Què hi ha darrere d'una barra de fluxos -->
+        <Modal :show="showDetall" max-width="2xl" @close="showDetall = false">
+            <div class="p-6">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    {{ detallDe?.signe === 'entrades' ? 'Entrades' : 'Sortides' }} de {{ detallDe?.tall.etiqueta }}
+                </h3>
+                <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
+                    <span class="font-medium tabular-nums text-gray-700 dark:text-gray-300">{{ formatEur(totalDetall) }}</span>
+                    en {{ detallRepartit.length }} moviments
+                    <template v-if="senseTraspassos"> · sense els traspassos interns</template>
+                    <template v-if="titularsTriats.size < props.titulars.length">
+                        · la part de {{ props.titulars.filter(t => titularsTriats.has(clauTitular(t.id))).map(t => t.nom).join(', ') }}
+                    </template>
+                </p>
+
+                <p v-if="carregantDetall" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Llegint els moviments…</p>
+                <p v-else-if="errorDetall" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-300">{{ errorDetall }}</p>
+                <p v-else-if="!detallRepartit.length" class="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                    Aquest període no té cap moviment que compti.
+                </p>
+
+                <template v-else>
+                    <!-- En un tall anual el detall són milers de línies; això és el que es llegeix -->
+                    <div v-if="detallPerCategoria.length > 1" class="mb-4">
+                        <h4 class="mb-2 text-xs font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">Per categoria</h4>
+                        <div v-for="c in detallPerCategoria.slice(0, 8)" :key="c.categoria" class="flex items-baseline gap-3 py-0.5 text-xs">
+                            <span class="w-44 shrink-0 truncate text-gray-700 dark:text-gray-300">{{ c.categoria }}</span>
+                            <span class="h-1.5 min-w-0 flex-1 rounded-full bg-gray-100 dark:bg-gray-700">
+                                <span class="block h-1.5 rounded-full"
+                                    :class="detallDe?.signe === 'entrades' ? 'bg-green-600' : 'bg-red-600'"
+                                    :style="{ width: (totalDetall ? (c.total / totalDetall) * 100 : 0) + '%' }"></span>
+                            </span>
+                            <span class="w-12 shrink-0 text-right text-gray-400 dark:text-gray-500">{{ c.quants }}</span>
+                            <span class="w-28 shrink-0 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ formatEur(c.total) }}</span>
+                        </div>
+                        <p v-if="detallPerCategoria.length > 8" class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                            i {{ detallPerCategoria.length - 8 }} categories més
+                        </p>
+                    </div>
+
+                    <h4 class="mb-1 text-xs font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
+                        Un per un, del més gros al més petit
+                    </h4>
+                    <div class="max-h-80 overflow-auto pr-2">
+                        <table class="w-full text-sm">
+                            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                <tr v-for="m in detallRepartit.slice(0, quantsEnsenyats)" :key="m.id">
+                                    <td class="whitespace-nowrap py-1 pr-3 tabular-nums text-xs text-gray-400 dark:text-gray-500">
+                                        {{ formatDataCurta(m.data) }}
+                                    </td>
+                                    <td class="py-1 pr-3">
+                                        <span class="block truncate text-gray-800 dark:text-gray-200">{{ m.concepte }}</span>
+                                        <span class="block truncate text-xs text-gray-400 dark:text-gray-500">
+                                            {{ m.categoria ?? 'sense categoria' }} · {{ m.compte }}
+                                        </span>
+                                    </td>
+                                    <td class="whitespace-nowrap py-1 text-right tabular-nums text-gray-900 dark:text-gray-100">
+                                        {{ formatEur(m.part) }}
+                                        <span v-if="m.compartit" class="block text-xs font-normal text-gray-400 dark:text-gray-500">
+                                            de {{ formatEur(m.sencer) }}
+                                        </span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <button v-if="detallRepartit.length > quantsEnsenyats" type="button" @click="quantsEnsenyats += 50"
+                        class="mt-2 text-sm text-green-700 hover:underline dark:text-green-400">
+                        mostra'n 50 més (en queden {{ detallRepartit.length - quantsEnsenyats }})
+                    </button>
+                </template>
+
+                <div class="mt-6 flex justify-end">
+                    <button @click="showDetall = false" class="rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200">Tancar</button>
                 </div>
             </div>
         </Modal>
