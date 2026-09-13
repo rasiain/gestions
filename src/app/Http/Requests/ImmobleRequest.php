@@ -108,6 +108,18 @@ class ImmobleRequest extends FormRequest
                 'nullable',
                 'date',
             ],
+
+            // La proporció de titularitat d'aquell tram; buida vol dir «a parts iguals»
+            'propietari_quota' => [
+                'nullable',
+                'array',
+            ],
+            'propietari_quota.*' => [
+                'nullable',
+                'numeric',
+                'min:0',
+                'max:100',
+            ],
         ];
     }
 

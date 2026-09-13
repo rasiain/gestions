@@ -28,8 +28,16 @@ interface Posicio {
     etiqueta: string | null;
     valor: number;
     parts: Part[];
+    /** Qui se'n reparteix el valor i des de quan: les quotes d'un immoble poden canviar. */
+    trams: Tram[];
     /** Què valia a final de cada mes, per «AAAA-MM». */
     serie: Record<string, number>;
+}
+
+interface Tram {
+    /** El mes a partir del qual val aquest repartiment; null vol dir des de sempre. */
+    des_de: string | null;
+    parts: Array<{ titular_id: number | null; nom: string; pes: number }>;
 }
 
 interface Titular {
@@ -108,6 +116,8 @@ const alternaPosicio = (clau: string) => {
 const posicionsVisibles = computed(() =>
     props.posicions.filter(p => p.parts.some(part => titularsTriats.value.has(clauTitular(part.titular_id)))),
 );
+
+/** El mes que mana per a la tria: el del tall que s'està mirant. */
 
 const posicionsDe = (font: Font) => posicionsVisibles.value.filter(p => p.font === font);
 
@@ -228,20 +238,32 @@ const tallEsAra = computed(() => mesDelTall.value === mesActual.value);
 /** Què valia una posició al tall que es mira. */
 const valorAlMes = (posicio: Posicio, mes: string) => posicio.serie[mes] ?? 0;
 
+/** Com es reparteix una posició un mes: l'últim tram que ja havia començat. */
+const tramAlMes = (posicio: Posicio, mes: string) => {
+    for (let i = posicio.trams.length - 1; i >= 0; i--) {
+        const tram = posicio.trams[i];
+        if (tram.des_de === null || tram.des_de <= mes) return tram.parts;
+    }
+
+    return posicio.trams[0]?.parts ?? [];
+};
+
 /**
- * El valor a parts iguals entre els titulars, amb el residu per a l'últim.
+ * El valor segons el pes de cadascú, amb el residu per a l'últim.
  *
  * És el mateix repartiment que fa el servidor amb el valor d'avui, repetit aquí perquè la
- * pantalla el pugui refer a qualsevol tall sense tornar-hi.
+ * pantalla el pugui refer a qualsevol tall sense tornar-hi. Els pesos són tots 1 quan va a
+ * parts iguals i les quotes de l'immoble quan n'hi ha.
  */
-const reparteix = (valor: number, parts: Part[]): number[] => {
+const reparteix = (valor: number, parts: Array<{ pes: number }>): number[] => {
+    const total = parts.reduce((s, p) => s + p.pes, 0) || 1;
     const parcials: number[] = [];
     let repartit = 0;
 
-    parts.forEach((_, i) => {
-        const part = i === parts.length - 1 ? round2(valor - repartit) : round2(valor / parts.length);
-        repartit += part;
-        parcials.push(part);
+    parts.forEach((part, i) => {
+        const tros = i === parts.length - 1 ? round2(valor - repartit) : round2((valor * part.pes) / total);
+        repartit += tros;
+        parcials.push(tros);
     });
 
     return parcials;
@@ -255,9 +277,10 @@ const totalsAlMes = (mes: string) => {
     for (const posicio of props.posicions) {
         if (!posicionsTriades.value.has(posicio.clau)) continue;
 
-        const parts = reparteix(valorAlMes(posicio, mes), posicio.parts);
+        const tram = tramAlMes(posicio, mes);
+        const parts = reparteix(valorAlMes(posicio, mes), tram);
 
-        posicio.parts.forEach((part, i) => {
+        tram.forEach((part, i) => {
             if (!titularsTriats.value.has(clauTitular(part.titular_id))) return;
 
             perFont[posicio.font] = (perFont[posicio.font] ?? 0) + parts[i];
@@ -298,9 +321,10 @@ const files = computed<FilaTitular[]>(() => {
 
         // Al tall d'ara la sèrie diu el mateix que el valor calculat pel servidor
         const valor = valorAlMes(posicio, mesDelTall.value);
-        const parts = reparteix(valor, posicio.parts);
+        const tram = tramAlMes(posicio, mesDelTall.value);
+        const parts = reparteix(valor, tram);
 
-        posicio.parts.forEach((part, i) => {
+        tram.forEach((part, i) => {
             const clau = clauTitular(part.titular_id);
             if (!titularsTriats.value.has(clau)) return;
 
@@ -317,7 +341,7 @@ const files = computed<FilaTitular[]>(() => {
                 etiqueta: posicio.etiqueta,
                 font: posicio.font,
                 valor,
-                titulars: posicio.parts.length,
+                titulars: tram.length,
                 part: parts[i],
             });
         });
@@ -418,13 +442,17 @@ const tallDelMes = (mes: string): string | null => {
  *
  * Els fluxos es reparteixen com el patrimoni: a parts iguals entre els titulars del compte.
  */
-const fraccioDe = (clauPosicio: string) => {
+const fraccioDe = (clauPosicio: string, mes: string) => {
     const posicio = props.posicions.find(p => p.clau === clauPosicio);
-    if (!posicio || !posicio.parts.length) return 0;
+    if (!posicio) return 0;
 
-    const marcats = posicio.parts.filter(part => titularsTriats.value.has(clauTitular(part.titular_id))).length;
+    const tram = tramAlMes(posicio, mes);
+    const total = tram.reduce((s, p) => s + p.pes, 0);
+    if (!total) return 0;
 
-    return marcats / posicio.parts.length;
+    return tram
+        .filter(part => titularsTriats.value.has(clauTitular(part.titular_id)))
+        .reduce((s, p) => s + p.pes, 0) / total;
 };
 
 interface Flux {
@@ -445,7 +473,7 @@ const fluxosPerTall = computed(() => {
         const clau = tallDelMes(f.mes);
         if (clau === null) continue;
 
-        const fraccio = fraccioDe(f.posicio);
+        const fraccio = fraccioDe(f.posicio, f.mes);
         suma(clau, f.entrades * fraccio, f.sortides * fraccio);
     }
 
@@ -457,10 +485,21 @@ const fluxosPerTall = computed(() => {
             const clau = tallDelMes(t.mes);
             if (clau === null) continue;
 
-            // El destí només té flux si és un compte: un fons no té moviments bancaris
-            const entrades = t.desti.startsWith('comptes-') ? t.import * fraccioDe(t.desti) : 0;
+            const partOrigen = t.import * fraccioDe(t.origen, t.mes);
+            // El destí només té flux registrat si és un compte: un fons no té moviments bancaris
+            const partDesti = t.import * fraccioDe(t.desti, t.mes);
+            const entradesRegistrades = t.desti.startsWith('comptes-') ? partDesti : 0;
 
-            suma(clau, -entrades, -t.import * fraccioDe(t.origen));
+            // Les dues bandes poden no ser de la mateixa gent: el que canvia de mans SÍ que
+            // creua la frontera dels titulars marcats, i és un flux seu de debò. Si Joan
+            // passa diners a un compte de la Marta, per a ella és una entrada.
+            const canviaDeMans = round2(partDesti - partOrigen);
+
+            suma(
+                clau,
+                -entradesRegistrades + Math.max(0, canviaDeMans),
+                -partOrigen + Math.max(0, -canviaDeMans),
+            );
         }
     }
 
@@ -893,11 +932,11 @@ const obreDetall = (fila: FilaTitular) => {
 </script>
 
 <template>
-    <Head title="Totals mobiliaris" />
+    <Head title="Anàlisi mobiliari" />
 
     <AuthenticatedLayout>
         <template #header>
-            <h2 class="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200">Totals mobiliaris per titular</h2>
+            <h2 class="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200">Anàlisi mobiliari</h2>
         </template>
 
         <div class="py-12">

@@ -61,24 +61,18 @@ class ImmobleController extends Controller
         $validated = $request->validated();
 
         // Extract propietari data
-        $propietariIds = $validated['propietari_ids'] ?? [];
-        $propietariDataInici = $validated['propietari_data_inici'] ?? [];
-        $propietariDataFi = $validated['propietari_data_fi'] ?? [];
+        $propietaris = $this->propietarisDelFormulari($validated);
 
-        unset($validated['propietari_ids'], $validated['propietari_data_inici'], $validated['propietari_data_fi']);
+        unset(
+            $validated['propietari_ids'],
+            $validated['propietari_data_inici'],
+            $validated['propietari_data_fi'],
+            $validated['propietari_quota'],
+        );
 
         $immoble = Immoble::create($validated);
 
-        // Sync propietaris with pivot data
-        $syncData = [];
-        foreach ($propietariIds as $index => $personaId) {
-            $syncData[$personaId] = [
-                'data_inici' => $propietariDataInici[$index] ?? now()->toDateString(),
-                'data_fi' => $propietariDataFi[$index] ?? null,
-            ];
-        }
-
-        $immoble->propietaris()->sync($syncData);
+        $this->desaPropietaris($immoble, $propietaris);
 
         return redirect()->route('immobles.index')
             ->with('success', 'Immoble creat correctament.');
@@ -92,24 +86,18 @@ class ImmobleController extends Controller
         $validated = $request->validated();
 
         // Extract propietari data
-        $propietariIds = $validated['propietari_ids'] ?? [];
-        $propietariDataInici = $validated['propietari_data_inici'] ?? [];
-        $propietariDataFi = $validated['propietari_data_fi'] ?? [];
+        $propietaris = $this->propietarisDelFormulari($validated);
 
-        unset($validated['propietari_ids'], $validated['propietari_data_inici'], $validated['propietari_data_fi']);
+        unset(
+            $validated['propietari_ids'],
+            $validated['propietari_data_inici'],
+            $validated['propietari_data_fi'],
+            $validated['propietari_quota'],
+        );
 
         $immoble->update($validated);
 
-        // Sync propietaris with pivot data
-        $syncData = [];
-        foreach ($propietariIds as $index => $personaId) {
-            $syncData[$personaId] = [
-                'data_inici' => $propietariDataInici[$index] ?? now()->toDateString(),
-                'data_fi' => $propietariDataFi[$index] ?? null,
-            ];
-        }
-
-        $immoble->propietaris()->sync($syncData);
+        $this->desaPropietaris($immoble, $propietaris);
 
         return redirect()->route('immobles.index')
             ->with('success', 'Immoble actualitzat correctament.');
@@ -124,5 +112,63 @@ class ImmobleController extends Controller
 
         return redirect()->route('immobles.index')
             ->with('success', 'Immoble eliminat correctament.');
+    }
+
+    /**
+     * Les files de titularitat que arriben del formulari.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return array<int, array<string, mixed>>
+     */
+    private function propietarisDelFormulari(array $validated): array
+    {
+        $files = [];
+
+        foreach ($validated['propietari_ids'] ?? [] as $i => $personaId) {
+            $files[] = [
+                'persona_id' => $personaId,
+                'data_inici' => $validated['propietari_data_inici'][$i] ?? now()->toDateString(),
+                'data_fi'    => $validated['propietari_data_fi'][$i] ?? null,
+                'quota'      => $validated['propietari_quota'][$i] ?? null,
+            ];
+        }
+
+        return $files;
+    }
+
+    /**
+     * Desa les titularitats una per una, no amb sync().
+     *
+     * Una persona pot constar-hi **més d'un cop**: la seva quota canvia amb els anys i cada
+     * tram és una fila amb les seves dates. Amb `sync()`, que va indexat per persona, el
+     * segon tram esborrava el primer.
+     *
+     * L'amortització no és al formulari —es calcula a part i s'edita per tinker— i es
+     * conserva buscant el tram que ja hi havia per persona i data d'inici.
+     *
+     * @param  array<int, array<string, mixed>>  $propietaris
+     */
+    private function desaPropietaris(Immoble $immoble, array $propietaris): void
+    {
+        $amortitzacions = $immoble->propietaris()
+            ->get()
+            ->mapWithKeys(function ($p) {
+                $inici = $p->pivot->data_inici instanceof \DateTimeInterface
+                    ? $p->pivot->data_inici->format('Y-m-d')
+                    : substr((string) $p->pivot->data_inici, 0, 10);
+
+                return [$p->id . '|' . $inici => $p->pivot->amortitzacio_anual];
+            });
+
+        $immoble->propietaris()->detach();
+
+        foreach ($propietaris as $fila) {
+            $immoble->propietaris()->attach($fila['persona_id'], [
+                'data_inici'         => $fila['data_inici'],
+                'data_fi'            => $fila['data_fi'],
+                'quota'              => $fila['quota'],
+                'amortitzacio_anual' => $amortitzacions[$fila['persona_id'] . '|' . $fila['data_inici']] ?? null,
+            ]);
+        }
     }
 }

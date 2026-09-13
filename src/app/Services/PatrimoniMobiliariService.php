@@ -21,9 +21,12 @@ use Illuminate\Support\Facades\DB;
  * totes en la mateixa forma —un nom,
  * un valor i com es reparteix entre els titulars— perquè es puguin sumar.
  *
- * El repartiment és sempre **a parts iguals** entre els titulars del compte, que és el
- * que fan les tres pantalles: cap pivot no desa percentatges. L'últim titular s'endú el
- * residu, perquè la suma de les parts doni exactament el valor de la posició.
+ * El repartiment és **a parts iguals** entre els titulars del compte, que és el que fan
+ * les tres pantalles, l'últim titular s'endú el residu perquè la suma doni exactament el
+ * valor de la posició. L'excepció són els comptes d'un lloguer l'immoble del qual té
+ * **quotes de titularitat** desades (`g_propietaris_immobles`): allà manen les quotes, i
+ * com que tenen dates, poden canviar al llarg de la sèrie. Per això cada posició porta els
+ * seus **trams de repartiment** i la pantalla tria el que toca a cada mes.
  *
  * Cada posició porta, a més del que val avui, **què valia a final de cada mes** des que hi
  * ha dades. No cal desar-ho enlloc: el saldo d'un compte a una data és el `saldo_posterior`
@@ -85,6 +88,105 @@ class PatrimoniMobiliariService
     }
 
     /**
+     * Els trams de repartiment d'un compte: qui hi té quina part, i des de quan.
+     *
+     * Sense quotes n'hi ha un de sol, a parts iguals i sense data. Amb quotes n'hi ha un
+     * per cada canvi de titularitat, i el pes de cadascú és la seva quota d'aquell tram.
+     *
+     * @param  \Illuminate\Support\Collection<int, \App\Models\Persona>  $titulars
+     * @return array<int, array<string, mixed>>
+     */
+    private function trams(?int $compteId, Collection $titulars): array
+    {
+        $unic = [[
+            'des_de' => null,
+            'parts'  => $titulars->map(fn ($t) => [
+                'titular_id' => $t->id,
+                'nom'        => trim($t->nom . ' ' . $t->cognoms),
+                'pes'        => 1.0,
+            ])->values()->all(),
+        ]];
+
+        if ($compteId === null) {
+            return $unic;
+        }
+
+        $quotes = $this->quotesDelCompte($compteId);
+
+        return $quotes === [] ? $unic : $quotes;
+    }
+
+    /**
+     * Les quotes de l'immoble del lloguer d'aquest compte, en trams.
+     *
+     * Un compte que reculli lloguers d'immobles diferents no té una resposta única: en
+     * aquest cas es deixa estar i el repartiment torna a ser a parts iguals.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function quotesDelCompte(int $compteId): array
+    {
+        $immobles = \App\Models\Lloguer::where('compte_corrent_id', $compteId)
+            ->with('immoble.propietaris')
+            ->get()
+            ->map(fn ($ll) => $ll->immoble)
+            ->filter()
+            ->unique('id');
+
+        if ($immobles->count() !== 1) {
+            return [];
+        }
+
+        $propietaris = $immobles->first()->propietaris
+            ->filter(fn ($p) => $p->pivot->quota !== null);
+
+        if ($propietaris->isEmpty()) {
+            return [];
+        }
+
+        // Cada data d'alta o de baixa obre un tram nou
+        $dates = $propietaris
+            ->flatMap(fn ($p) => [$this->mesDe($p->pivot->data_inici), $this->mesSeguent($p->pivot->data_fi)])
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values();
+
+        return $dates->map(function (string $mes) use ($propietaris) {
+            $vigents = $propietaris->filter(fn ($p) =>
+                $this->mesDe($p->pivot->data_inici) <= $mes
+                && ($p->pivot->data_fi === null || $this->mesDe($p->pivot->data_fi) >= $mes)
+            );
+
+            return [
+                'des_de' => $mes,
+                'parts'  => $vigents->map(fn ($p) => [
+                    'titular_id' => $p->id,
+                    'nom'        => trim($p->nom . ' ' . $p->cognoms),
+                    'pes'        => (float) $p->pivot->quota,
+                ])->values()->all(),
+            ];
+        })->filter(fn (array $tram) => $tram['parts'] !== [])->values()->all();
+    }
+
+    private function mesDe(mixed $data): ?string
+    {
+        if ($data === null) {
+            return null;
+        }
+
+        return $data instanceof \DateTimeInterface ? $data->format('Y-m') : substr((string) $data, 0, 7);
+    }
+
+    /** El mes que ve després d'una baixa: quan la titularitat ja no hi és. */
+    private function mesSeguent(mixed $data): ?string
+    {
+        $mes = $this->mesDe($data);
+
+        return $mes === null ? null : Carbon::parse($mes . '-01')->addMonth()->format('Y-m');
+    }
+
+    /**
      * Els titulars que tenen alguna cosa, ordenats per nom.
      *
      * No són totes les persones: triar algú que no té cap posició no diria res.
@@ -129,6 +231,7 @@ class PatrimoniMobiliariService
                 valor: (float) $c->saldo_actual,
                 titulars: $c->titulars,
                 serie: $saldos[$c->id] ?? $this->arrossega([], $mesos),
+                compteId: $c->id,
             ))
             ->all();
     }
@@ -183,6 +286,7 @@ class PatrimoniMobiliariService
                     valor: round($c->aportacions->sum(fn ($a) => (float) $a->participacions) * $valorPart, 2),
                     titulars: $c->compteCorrent?->titulars ?? collect(),
                     serie: $this->serieParticipacions($c->aportacions, $cotitzacions, $mesos),
+                    compteId: $c->compte_corrent_id,
                 ));
             })
             ->all();
@@ -211,6 +315,7 @@ class PatrimoniMobiliariService
                     valor: round($c->aportacions->sum(fn ($a) => (float) $a->participacions) * $valorPart, 2),
                     titulars: $c->compteCorrent?->titulars ?? collect(),
                     serie: $this->serieParticipacions($c->aportacions, $cotitzacions, $mesos),
+                    compteId: $c->compte_corrent_id,
                 ));
             })
             ->all();
@@ -235,6 +340,7 @@ class PatrimoniMobiliariService
                 valor: $c->valorAData(),
                 titulars: $c->compteCorrent?->titulars ?? collect(),
                 serie: $this->serieRendaFixa($c, $mesos),
+                compteId: $c->compte_corrent_id,
             ))
             ->all();
     }
@@ -267,6 +373,7 @@ class PatrimoniMobiliariService
                 valor: $c->valorAData(),
                 titulars: $c->titulars(),
                 serie: $this->serieCapitalSocial($c, $mesos),
+                compteId: $c->compte_corrent_id,
             ))
             ->all();
     }
@@ -412,49 +519,66 @@ class PatrimoniMobiliariService
         float $valor,
         Collection $titulars,
         array $serie = [],
+        ?int $compteId = null,
     ): array {
+        $trams = $this->trams($compteId, $titulars);
+
         return [
             // La clau identifica la posició a la tria de la pantalla
             'clau'     => $font . '-' . $id,
+            // Qui se'n reparteix el valor, i des de quan: les quotes poden canviar
+            'trams'    => $trams,
             'font'     => $font,
             'nom'      => $nom,
             'detall'   => $detall,
             'etiqueta' => $etiqueta,
             'valor'    => round($valor, 2),
-            'parts'    => $this->reparteix($valor, $titulars),
+            'parts'    => $this->reparteix($valor, $this->tramVigent($trams)),
             // Què valia a final de cada mes; la pantalla en tria el tall
             'serie'    => $serie,
         ];
     }
 
+    /** El tram que val avui: l'últim que ja ha començat. */
+    private function tramVigent(array $trams): array
+    {
+        $ara = Carbon::now()->format('Y-m');
+
+        foreach (array_reverse($trams) as $tram) {
+            if ($tram['des_de'] === null || $tram['des_de'] <= $ara) {
+                return $tram['parts'];
+            }
+        }
+
+        return $trams[0]['parts'] ?? [];
+    }
+
     /**
-     * El valor a parts iguals entre els titulars, amb el residu per a l'últim.
+     * El valor repartit segons el pes de cadascú, amb el residu per a l'últim.
      *
+     * Els pesos són tots 1 quan va a parts iguals i les quotes de l'immoble quan n'hi ha.
      * Una posició sense titular no es pot repartir, però tampoc s'ha de perdre: va a parar
      * a una fila «Sense titular», com a la pantalla de comptes corrents.
      *
-     * @param  \Illuminate\Support\Collection<int, \App\Models\Persona>  $titulars
+     * @param  array<int, array<string, mixed>>  $parts
      * @return array<int, array<string, mixed>>
      */
-    private function reparteix(float $valor, Collection $titulars): array
+    private function reparteix(float $valor, array $parts): array
     {
-        $files = $titulars->isEmpty()
-            ? [['titular_id' => null, 'nom' => 'Sense titular']]
-            : $titulars->map(fn ($t) => [
-                'titular_id' => $t->id,
-                'nom'        => trim($t->nom . ' ' . $t->cognoms),
-            ])->values()->all();
+        $files = $parts === [] ? [['titular_id' => null, 'nom' => 'Sense titular', 'pes' => 1.0]] : $parts;
+        $total = array_sum(array_column($files, 'pes')) ?: 1.0;
 
-        $parts    = count($files);
         $repartit = 0.0;
+        $ultim    = count($files) - 1;
 
         foreach ($files as $i => $fila) {
-            $part = $i === $parts - 1
+            $part = $i === $ultim
                 ? round($valor - $repartit, 2)
-                : round($valor / $parts, 2);
+                : round($valor * $fila['pes'] / $total, 2);
             $repartit += $part;
 
             $files[$i]['part'] = $part;
+            unset($files[$i]['pes']);
         }
 
         return $files;

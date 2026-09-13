@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
+import { num } from '@/formularis';
 
 interface Persona {
     id: number;
@@ -18,6 +19,8 @@ interface Proveidor {
 interface PropietariPivot {
     data_inici: string;
     data_fi: string | null;
+    /** Percentatge de titularitat d'aquell tram; null vol dir a parts iguals. */
+    quota: number | string | null;
 }
 
 interface Immoble {
@@ -74,6 +77,7 @@ const form = useForm({
     propietari_ids: [] as number[],
     propietari_data_inici: [] as string[],
     propietari_data_fi: [] as (string | null)[],
+    propietari_quota: [] as (number | string | null)[],
 });
 
 interface PropietariLocal {
@@ -82,14 +86,15 @@ interface PropietariLocal {
     data_inici: string;
     /** Buida mentre la titularitat és vigent. */
     data_fi: string | null;
+    /** Percentatge d'aquell tram; buit vol dir a parts iguals amb els altres. */
+    quota: number | string | null;
 }
 
 const localPropietaris = ref<PropietariLocal[]>([]);
 const nouPropietariId = ref<number | null>(null);
 
-const personesDisponibles = computed(() =>
-    props.persones.filter(p => !localPropietaris.value.some(lp => lp.persona_id === p.id))
-);
+// Una persona hi pot sortir més d'un cop, amb un tram i una quota diferents cada vegada
+const personesDisponibles = computed(() => props.persones);
 
 const addPropietari = () => {
     if (!nouPropietariId.value) return;
@@ -98,8 +103,10 @@ const addPropietari = () => {
     localPropietaris.value.push({
         persona_id: persona.id,
         nom: persona.nom + ' ' + persona.cognoms,
+        // El tram nou comença on acaba l'últim d'aquella persona, si n'hi havia cap
         data_inici: new Date().toISOString().split('T')[0],
         data_fi: null,
+        quota: null,
     });
     nouPropietariId.value = null;
 };
@@ -107,6 +114,20 @@ const addPropietari = () => {
 const removePropietari = (index: number) => {
     localPropietaris.value.splice(index, 1);
 };
+
+/** Els trams vigents avui han de sumar 100: si no, el repartiment no vol dir res. */
+const quotaVigent = computed(() => {
+    const avui = new Date().toISOString().split('T')[0];
+    const vigents = localPropietaris.value.filter(p => p.data_inici <= avui && (!p.data_fi || p.data_fi >= avui));
+    const amb = vigents.filter(p => num(p.quota) !== null);
+
+    if (!amb.length) return null;
+
+    return {
+        suma: Math.round(amb.reduce((s, p) => s + (num(p.quota) ?? 0), 0) * 100) / 100,
+        incompleta: amb.length !== vigents.length,
+    };
+});
 
 const valorCadastral = computed(() => {
     const sol = Number(form.valor_sol) || 0;
@@ -142,6 +163,7 @@ const openEditModal = (immoble: Immoble) => {
         nom: p.nom + ' ' + p.cognoms,
         data_inici: p.pivot.data_inici,
         data_fi: p.pivot.data_fi,
+        quota: p.pivot.quota ?? null,
     }));
     nouPropietariId.value = null;
     showModal.value = true;
@@ -160,6 +182,7 @@ const submit = () => {
     form.propietari_data_inici = localPropietaris.value.map(p => p.data_inici);
     // La data de fi que hi hagi: enviar-hi null sempre esborrava les titularitats tancades
     form.propietari_data_fi = localPropietaris.value.map(p => p.data_fi || null);
+    form.propietari_quota = localPropietaris.value.map(p => num(p.quota));
     if (isEditing.value && editingImmoble.value) {
         form.put(route('immobles.update', editingImmoble.value.id), {
             onSuccess: () => closeModal(),
@@ -623,13 +646,34 @@ const formatNumber = (value: number | null, suffix: string = ''): string => {
                                 </label>
 
                                 <!-- Llista de propietaris actuals -->
+                                <p v-if="quotaVigent && (quotaVigent.suma !== 100 || quotaVigent.incompleta)"
+                                    class="mb-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                                    <template v-if="quotaVigent.incompleta">
+                                        Hi ha titulars vigents amb quota i altres sense: o les poses totes, o cap.
+                                    </template>
+                                    <template v-else>
+                                        Les quotes vigents sumen {{ quotaVigent.suma }} % i haurien de sumar 100.
+                                    </template>
+                                </p>
+
                                 <ul v-if="localPropietaris.length" class="mb-3 divide-y divide-gray-100 dark:divide-gray-700 rounded-md border border-gray-200 dark:border-gray-600">
                                     <li
                                         v-for="(p, i) in localPropietaris"
-                                        :key="p.persona_id"
+                                        :key="i"
                                         class="flex items-center justify-between px-3 py-2 text-sm text-gray-800 dark:text-gray-200"
                                     >
                                         <span class="min-w-0 flex-1 truncate">{{ p.nom }}</span>
+                                        <label class="ml-3 flex shrink-0 items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                                            <input
+                                                v-model="p.quota"
+                                                type="text"
+                                                inputmode="decimal"
+                                                placeholder="a parts iguals"
+                                                title="Percentatge de titularitat en aquest tram"
+                                                class="w-28 rounded-md border-gray-300 py-1 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                                            />
+                                            %
+                                        </label>
                                         <!-- La data d'adquisició de la quota, no la d'alta del
                                              registre: el model 184 hi filtra per exercici. -->
                                         <label class="ml-3 flex shrink-0 items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
