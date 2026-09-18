@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { perEntitatINom, type CompteOrdenable } from '@/comptes';
 
 interface ScannedFile {
     name: string;
@@ -32,11 +33,8 @@ interface PreviewData {
     warnings: string[];
 }
 
-interface CompteDisponible {
+interface CompteDisponible extends CompteOrdenable {
     id: number;
-    nom: string | null;
-    iban: string;
-    entitat: string;
 }
 
 type Step = 'scan' | 'select_compte' | 'preview' | 'importing' | 'done';
@@ -53,6 +51,10 @@ const importedCompteId = ref<number | null>(null);
 const comptesDisponibles = ref<CompteDisponible[]>([]);
 const selectedCompteId = ref<number | null>(null);
 const pendingFilePath = ref<string>('');
+
+// Els mateixos grups i el mateix ordre que a Comptes Corrents
+const comptesCorrents = computed(() => comptesDisponibles.value.filter(c => !c.lloguer_nom).sort(perEntitatINom));
+const comptesLloguers = computed(() => comptesDisponibles.value.filter(c => !!c.lloguer_nom).sort(perEntitatINom));
 
 // Llegim el token de la cookie XSRF-TOKEN (sempre actual) en comptes del meta tag
 // (el meta tag només es refresca en full page load, la cookie es refresca a cada resposta Laravel)
@@ -246,9 +248,16 @@ onMounted(scanFiles);
                                     class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                 >
                                     <option :value="null" disabled>Selecciona un compte...</option>
-                                    <option v-for="c in comptesDisponibles" :key="c.id" :value="c.id">
-                                        {{ c.nom || c.iban }} — {{ c.entitat }}
-                                    </option>
+                                    <optgroup v-if="comptesCorrents.length" label="Corrents">
+                                        <option v-for="c in comptesCorrents" :key="c.id" :value="c.id">
+                                            {{ c.nom || c.compte_corrent }} — {{ c.entitat }}
+                                        </option>
+                                    </optgroup>
+                                    <optgroup v-if="comptesLloguers.length" label="Lloguers">
+                                        <option v-for="c in comptesLloguers" :key="c.id" :value="c.id">
+                                            {{ c.nom || c.compte_corrent }}
+                                        </option>
+                                    </optgroup>
                                 </select>
                             </div>
                             <div class="flex gap-3">

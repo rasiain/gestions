@@ -10,6 +10,7 @@ use App\Http\Services\ImportFiles\CaixaBankParserService;
 use App\Http\Services\ImportFiles\KMyMoneyMovementParserService;
 use App\Http\Services\MovementImportService;
 use App\Models\CompteCorrent;
+use App\Models\Lloguer;
 use App\Models\MovimentCompteCorrent;
 use App\Services\SaldoRecalculationService;
 use Illuminate\Http\JsonResponse;
@@ -296,9 +297,20 @@ class MovementImportController extends Controller
             }
 
             if (!$compte) {
-                $comptes = CompteCorrent::with('entitatRelacio')->orderBy('ordre')->get()->map(fn ($c) => [
-                    'id' => $c->id, 'nom' => $c->nom, 'iban' => $c->compte_corrent, 'entitat' => $c->entitat,
-                ]);
+                // Només els corrents: la resta no tenen moviments. L'ordre i els
+                // grups els posa la pantalla, amb el mateix criteri que Comptes Corrents.
+                $lloguersPerCompte = Lloguer::pluck('nom', 'compte_corrent_id');
+                $comptes = CompteCorrent::with('entitatRelacio')
+                    ->where('tipus', 'corrent')
+                    ->get()
+                    ->map(fn ($c) => [
+                        'id' => $c->id,
+                        'nom' => $c->nom,
+                        'compte_corrent' => $c->compte_corrent,
+                        'entitat' => $c->entitat,
+                        'tipus' => $c->tipus,
+                        'lloguer_nom' => $lloguersPerCompte->get($c->id),
+                    ]);
                 return response()->json([
                     'success' => false,
                     'needs_compte_selection' => true,
@@ -425,11 +437,25 @@ class MovementImportController extends Controller
 
     private function detectCompte(string $filePath, string $bankType): ?CompteCorrent
     {
-        // 1. Cerca IBAN com a text pla (funciona per CSV/XLSX descomprimit)
-        $content = file_get_contents($filePath, false, null, 0, 8192);
-        if ($content && preg_match('/ES\d{2}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}/', $content, $matches)) {
+        // 1. Cerca l'IBAN al contingut. Un XLS és binari i el text pla no hi
+        //    troba res: per això també es mira a les primeres files llegides,
+        //    on CaixaBank posa «Moviments del compte ES40 2100 …».
+        $content = (string) file_get_contents($filePath, false, null, 0, 8192);
+        if ($bankType !== 'kmymoney') {
+            try {
+                $file = new UploadedFile($filePath, basename($filePath), mime_content_type($filePath), null, true);
+                $capcalera = array_slice($this->fileParser->parse($file), 0, 5);
+                $content .= "\n" . implode("\n", array_map(
+                    fn ($fila) => implode(' ', array_filter((array) $fila, 'is_string')),
+                    $capcalera
+                ));
+            } catch (\Throwable) {
+                // Si no es pot llegir, queden el nom del fitxer i el tipus de banc
+            }
+        }
+        if (preg_match('/ES\d{2}(?:\s?\d{4}){5}/', $content, $matches)) {
             $iban = preg_replace('/\s/', '', $matches[0]);
-            $compte = CompteCorrent::where('compte_corrent', $iban)->first();
+            $compte = CompteCorrent::whereRaw("REPLACE(compte_corrent, ' ', '') = ?", [$iban])->first();
             if ($compte) return $compte;
         }
 
@@ -437,7 +463,7 @@ class MovementImportController extends Controller
         $filename = pathinfo($filePath, PATHINFO_FILENAME);
         if (preg_match('/\d{5,}/', $filename, $matches)) {
             $partial = $matches[0];
-            $compte = CompteCorrent::where('compte_corrent', 'LIKE', "%{$partial}%")->first();
+            $compte = CompteCorrent::whereRaw("REPLACE(compte_corrent, ' ', '') LIKE ?", ["%{$partial}%"])->first();
             if ($compte) return $compte;
         }
 
