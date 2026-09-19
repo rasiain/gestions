@@ -36,8 +36,6 @@ class LloguerRequest extends FormRequest
             'immoble_id'       => ['required', 'integer', 'exists:g_immobles,id'],
             'compte_corrent_id' => ['required', 'integer', 'exists:g_comptes_corrents,id'],
             'base_euros'            => ['nullable', 'numeric', 'min:0'],
-            'proveidor_gestoria_id' => ['nullable', 'integer', 'exists:g_proveidors,id'],
-            'gestoria_percentatge'  => ['nullable', 'numeric', 'min:0', 'max:100'],
             'es_habitatge'          => ['boolean'],
             'retencio_irpf'         => ['boolean'],
             'iva_percentatge'       => ['nullable', 'numeric', 'min:0', 'max:100'],

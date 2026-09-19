@@ -31,8 +31,8 @@ class LloguerController extends Controller
     {
         $lloguers = Lloguer::with([
                 'immoble.propietaris',
+                'immoble.administracions.proveidor',
                 'compteCorrent',
-                'gestoria',
                 'contractes' => function ($q) {
                     $q->where(function ($q2) {
                         $q2->whereNull('data_fi')->orWhere('data_fi', '>', now()->toDateString());
@@ -64,18 +64,16 @@ class LloguerController extends Controller
                         'nom' => $lloguer->compteCorrent->nom,
                     ] : null,
                     'base_euros'            => $lloguer->base_euros,
-                    'proveidor_gestoria_id' => $lloguer->proveidor_gestoria_id,
-                    'gestoria_percentatge'  => $lloguer->gestoria_percentatge,
                     'es_habitatge'          => $lloguer->es_habitatge,
                     'retencio_irpf'         => $lloguer->retencio_irpf,
                     'iva_percentatge'       => $lloguer->iva_percentatge,
                     'irpf_percentatge'      => $lloguer->irpf_percentatge,
                     'ruta_descarrega'       => $lloguer->ruta_descarrega,
                     'ruta_export'           => $lloguer->ruta_export,
-                    'gestoria'              => $lloguer->gestoria ? [
-                        'id'             => $lloguer->gestoria->id,
-                        'nom_rao_social' => $lloguer->gestoria->nom_rao_social,
-                    ] : null,
+                    // De l'immoble: el cobrament en pren la del seu dia, no la d'avui
+                    'administracions'       => $lloguer->immoble
+                        ? $lloguer->immoble->administracions->map->perAlClient()->values()
+                        : [],
                     'propietaris' => $lloguer->immoble ? $lloguer->immoble->propietaris
                         ->where('pivot.data_fi', null)
                         ->map(fn($p) => [
@@ -115,7 +113,15 @@ class LloguerController extends Controller
                 ];
             });
 
-        $immobles = Immoble::orderBy('adreca')->get(['id', 'adreca']);
+        // Amb l'administradora d'avui, que el formulari del lloguer mostra i no edita
+        $immobles = Immoble::with('administracions.proveidor')
+            ->orderBy('adreca')
+            ->get()
+            ->map(fn (Immoble $i) => [
+                'id'           => $i->id,
+                'adreca'       => $i->adreca,
+                'administracio' => $i->administracioA()?->perAlClient(),
+            ]);
         $comptesCorrents = CompteCorrent::orderBy('nom')->get(['id', 'nom']);
         $llogaters = Llogater::with('persona')
             ->get()

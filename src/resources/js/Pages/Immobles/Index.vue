@@ -23,6 +23,21 @@ interface PropietariPivot {
     quota: number | string | null;
 }
 
+/** Un tram d'administració: qui administrava l'immoble, entre quines dates. */
+interface Administracio {
+    id?: number;
+    proveidor_id: number | null;
+    proveidor?: string | null;
+    /** Com identifica l'immoble l'empresa. */
+    referencia: string | null;
+    /** Comissió sobre la renda cobrada, sense IVA. */
+    percentatge: number | string | null;
+    /** Buida: des de sempre. */
+    data_inici: string | null;
+    /** Buida mentre és vigent. */
+    data_fi: string | null;
+}
+
 interface Immoble {
     id: number;
     referencia_cadastral: string;
@@ -35,9 +50,8 @@ interface Immoble {
     valor_construccio: number | null;
     valor_cadastral: number | null;
     valor_adquisicio: number | null;
-    referencia_administracio: string | null;
-    administrador_id: number | null;
-    administrador: Proveidor | null;
+    administracions: Administracio[];
+    administracio_vigent: Administracio | null;
     propietaris: (Persona & { pivot: PropietariPivot })[];
     created_at: string;
     updated_at: string;
@@ -72,8 +86,7 @@ const form = useForm({
     valor_sol: null as number | null,
     valor_construccio: null as number | null,
     valor_adquisicio: null as number | null,
-    referencia_administracio: '',
-    administrador_id: null as number | null,
+    administracions: [] as Administracio[],
     propietari_ids: [] as number[],
     propietari_data_inici: [] as string[],
     propietari_data_fi: [] as (string | null)[],
@@ -129,6 +142,32 @@ const quotaVigent = computed(() => {
     };
 });
 
+const localAdministracions = ref<Administracio[]>([]);
+
+const addAdministracio = () => {
+    const darrera = localAdministracions.value[localAdministracions.value.length - 1];
+    localAdministracions.value.push({
+        // Un tram nou sol ser una empresa nova; la comissió, en canvi, sovint es manté
+        proveidor_id: null,
+        referencia: null,
+        percentatge: darrera?.percentatge ?? null,
+        data_inici: new Date().toISOString().split('T')[0],
+        data_fi: null,
+    });
+};
+
+const removeAdministracio = (index: number) => {
+    localAdministracions.value.splice(index, 1);
+};
+
+/** L'error de validació d'un tram, si n'hi ha cap. */
+const errorAdministracions = computed(() => {
+    const errors = form.errors as Record<string, string>;
+    return errors.administracions
+        ?? Object.entries(errors).find(([k]) => k.startsWith('administracions.'))?.[1]
+        ?? null;
+});
+
 const valorCadastral = computed(() => {
     const sol = Number(form.valor_sol) || 0;
     const construccio = Number(form.valor_construccio) || 0;
@@ -140,6 +179,7 @@ const openCreateModal = () => {
     editingImmoble.value = null;
     form.reset();
     localPropietaris.value = [];
+    localAdministracions.value = [];
     nouPropietariId.value = null;
     showModal.value = true;
 };
@@ -156,8 +196,7 @@ const openEditModal = (immoble: Immoble) => {
     form.valor_sol = immoble.valor_sol;
     form.valor_construccio = immoble.valor_construccio;
     form.valor_adquisicio = immoble.valor_adquisicio;
-    form.referencia_administracio = immoble.referencia_administracio || '';
-    form.administrador_id = immoble.administrador_id;
+    localAdministracions.value = immoble.administracions.map(a => ({ ...a }));
     localPropietaris.value = immoble.propietaris.map(p => ({
         persona_id: p.id,
         nom: p.nom + ' ' + p.cognoms,
@@ -173,6 +212,7 @@ const closeModal = () => {
     showModal.value = false;
     form.reset();
     localPropietaris.value = [];
+    localAdministracions.value = [];
     isEditing.value = false;
     editingImmoble.value = null;
 };
@@ -183,6 +223,13 @@ const submit = () => {
     // La data de fi que hi hagi: enviar-hi null sempre esborrava les titularitats tancades
     form.propietari_data_fi = localPropietaris.value.map(p => p.data_fi || null);
     form.propietari_quota = localPropietaris.value.map(p => num(p.quota));
+    form.administracions = localAdministracions.value.map(a => ({
+        proveidor_id: a.proveidor_id,
+        referencia: a.referencia?.trim() || null,
+        percentatge: num(a.percentatge),
+        data_inici: a.data_inici || null,
+        data_fi: a.data_fi || null,
+    }));
     if (isEditing.value && editingImmoble.value) {
         form.put(route('immobles.update', editingImmoble.value.id), {
             onSuccess: () => closeModal(),
@@ -312,7 +359,13 @@ const formatNumber = (value: number | null, suffix: string = ''): string => {
                                             {{ formatCurrency(immoble.valor_cadastral) }}
                                         </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
-                                            {{ immoble.administrador?.nom_rao_social || '-' }}
+                                            <template v-if="immoble.administracio_vigent">
+                                                {{ immoble.administracio_vigent.proveidor }}
+                                                <span v-if="immoble.administracio_vigent.referencia" class="block text-xs text-gray-500 dark:text-gray-400">
+                                                    Ref. {{ immoble.administracio_vigent.referencia }}
+                                                </span>
+                                            </template>
+                                            <template v-else>-</template>
                                         </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                                             <button
@@ -532,46 +585,6 @@ const formatNumber = (value: number | null, suffix: string = ''): string => {
                                     </select>
                                 </div>
 
-                                <!-- Referència Administració -->
-                                <div>
-                                    <label
-                                        for="referencia_administracio"
-                                        class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                                    >
-                                        Ref. Administració
-                                    </label>
-                                    <input
-                                        id="referencia_administracio"
-                                        v-model="form.referencia_administracio"
-                                        type="text"
-                                        maxlength="50"
-                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
-                                    />
-                                </div>
-
-                                <!-- Administrador -->
-                                <div>
-                                    <label
-                                        for="administrador_id"
-                                        class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                                    >
-                                        Administrador
-                                    </label>
-                                    <select
-                                        id="administrador_id"
-                                        v-model="form.administrador_id"
-                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
-                                    >
-                                        <option :value="null">Sense administrador</option>
-                                        <option v-for="proveidor in proveidors" :key="proveidor.id" :value="proveidor.id">
-                                            {{ proveidor.nom_rao_social }}
-                                        </option>
-                                    </select>
-                                    <p v-if="form.errors.administrador_id" class="mt-1 text-sm text-red-600 dark:text-red-400">
-                                        {{ form.errors.administrador_id }}
-                                    </p>
-                                </div>
-
                                 <!-- Valor Sòl -->
                                 <div>
                                     <label
@@ -728,6 +741,96 @@ const formatNumber = (value: number | null, suffix: string = ''): string => {
                                         Afegir
                                     </button>
                                 </div>
+                            </div>
+
+                            <!-- Administració -->
+                            <div class="sm:col-span-2 mt-4">
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Administració
+                                </label>
+                                <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">
+                                    L'empresa que l'administra, com l'identifica i la comissió que cobra. Quan canvia, tanca el tram anterior amb una data de fi i afegeix-ne un de nou: la comissió de cada cobrament es pren del tram del seu dia.
+                                </p>
+
+                                <p v-if="errorAdministracions" class="mb-2 text-sm text-red-600 dark:text-red-400">
+                                    {{ errorAdministracions }}
+                                </p>
+
+                                <ul v-if="localAdministracions.length" class="mb-3 divide-y divide-gray-100 dark:divide-gray-700 rounded-md border border-gray-200 dark:border-gray-600">
+                                    <li
+                                        v-for="(a, i) in localAdministracions"
+                                        :key="i"
+                                        class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 text-sm text-gray-800 dark:text-gray-200"
+                                    >
+                                        <select
+                                            v-model="a.proveidor_id"
+                                            class="min-w-0 flex-1 rounded-md border-gray-300 py-1 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                                        >
+                                            <option :value="null">Selecciona l'empresa…</option>
+                                            <option v-for="proveidor in proveidors" :key="proveidor.id" :value="proveidor.id">
+                                                {{ proveidor.nom_rao_social }}
+                                            </option>
+                                        </select>
+                                        <label class="flex shrink-0 items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                                            ref.
+                                            <input
+                                                v-model="a.referencia"
+                                                type="text"
+                                                maxlength="50"
+                                                title="Identificador que l'administradora fa servir per a aquest immoble"
+                                                class="w-24 rounded-md border-gray-300 py-1 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                                            />
+                                        </label>
+                                        <label class="flex shrink-0 items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                                            <input
+                                                v-model="a.percentatge"
+                                                type="text"
+                                                inputmode="decimal"
+                                                title="Comissió sobre la renda, sense IVA"
+                                                class="w-14 rounded-md border-gray-300 py-1 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                                            />
+                                            %
+                                        </label>
+                                        <label class="flex shrink-0 items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                                            des de
+                                            <input
+                                                v-model="a.data_inici"
+                                                type="date"
+                                                title="Deixa-ho buit si no se sap: vol dir des de sempre"
+                                                class="rounded-md border-gray-300 py-1 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                                            />
+                                        </label>
+                                        <label class="flex shrink-0 items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                                            fins a
+                                            <input
+                                                v-model="a.data_fi"
+                                                type="date"
+                                                :min="a.data_inici ?? undefined"
+                                                title="Deixa-ho buit mentre sigui vigent"
+                                                class="rounded-md border-gray-300 py-1 text-xs shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                                            />
+                                        </label>
+                                        <button
+                                            type="button"
+                                            @click="removeAdministracio(i)"
+                                            class="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                                            title="Eliminar tram"
+                                        >
+                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                            </svg>
+                                        </button>
+                                    </li>
+                                </ul>
+                                <p v-else class="mb-3 text-xs text-gray-400 dark:text-gray-500">Sense administradora.</p>
+
+                                <button
+                                    type="button"
+                                    @click="addAdministracio"
+                                    class="rounded-md border border-indigo-600 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 dark:border-indigo-400 dark:text-indigo-400 dark:hover:bg-indigo-900/20"
+                                >
+                                    Afegir tram
+                                </button>
                             </div>
                         </div>
 

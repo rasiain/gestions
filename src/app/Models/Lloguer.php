@@ -16,8 +16,6 @@ class Lloguer extends Model
         'immoble_id',
         'compte_corrent_id',
         'base_euros',
-        'proveidor_gestoria_id',
-        'gestoria_percentatge',
         'es_habitatge',
         'retencio_irpf',
         'iva_percentatge',
@@ -28,7 +26,6 @@ class Lloguer extends Model
 
     protected $casts = [
         'base_euros'           => 'decimal:2',
-        'gestoria_percentatge' => 'decimal:2',
         'es_habitatge'         => 'boolean',
         'retencio_irpf'        => 'boolean',
         'iva_percentatge'      => 'decimal:2',
@@ -50,9 +47,13 @@ class Lloguer extends Model
         return $this->hasMany(Contracte::class);
     }
 
-    public function gestoria(): BelongsTo
+    /**
+     * La gestoria del lloguer és l'administradora de l'immoble a aquella data: qui cobra
+     * la renda i en descompta la comissió.
+     */
+    public function administracioA(\Carbon\CarbonInterface|string|null $data = null): ?AdministracioImmoble
     {
-        return $this->belongsTo(Proveidor::class, 'proveidor_gestoria_id');
+        return $this->immoble?->administracioA($data);
     }
 
     public function factures(): HasMany

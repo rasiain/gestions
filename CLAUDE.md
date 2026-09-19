@@ -71,6 +71,7 @@ src/
 - Deduplicació de moviments bancaris per hash SHA-256: `data|import|compte_id|seqüència` (el concepte s'exclou intencionadament)
 - Categories jeràrquiques (auto-referència `categoria_pare_id`)
 - Pivots amb dates per a propietaris d'immobles
+- **L'administració és de l'immoble i té històric** (`g_administracions_immobles`): cada tram diu quina empresa l'administrava, amb quin identificador el coneixia (`referencia`) i quina comissió cobrava (`percentatge`), entre `data_inici` (buida = des de sempre) i `data_fi` (buida = vigent). Els trams no es poden encavalcar. Abans hi havia l'empresa dues vegades —`g_immobles.administrador_id` i `g_lloguers.proveidor_gestoria_id`, sempre iguals— i canviar-la esborrava l'anterior. La gestoria d'un lloguer **no es desa**: és el tram de l'immoble vigent el dia de cada cobrament (`Lloguer::administracioA()`), i d'aquí el modal de classificació proposa la comissió. S'edita a la fitxa de l'immoble; al formulari del lloguer només es mostra.
 - **Un contracte pot tenir diversos arrendadors** (`g_arrendador_contracte`): en proindivís cada copropietari hi consta. La copropietat també es pot modelar amb una `ComunitatBens` (NIF propi) com a arrendador únic. A efectes d'IVA es pren el primer arrendador, perquè el subjecte passiu és un de sol. L'arrendador hauria de ser propietari de l'immoble: es proposa automàticament i s'avisa si no ho és, però no es força.
 - **Una despesa de lloguer pot venir d'un altre compte**: `g_moviment_lloguer_despesa` relaciona moviment i lloguer sense restricció de compte. És excepcional (normalment totes les despeses són al compte del lloguer), però els càlculs del lloguer —resum, exportacions i IRPF— parteixen dels moviments *del lloguer*, mai dels del seu compte. A la llista de moviments d'un lloguer, el filtre `tots_comptes` permet trobar aquests moviments per classificar-los; un cop classificats hi són sempre visibles, amb una etiqueta del compte d'origen.
 - **`concepte_original` és immutable**: text brut del banc, mai s'actualitza en editar. Només canvia `concepte_id`. És la clau per al mapeig automàtic d'imports futurs.
@@ -245,7 +246,8 @@ D'aquí també ve una regla de disseny d'aquests formularis: **el botó de desar
               │  │    │          (propietaris)      (proposen arrendador)│
               │  │    │                                                │
               │  │    ├──▶ CompteCorrent                               │
-              │  │    ├──▶ Proveidor (gestoria)                        │
+              │  │    │   Immoble ── 1:N ─▶ Administracio ─▶ Proveidor  │
+              │  │    │   (trams amb dates: la gestoria del lloguer)    │
               │  │    │                                                │
               │  │    ├── 1:N ──▶ Contracte ──N:M──▶ Llogater          │
               │  │    │           │                                     │

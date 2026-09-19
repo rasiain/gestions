@@ -28,8 +28,6 @@ class Immoble extends Model
         'valor_sol',
         'valor_construccio',
         'valor_adquisicio',
-        'referencia_administracio',
-        'administrador_id',
     ];
 
     /**
@@ -56,11 +54,24 @@ class Immoble extends Model
     }
 
     /**
-     * Get the administrador (proveidor) associated with this immoble.
+     * Els trams d'administració, del més antic al més recent. Un tram sense data d'inici
+     * és el de des de sempre i va primer.
      */
-    public function administrador()
+    public function administracions()
     {
-        return $this->belongsTo(Proveidor::class, 'administrador_id');
+        return $this->hasMany(AdministracioImmoble::class)
+            ->orderByRaw('data_inici IS NOT NULL')
+            ->orderBy('data_inici');
+    }
+
+    /**
+     * L'administració vigent a una data (avui, per defecte), si n'hi havia cap.
+     */
+    public function administracioA(\Carbon\CarbonInterface|string|null $data = null): ?AdministracioImmoble
+    {
+        $data ??= now();
+
+        return $this->administracions->last(fn (AdministracioImmoble $a) => $a->vigentA($data));
     }
 
     /**

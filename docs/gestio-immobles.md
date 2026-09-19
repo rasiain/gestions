@@ -28,9 +28,10 @@ Els immobles representen les propietats físiques que poden ser assignades a llo
   - Obligatori
   - Màxim 200 caràcters
 
-- **Administrador**: Persona responsable de l'immoble
-  - Opcional
-  - Relació amb la taula `g_persones`
+- **Administració**: l'empresa (proveïdor) que administra l'immoble, amb històric
+  - Opcional; un tram per període, a la taula `g_administracions_immobles`
+  - Cada tram porta l'identificador que l'empresa fa servir per a l'immoble i la comissió
+  - És també la gestoria dels seus lloguers
 
 ## Base de Dades
 
@@ -40,10 +41,24 @@ Els immobles representen les propietats físiques que poden ser assignades a llo
 CREATE TABLE g_immobles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     adreca VARCHAR(200) NOT NULL,
-    administrador_id INTEGER NULL,
     created_at TIMESTAMP,
-    updated_at TIMESTAMP,
-    FOREIGN KEY (administrador_id) REFERENCES g_persones(id) ON DELETE SET NULL
+    updated_at TIMESTAMP
+);
+```
+
+### Taula: `g_administracions_immobles`
+
+```sql
+CREATE TABLE g_administracions_immobles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    immoble_id INTEGER NOT NULL,   -- ON DELETE CASCADE
+    proveidor_id INTEGER NOT NULL, -- ON DELETE RESTRICT: no es perd l'històric
+    referencia VARCHAR(50) NULL,   -- com identifica l'immoble l'empresa
+    percentatge DECIMAL(5,2) NULL, -- comissió sobre la renda, sense IVA
+    data_inici DATE NULL,          -- buida: des de sempre
+    data_fi DATE NULL,             -- buida: vigent
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
 );
 ```
 
@@ -52,7 +67,8 @@ CREATE TABLE g_immobles (
 **Ubicació**: `app/Models/Immoble.php`
 
 ### Relacions
-- `administrador()`: Relació belongs-to amb Persona
+- `administracions()`: Relació has-many amb AdministracioImmoble (trams, del més antic al més recent)
+- `administracioA($data)`: el tram vigent a una data (avui, per defecte)
 - `lloguers()`: Relació has-many amb Lloguer
 
 ## Validació
@@ -62,8 +78,10 @@ CREATE TABLE g_immobles (
 ### Regles de validació
 ```php
 'adreca'          => ['required', 'string', 'max:200'],
-'administrador_id' => ['nullable', 'integer', 'exists:g_persones,id'],
+'administracions.*.proveidor_id' => ['required', 'integer', 'exists:g_proveidors,id'],
 ```
+
+A més, `after()` rebutja els trams d'administració que s'encavalquen.
 
 ## Controller
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ImmobleRequest;
+use App\Models\AdministracioImmoble;
 use App\Models\Immoble;
 use App\Models\Persona;
 use Inertia\Inertia;
@@ -14,7 +15,7 @@ class ImmobleController extends Controller
      */
     public function index()
     {
-        $immobles = Immoble::with(['propietaris', 'administrador'])
+        $immobles = Immoble::with(['propietaris', 'administracions.proveidor'])
             ->orderBy('adreca')
             ->get()
             ->map(function ($immoble) {
@@ -30,9 +31,8 @@ class ImmobleController extends Controller
                     'valor_construccio' => $immoble->valor_construccio,
                     'valor_cadastral' => $immoble->valor_cadastral,
                     'valor_adquisicio' => $immoble->valor_adquisicio,
-                    'referencia_administracio' => $immoble->referencia_administracio,
-                    'administrador_id' => $immoble->administrador_id,
-                    'administrador' => $immoble->administrador,
+                    'administracions' => $immoble->administracions->map->perAlClient()->values(),
+                    'administracio_vigent' => $immoble->administracioA()?->perAlClient(),
                     'propietaris' => $immoble->propietaris,
                     'created_at' => $immoble->created_at,
                     'updated_at' => $immoble->updated_at,
@@ -68,11 +68,13 @@ class ImmobleController extends Controller
             $validated['propietari_data_inici'],
             $validated['propietari_data_fi'],
             $validated['propietari_quota'],
+            $validated['administracions'],
         );
 
         $immoble = Immoble::create($validated);
 
         $this->desaPropietaris($immoble, $propietaris);
+        $this->desaAdministracions($immoble, $request->validated('administracions') ?? []);
 
         return redirect()->route('immobles.index')
             ->with('success', 'Immoble creat correctament.');
@@ -93,11 +95,13 @@ class ImmobleController extends Controller
             $validated['propietari_data_inici'],
             $validated['propietari_data_fi'],
             $validated['propietari_quota'],
+            $validated['administracions'],
         );
 
         $immoble->update($validated);
 
         $this->desaPropietaris($immoble, $propietaris);
+        $this->desaAdministracions($immoble, $request->validated('administracions') ?? []);
 
         return redirect()->route('immobles.index')
             ->with('success', 'Immoble actualitzat correctament.');
@@ -168,6 +172,27 @@ class ImmobleController extends Controller
                 'data_fi'            => $fila['data_fi'],
                 'quota'              => $fila['quota'],
                 'amortitzacio_anual' => $amortitzacions[$fila['persona_id'] . '|' . $fila['data_inici']] ?? null,
+            ]);
+        }
+    }
+
+    /**
+     * Els trams d'administració es reescriuen sencers, com els propietaris: la mateixa
+     * empresa hi pot tornar a sortir en un altre tram.
+     *
+     * @param  array<int, array<string, mixed>>  $administracions
+     */
+    private function desaAdministracions(Immoble $immoble, array $administracions): void
+    {
+        AdministracioImmoble::where('immoble_id', $immoble->id)->delete();
+
+        foreach ($administracions as $tram) {
+            $immoble->administracions()->create([
+                'proveidor_id' => $tram['proveidor_id'],
+                'referencia'   => ($tram['referencia'] ?? null) ?: null,
+                'percentatge'  => $tram['percentatge'] ?? null,
+                'data_inici'   => $tram['data_inici'] ?? null,
+                'data_fi'      => $tram['data_fi'] ?? null,
             ]);
         }
     }

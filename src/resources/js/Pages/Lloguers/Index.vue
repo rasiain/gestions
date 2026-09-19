@@ -8,9 +8,23 @@ import CategoriaCell from '@/Components/CategoriaCell.vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import { ref, computed, watch, Transition } from 'vue';
 
+/** Un tram d'administració de l'immoble: la gestoria del lloguer entre dues dates. */
+interface Administracio {
+    proveidor_id: number;
+    proveidor: string | null;
+    referencia: string | null;
+    /** Comissió sobre la renda, sense IVA. */
+    percentatge: string | null;
+    /** Buida: des de sempre. */
+    data_inici: string | null;
+    data_fi: string | null;
+}
+
 interface Immoble {
     id: number;
     adreca: string;
+    /** La vigent avui (només a la llista d'immobles). */
+    administracio?: Administracio | null;
 }
 
 interface CompteCorrent {
@@ -72,15 +86,14 @@ interface Lloguer {
     compte_corrent_id: number;
     compte_corrent: CompteCorrent | null;
     base_euros: string | null;
-    proveidor_gestoria_id: number | null;
-    gestoria_percentatge: string | null;
     es_habitatge: boolean;
     retencio_irpf: boolean;
     iva_percentatge: string | null;
     irpf_percentatge: string | null;
     ruta_descarrega: string | null;
     ruta_export: string | null;
-    gestoria: Proveidor | null;
+    /** Els trams d'administració de l'immoble: la gestoria és la del dia de cada cobrament. */
+    administracions: Administracio[];
     propietaris: PersonaBasic[];
     contracte_actiu: ContracteActiu | null;
 }
@@ -110,8 +123,6 @@ const lloguerForm = useForm({
     immoble_id: null as number | null,
     compte_corrent_id: null as number | null,
     base_euros: null as number | null,
-    proveidor_gestoria_id: null as number | null,
-    gestoria_percentatge: null as number | null,
     es_habitatge: false,
     retencio_irpf: false,
     iva_percentatge: 21.00 as number | null,
@@ -119,6 +130,19 @@ const lloguerForm = useForm({
     ruta_descarrega: '' as string,
     ruta_export: '' as string,
 });
+
+/** L'administradora d'avui de l'immoble del lloguer, per a la llista. */
+const administracioAvui = (lloguer: Lloguer): Administracio | null => {
+    const avui = new Date().toISOString().slice(0, 10);
+    return [...lloguer.administracions]
+        .reverse()
+        .find(a => (!a.data_inici || a.data_inici <= avui) && (!a.data_fi || a.data_fi >= avui)) ?? null;
+};
+
+/** L'administradora d'avui de l'immoble triat al formulari. */
+const administracioFormulari = computed(() =>
+    props.immobles.find(i => i.id === lloguerForm.immoble_id)?.administracio ?? null,
+);
 
 const openCreateLloguerModal = () => {
     isEditingLloguer.value = false;
@@ -135,8 +159,6 @@ const openEditLloguerModal = (lloguer: Lloguer) => {
     lloguerForm.immoble_id = lloguer.immoble_id;
     lloguerForm.compte_corrent_id = lloguer.compte_corrent_id;
     lloguerForm.base_euros = lloguer.base_euros ? parseFloat(lloguer.base_euros) : null;
-    lloguerForm.proveidor_gestoria_id = lloguer.proveidor_gestoria_id;
-    lloguerForm.gestoria_percentatge = lloguer.gestoria_percentatge ? parseFloat(lloguer.gestoria_percentatge) : null;
     lloguerForm.es_habitatge = lloguer.es_habitatge;
     lloguerForm.retencio_irpf = lloguer.retencio_irpf;
     lloguerForm.iva_percentatge = lloguer.iva_percentatge ? parseFloat(lloguer.iva_percentatge) : 21.00;
@@ -918,11 +940,21 @@ const ingresDiferencia = computed(() => {
     return parseFloat((ingresNetCalculat.value + altresIngressosImport.value - importBanc).toFixed(2));
 });
 
+/** La gestoria del dia del cobrament: si l'immoble ha canviat d'administradora, la d'aleshores. */
+const gestoriaDelMoviment = computed((): Administracio | null => {
+    const dia = classificacioMoviment.value?.data_moviment?.slice(0, 10);
+    if (!dia) return null;
+    return [...(selectedLloguer.value?.administracions ?? [])]
+        .reverse()
+        .find(a => (!a.data_inici || a.data_inici <= dia) && (!a.data_fi || a.data_fi >= dia)) ?? null;
+});
+
 const computedGestoriaImport = computed(() => {
     const lloguer = selectedLloguer.value;
-    if (!lloguer?.gestoria_percentatge || !lloguer?.base_euros) return null;
+    const gestoria = gestoriaDelMoviment.value;
+    if (!gestoria?.percentatge || !lloguer?.base_euros) return null;
     // Calcula el total amb IVA directament
-    const net = parseFloat(lloguer.base_euros) * parseFloat(lloguer.gestoria_percentatge) / 100;
+    const net = parseFloat(lloguer.base_euros) * parseFloat(gestoria.percentatge) / 100;
     return parseFloat((net * (1 + IVA_RATE)).toFixed(2));
 });
 
@@ -973,7 +1005,7 @@ const openClassificacioModal = (moviment: Moviment) => {
                 tipus: 'gestoria',
                 descripcio: 'Comissió gestoria',
                 import: computedGestoriaImport.value,
-                proveidor_id: selectedLloguer.value?.proveidor_gestoria_id ?? null,
+                proveidor_id: gestoriaDelMoviment.value?.proveidor_id ?? null,
             });
         }
         classificacioIngres.value = {
@@ -1405,6 +1437,7 @@ const formatCurrency = (value: string | null): string => {
                                         <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Nom</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Acrònim</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Immoble</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Administradora</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Base (€/mes)</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Arrendador</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Contracte actiu</th>
@@ -1416,7 +1449,7 @@ const formatCurrency = (value: string | null): string => {
                                     <!-- Grup: Habitatges -->
                                     <template v-if="lloguersHabitatge.length">
                                         <tr class="bg-gray-50 dark:bg-gray-900/40">
-                                            <td colspan="7" class="px-6 py-1.5 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">Habitatges</td>
+                                            <td colspan="8" class="px-6 py-1.5 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">Habitatges</td>
                                         </tr>
                                         <tr
                                             v-for="lloguer in lloguersHabitatge"
@@ -1428,6 +1461,13 @@ const formatCurrency = (value: string | null): string => {
                                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">{{ lloguer.nom }}</td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ lloguer.acronim || '-' }}</td>
                                             <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ lloguer.immoble?.adreca || '-' }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                                                <template v-if="administracioAvui(lloguer)">
+                                                    {{ administracioAvui(lloguer)!.proveidor }}
+                                                    <span v-if="administracioAvui(lloguer)!.referencia" class="block text-xs text-gray-500 dark:text-gray-400">Ref. {{ administracioAvui(lloguer)!.referencia }}</span>
+                                                </template>
+                                                <span v-else class="italic text-gray-400 dark:text-gray-500">—</span>
+                                            </td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ formatCurrency(lloguer.base_euros) }}</td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                                                 <span v-if="lloguer.contracte_actiu?.arrendadors?.length">{{ lloguer.contracte_actiu.arrendadors.map(a => a.arrendadorable?.nom ?? '—').join(', ') }}</span>
@@ -1447,7 +1487,7 @@ const formatCurrency = (value: string | null): string => {
                                     <!-- Grup: Locals / Altres -->
                                     <template v-if="lloguersNoHabitatge.length">
                                         <tr class="bg-amber-50 dark:bg-amber-900/20">
-                                            <td colspan="7" class="px-6 py-1.5 text-xs font-semibold uppercase tracking-widest text-amber-500 dark:text-amber-400">Locals i altres</td>
+                                            <td colspan="8" class="px-6 py-1.5 text-xs font-semibold uppercase tracking-widest text-amber-500 dark:text-amber-400">Locals i altres</td>
                                         </tr>
                                         <tr
                                             v-for="lloguer in lloguersNoHabitatge"
@@ -1459,6 +1499,13 @@ const formatCurrency = (value: string | null): string => {
                                             <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-amber-700 dark:text-amber-300">{{ lloguer.nom }}</td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ lloguer.acronim || '-' }}</td>
                                             <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ lloguer.immoble?.adreca || '-' }}</td>
+                                            <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                                                <template v-if="administracioAvui(lloguer)">
+                                                    {{ administracioAvui(lloguer)!.proveidor }}
+                                                    <span v-if="administracioAvui(lloguer)!.referencia" class="block text-xs text-gray-500 dark:text-gray-400">Ref. {{ administracioAvui(lloguer)!.referencia }}</span>
+                                                </template>
+                                                <span v-else class="italic text-gray-400 dark:text-gray-500">—</span>
+                                            </td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ formatCurrency(lloguer.base_euros) }}</td>
                                             <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                                                 <span v-if="lloguer.contracte_actiu?.arrendadors?.length">{{ lloguer.contracte_actiu.arrendadors.map(a => a.arrendadorable?.nom ?? '—').join(', ') }}</span>
@@ -2341,29 +2388,20 @@ const formatCurrency = (value: string | null): string => {
                                     <p v-if="lloguerForm.errors.compte_corrent_id" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ lloguerForm.errors.compte_corrent_id }}</p>
                                 </div>
 
+                                <!-- La gestoria és l'administradora de l'immoble i s'edita a la seva fitxa -->
                                 <div class="sm:col-span-2">
-                                    <label for="proveidor_gestoria_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Gestoria (proveïdor)</label>
-                                    <select
-                                        id="proveidor_gestoria_id"
-                                        v-model="lloguerForm.proveidor_gestoria_id"
-                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
-                                    >
-                                        <option :value="null">Sense gestoria</option>
-                                        <option v-for="p in proveidors" :key="p.id" :value="p.id">{{ p.nom_rao_social }}</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label for="gestoria_percentatge" class="block text-sm font-medium text-gray-700 dark:text-gray-300">% Gestoria</label>
-                                    <input
-                                        id="gestoria_percentatge"
-                                        v-model="lloguerForm.gestoria_percentatge"
-                                        type="number"
-                                        step="0.01"
-                                        min="0"
-                                        max="100"
-                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
-                                    />
+                                    <span class="block text-sm font-medium text-gray-700 dark:text-gray-300">Gestoria</span>
+                                    <p class="mt-1 text-sm text-gray-800 dark:text-gray-200">
+                                        <template v-if="administracioFormulari">
+                                            {{ administracioFormulari.proveidor }}
+                                            <span v-if="administracioFormulari.referencia" class="text-gray-500 dark:text-gray-400">· ref. {{ administracioFormulari.referencia }}</span>
+                                            <span v-if="administracioFormulari.percentatge" class="text-gray-500 dark:text-gray-400">· {{ parseFloat(administracioFormulari.percentatge) }} %</span>
+                                        </template>
+                                        <template v-else>Sense gestoria</template>
+                                    </p>
+                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                        És l'administradora de l'immoble: es canvia a la seva fitxa, a Immobles, on en queda l'històric.
+                                    </p>
                                 </div>
 
                                 <div v-if="!lloguerForm.es_habitatge" class="sm:col-span-2">
