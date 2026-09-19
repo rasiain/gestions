@@ -11,6 +11,23 @@ class LloguerRequest extends FormRequest
         return true;
     }
 
+    /**
+     * Una ruta enganxada des del Finder o del terminal pot portar cometes o
+     * escapaments de shell («Platja\ d\'Aro»). Amb cometes deixa de començar per
+     * «/» i PHP la resol com a relativa: el fitxer acaba dins de public/ sense
+     * cap error. Amb escapaments, la carpeta no existeix i se'n crea una altra.
+     */
+    protected function prepareForValidation(): void
+    {
+        foreach (['ruta_descarrega', 'ruta_export'] as $camp) {
+            if (is_string($this->input($camp))) {
+                $ruta = trim($this->input($camp), " \t\n\r\0\x0B'\"");
+                $ruta = preg_replace('/\\\\(.)/u', '$1', $ruta);
+                $this->merge([$camp => $ruta === '' ? null : $ruta]);
+            }
+        }
+    }
+
     public function rules(): array
     {
         return [
