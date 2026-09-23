@@ -310,7 +310,16 @@ class MovementImportController extends Controller
                         'entitat' => $c->entitat,
                         'tipus' => $c->tipus,
                         'lloguer_nom' => $lloguersPerCompte->get($c->id),
+                        // El fitxer no diu de quin compte és, però sí de quin banc: els
+                        // del mateix banc són els únics candidats possibles
+                        'coincideix' => $c->bank_type === $bankType,
                     ]);
+
+                // Un QIF de KMyMoney pot anar a qualsevol compte: si el banc no
+                // n'assenyala cap, val més oferir-los tots que no pas cap
+                if ($comptes->doesntContain('coincideix', true)) {
+                    $comptes = $comptes->map(fn ($c) => [...$c, 'coincideix' => true]);
+                }
                 return response()->json([
                     'success' => false,
                     'needs_compte_selection' => true,

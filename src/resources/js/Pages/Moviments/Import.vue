@@ -35,7 +35,18 @@ interface PreviewData {
 
 interface CompteDisponible extends CompteOrdenable {
     id: number;
+    /** Si és del banc que s'ha detectat al fitxer. */
+    coincideix?: boolean;
 }
+
+const etiquetesBanc: Record<string, string> = {
+    bbva: 'BBVA',
+    caixa_enginyers: "Caixa d'Enginyers",
+    caixabank: 'CaixaBank',
+    kmymoney: 'KMyMoney (QIF)',
+};
+
+const etiquetaBanc = (tipus: string): string => etiquetesBanc[tipus] ?? tipus;
 
 type Step = 'scan' | 'select_compte' | 'preview' | 'importing' | 'done';
 
@@ -52,9 +63,21 @@ const comptesDisponibles = ref<CompteDisponible[]>([]);
 const selectedCompteId = ref<number | null>(null);
 const pendingFilePath = ref<string>('');
 
+/** D'entrada només els comptes del banc del fitxer; la resta, si es demanen. */
+const mostraTotsElsComptes = ref(false);
+const bancDelFitxer = ref<string | null>(null);
+
+const comptesOferts = computed(() =>
+    mostraTotsElsComptes.value
+        ? comptesDisponibles.value
+        : comptesDisponibles.value.filter(c => c.coincideix !== false),
+);
+
+const comptesDescartats = computed(() => comptesDisponibles.value.length - comptesOferts.value.length);
+
 // Els mateixos grups i el mateix ordre que a Comptes Corrents
-const comptesCorrents = computed(() => comptesDisponibles.value.filter(c => !c.lloguer_nom).sort(perEntitatINom));
-const comptesLloguers = computed(() => comptesDisponibles.value.filter(c => !!c.lloguer_nom).sort(perEntitatINom));
+const comptesCorrents = computed(() => comptesOferts.value.filter(c => !c.lloguer_nom).sort(perEntitatINom));
+const comptesLloguers = computed(() => comptesOferts.value.filter(c => !!c.lloguer_nom).sort(perEntitatINom));
 
 // Llegim el token de la cookie XSRF-TOKEN (sempre actual) en comptes del meta tag
 // (el meta tag només es refresca en full page load, la cookie es refresca a cada resposta Laravel)
@@ -97,6 +120,8 @@ const doPreview = async (filePath: string, compteCorrentId?: number) => {
             step.value = 'preview';
         } else if (json.needs_compte_selection) {
             comptesDisponibles.value = json.data.comptes_disponibles;
+            bancDelFitxer.value = json.data.bank_type ?? null;
+            mostraTotsElsComptes.value = false;
             selectedCompteId.value = null;
             pendingFilePath.value = json.data.file_path;
             step.value = 'select_compte';
@@ -240,7 +265,7 @@ onMounted(scanFiles);
                         <!-- STEP: Selecció manual de compte -->
                         <div v-if="step === 'select_compte'">
                             <p class="mb-4 text-sm text-amber-700 dark:text-amber-300 rounded-md bg-amber-50 dark:bg-amber-900/20 p-3">
-                                No s'ha pogut identificar el compte corrent automàticament. Selecciona'l manualment:
+                                El fitxer no diu de quin compte és<span v-if="bancDelFitxer">, només que és de {{ etiquetaBanc(bancDelFitxer) }}</span>. Selecciona'l:
                             </p>
                             <div class="mb-4">
                                 <select
@@ -259,6 +284,14 @@ onMounted(scanFiles);
                                         </option>
                                     </optgroup>
                                 </select>
+                                <button
+                                    v-if="comptesDescartats > 0 && !mostraTotsElsComptes"
+                                    type="button"
+                                    @click="mostraTotsElsComptes = true"
+                                    class="mt-2 text-xs text-gray-500 underline hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                                >
+                                    Mostra també els {{ comptesDescartats }} comptes d'altres bancs
+                                </button>
                             </div>
                             <div class="flex gap-3">
                                 <button

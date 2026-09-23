@@ -116,6 +116,13 @@ class CompteCorrent extends Model
             return 'caixabank';
         }
 
+        // Dos comptes de BBVA, i els seus fitxers no diuen de quin són: reconèixer-los
+        // tots dos fa que la importació pregunti a quin va, en comptes de triar l'únic
+        // que coneixia (el darrer que s'hi havia importat).
+        if (str_contains($entitat, 'bbva')) {
+            return 'bbva';
+        }
+
         if (str_contains($entitat, 'kmymoney') || str_contains($entitat, 'kmoney')) {
             return 'kmymoney';
         }
