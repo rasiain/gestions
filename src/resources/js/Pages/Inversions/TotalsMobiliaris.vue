@@ -814,14 +814,27 @@ const movimentsDelTram = ref<MovimentDelTram[]>([]);
 const detallDe = ref<{ tall: Tall; signe: 'entrades' | 'sortides' } | null>(null);
 const quantsEnsenyats = ref(50);
 
-/** Els moviments que la barra no compta perquè són un traspàs entre coses marcades. */
+/**
+ * Els moviments que la barra no compta perquè són un traspàs entre coses marcades.
+ *
+ * S'amaga cada banda per separat, perquè la barra només anul·la la part comuna: d'un
+ * traspàs al compte d'algú altre, el que canvia de mans hi compta com el flux que és
+ * (`fluxosPerTall`) i per tant el seu moviment ha de sortir al llistat. Amagar-lo
+ * deixava una despesa comptada que no es veia enlloc.
+ */
 const movimentsExclosos = computed(() => {
     const exclosos = new Set<number>();
     if (!senseTraspassos.value) return exclosos;
 
     for (const t of props.traspassos) {
         if (!posicionsTriades.value.has(t.origen) || !posicionsTriades.value.has(t.desti)) continue;
-        for (const id of t.moviments) exclosos.add(id);
+
+        const partOrigen = fraccioDe(t.origen, t.mes);
+        const partDesti = fraccioDe(t.desti, t.mes);
+        const [sortida, entrada] = t.moviments;
+
+        if (partOrigen <= partDesti) exclosos.add(sortida);
+        if (entrada !== undefined && partDesti <= partOrigen) exclosos.add(entrada);
     }
 
     return exclosos;
