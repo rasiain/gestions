@@ -60,8 +60,9 @@ class LloguerController extends Controller
                     ] : null,
                     'compte_corrent_id' => $lloguer->compte_corrent_id,
                     'compte_corrent'   => $lloguer->compteCorrent ? [
-                        'id'  => $lloguer->compteCorrent->id,
-                        'nom' => $lloguer->compteCorrent->nom,
+                        'id'     => $lloguer->compteCorrent->id,
+                        'nom'    => $lloguer->compteCorrent->nom,
+                        'digits' => substr((string) $lloguer->compteCorrent->compte_corrent, -4),
                     ] : null,
                     'base_euros'            => $lloguer->base_euros,
                     'es_habitatge'          => $lloguer->es_habitatge,

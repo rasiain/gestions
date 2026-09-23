@@ -30,6 +30,8 @@ interface Immoble {
 interface CompteCorrent {
     id: number;
     nom: string;
+    /** Les quatre darreres xifres (només al compte del lloguer). */
+    digits?: string;
 }
 
 interface Proveidor {
@@ -262,6 +264,10 @@ const contracteForm = useForm({
     data_fi_anterior: '',
 });
 
+// El formulari del contracte només es desplega quan cal: si no n'hi ha cap, per crear-lo,
+// i quan se n'edita o se'n crea un de nou. La resta del temps en surt un resum.
+const contracteDesplegat = ref(false);
+
 // ── Nou contracte ───────────────────────────────────────────────
 const creantNouContracte = ref(false);
 const dataFiContracteAntic = ref('');
@@ -270,6 +276,7 @@ const iniciarNouContracte = () => {
     const c = selectedLloguer.value?.contracte_actiu;
     dataFiContracteAntic.value = c?.data_fi ?? new Date().toISOString().split('T')[0];
     creantNouContracte.value = true;
+    contracteDesplegat.value = true;
     contracteForm.data_inici = '';
     contracteForm.data_fi = '';
     contracteForm.llogater_ids = [];
@@ -279,6 +286,7 @@ const iniciarNouContracte = () => {
 
 const cancellarNouContracte = () => {
     creantNouContracte.value = false;
+    contracteDesplegat.value = !selectedLloguer.value?.contracte_actiu;
     dataFiContracteAntic.value = '';
     const c = selectedLloguer.value?.contracte_actiu;
     contracteForm.data_inici = c?.data_inici ?? '';
@@ -295,6 +303,7 @@ const selectLloguer = (lloguer: Lloguer) => {
     }
     selectedLloguerId.value = lloguer.id;
     creantNouContracte.value = false;
+    contracteDesplegat.value = !lloguer.contracte_actiu;
     dataFiContracteAntic.value = '';
     const c = lloguer.contracte_actiu;
     contracteForm.lloguer_id = lloguer.id;
@@ -358,12 +367,12 @@ const submitContracte = () => {
         contracteForm.data_fi_anterior = dataFiContracteAntic.value;
         contracteForm.post(route('contractes.store'), {
             preserveScroll: true,
-            onSuccess: () => { creantNouContracte.value = false; dataFiContracteAntic.value = ''; },
+            onSuccess: () => { creantNouContracte.value = false; dataFiContracteAntic.value = ''; contracteDesplegat.value = false; },
         });
     } else if (contracte) {
-        contracteForm.put(route('contractes.update', contracte.id), { preserveScroll: true });
+        contracteForm.put(route('contractes.update', contracte.id), { preserveScroll: true, onSuccess: () => { contracteDesplegat.value = false; } });
     } else {
-        contracteForm.post(route('contractes.store'), { preserveScroll: true });
+        contracteForm.post(route('contractes.store'), { preserveScroll: true, onSuccess: () => { contracteDesplegat.value = false; } });
     }
 };
 
@@ -1564,16 +1573,32 @@ const formatCurrency = (value: string | null): string => {
                             <span><strong>Incoherència arrendador:</strong> {{ inconsistenciaArrendador(selectedLloguer) }}</span>
                         </div>
 
-                        <div class="mb-4 flex items-center justify-between">
-                            <div>
+                        <div class="flex items-center justify-between" :class="{ 'mb-4': contracteDesplegat }">
+                            <div class="min-w-0">
                                 <h3 class="text-lg font-medium">
                                     Contracte — {{ selectedLloguer.nom }}
                                 </h3>
-                                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                <p v-if="selectedLloguer.contracte_actiu && !contracteDesplegat" class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                    {{ selectedLloguer.contracte_actiu.data_inici }} → {{ selectedLloguer.contracte_actiu.data_fi ?? 'indefinit' }}
+                                    <template v-if="selectedLloguer.contracte_actiu.llogaters?.length">
+                                        · Llogaters: {{ selectedLloguer.contracte_actiu.llogaters.map(l => [l.nom, l.cognoms].filter(Boolean).join(' ')).join(', ') }}
+                                    </template>
+                                    <template v-if="selectedLloguer.contracte_actiu.arrendadors?.length">
+                                        · Arrendadors: {{ selectedLloguer.contracte_actiu.arrendadors.map(a => a.arrendadorable?.nom ?? '—').join(', ') }}
+                                    </template>
+                                </p>
+                                <p v-else class="mt-1 text-sm text-gray-600 dark:text-gray-400">
                                     {{ selectedLloguer.contracte_actiu ? 'Contracte actiu' : 'No hi ha contracte actiu' }}
                                 </p>
                             </div>
-                            <div class="flex items-center gap-4">
+                            <div class="flex shrink-0 items-center gap-4">
+                                <button
+                                    v-if="selectedLloguer.contracte_actiu && !creantNouContracte"
+                                    @click="contracteDesplegat = !contracteDesplegat"
+                                    class="text-sm text-amber-700 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-200 font-medium"
+                                >
+                                    {{ contracteDesplegat ? 'Plegar' : 'Editar contracte' }}
+                                </button>
                                 <button
                                     v-if="selectedLloguer.contracte_actiu && !creantNouContracte"
                                     @click="deleteContracte"
@@ -1634,7 +1659,7 @@ const formatCurrency = (value: string | null): string => {
                             </div>
                         </div>
 
-                        <form @submit.prevent="submitContracte">
+                        <form v-if="contracteDesplegat" @submit.prevent="submitContracte">
                             <input type="hidden" v-model="contracteForm.lloguer_id" />
 
                             <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -1922,6 +1947,7 @@ const formatCurrency = (value: string | null): string => {
                             <div>
                                 <h3 class="text-lg font-medium">
                                     Moviments — {{ selectedLloguer.compte_corrent?.nom ?? 'Compte corrent' }}
+                                    <span v-if="selectedLloguer.compte_corrent?.digits" class="ml-1 font-mono text-base text-gray-500 dark:text-gray-400">··{{ selectedLloguer.compte_corrent.digits }}</span>
                                 </h3>
                                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
                                     {{ movimentsTotal }} moviments en total
