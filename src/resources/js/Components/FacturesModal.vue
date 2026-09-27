@@ -297,27 +297,24 @@ const desarPdfAny = async (force = false) => {
 
 // L'esborrany s'obre a Gmail amb tot escrit; el PDF es baixa alhora perquè Gmail
 // no deixa adjuntar per URL i s'hi ha d'arrossegar.
-const preparantCorreu = ref<number | null>(null);
+//
+// Les dues coses van síncrones dins del clic i en aquest ordre: si abans s'espera
+// cap resposta del servidor, el navegador ja no lliga la finestra al clic i la
+// bloqueja com a emergent. La redirecció cap a Gmail la fa el servidor.
+const prepararCorreu = (factura: Factura) => {
+    const finestra = window.open(`/factures/${factura.id}/correu?obrir=1`, '_blank');
 
-const prepararCorreu = async (factura: Factura) => {
-    preparantCorreu.value = factura.id;
-    missatgePdf.value = null;
-    try {
-        const res = await fetch(`/factures/${factura.id}/correu`, {
-            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
-        });
-        const json = await res.json();
-
-        if (!json.to) {
-            missatgePdf.value = 'El llogater no té correu electrònic: s\'indica a la seva fitxa.';
-            return;
-        }
-
-        window.open(`/factures/${factura.id}/pdf?baixa=1`, '_blank');
-        window.open(json.url, '_blank');
-    } finally {
-        preparantCorreu.value = null;
+    if (!finestra) {
+        missatgePdf.value = 'El navegador ha blocat la finestra de Gmail: permet-les per a aquest lloc.';
     }
+
+    // Una descàrrega no obre finestra i no es bloqueja.
+    const enllac = document.createElement('a');
+    enllac.href = `/factures/${factura.id}/pdf?baixa=1`;
+    enllac.download = '';
+    document.body.appendChild(enllac);
+    enllac.click();
+    enllac.remove();
 };
 
 const openEditFactura = (factura: Factura) => {
@@ -726,8 +723,7 @@ const anys = computed(() => {
                                         </button>
                                         <button
                                             @click="prepararCorreu(factura)"
-                                            :disabled="preparantCorreu === factura.id"
-                                            class="mr-2 text-gray-600 hover:text-gray-900 disabled:opacity-50 dark:text-gray-300"
+                                            class="mr-2 text-gray-600 hover:text-gray-900 dark:text-gray-300"
                                         >
                                             Correu
                                         </button>

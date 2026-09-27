@@ -147,10 +147,17 @@ contra els 4.856,25 del rebut. Els imports de les fraccions poden no ser iguals 
 arrodoniment, i per això cada una desa el seu.
 
 `FacturaController::generar()` crea, en una sola passada, les mensuals de l'any i les
-fraccions —com a línia o com a puntual—, i **no duplica res** si es torna a executar. El
-**número** és la seqüència de l'any comptant les d'escombraries intercalades
-(`max + 1`, format `{any}{NN}`), i els totals d'una factura són sempre la suma de les seves
-línies.
+fraccions —com a línia o com a puntual—, i **no duplica res** si es torna a executar. Els
+totals d'una factura són sempre la suma de les seves línies.
+
+El **número** (`{any}{NN}`) no s'assigna en crear sinó **d'una passada al final**, per
+ordre de data: el mes, i dins del mes la mensual abans de la fracció que hi va a banda.
+Només es toquen els **esborranys**; una factura emesa ja ha sortit amb el seu número i el
+conserva, i cap esborrany no li pren. Això és el que fa que el cas real funcioni: al gener
+encara no se sap què cobrarà l'ajuntament i es generen les mensuals, i quan al març se sap,
+es configuren les fraccions i es torna a generar —les noves s'intercalen on els toca, els
+esborranys de després es corren i el que ja s'ha enviat no es mou. Sense això les fraccions
+anaven a parar al final de l'any, amb números posteriors als de desembre.
 
 Del **correu** només se'n prepara l'esborrany: `assumpte_correu` i `cos_correu` del lloguer
 (amb `{mes}`, `{any}`, `{numero}`, `{concepte}`, `{contacte}` i `{total}`; les factures

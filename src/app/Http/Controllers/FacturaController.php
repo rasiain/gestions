@@ -260,8 +260,6 @@ class FacturaController extends Controller
         $ivaPerc = (float) $lloguer->iva_percentatge;
         $irpfPerc = $lloguer->retencio_irpf ? (float) $lloguer->irpf_percentatge : 0;
 
-        $numero = $this->darrerNumero($lloguer, $any);
-
         $escombraries = $lloguer->escombrariesDe($any);
         $fraccions = $escombraries?->fraccions ?? collect();
         $totalFraccions = $fraccions->count();
@@ -276,14 +274,11 @@ class FacturaController extends Controller
                 ->first();
 
             if (!$mensual) {
-                $numero++;
-
                 $mensual = $lloguer->factures()->create([
                     'contracte_id'     => $contracteActiu?->id,
                     'any'              => $any,
                     'mes'              => $mes,
                     'tipus'            => 'mensual',
-                    'numero_factura'   => sprintf('%d%02d', $any, $numero),
                     'base'             => $base,
                     'iva_percentatge'  => $ivaPerc,
                     'irpf_percentatge' => $irpfPerc,
@@ -315,10 +310,9 @@ class FacturaController extends Controller
             $descripcio = $fraccio->descripcio($totalFraccions);
 
             if ($escombraries->factura_separada) {
-                $puntual = $this->facturaEscombraries($lloguer, $any, $mes, $descripcio, $contracteActiu?->id, $fraccio, $numero + 1);
+                $puntual = $this->facturaEscombraries($lloguer, $any, $mes, $descripcio, $contracteActiu?->id, $fraccio);
 
                 if ($puntual) {
-                    $numero++;
                     $creades[] = $puntual;
                 }
 
@@ -341,6 +335,8 @@ class FacturaController extends Controller
             $this->recalcula($mensual);
         }
 
+        $this->renumeraEsborranys($lloguer, $any);
+
         return response()->json([
             'creades' => count($creades),
             'data'    => $creades,
@@ -355,7 +351,6 @@ class FacturaController extends Controller
         string $descripcio,
         ?int $contracteId,
         $fraccio,
-        int $numero,
     ): ?Factura {
         $jaHiEs = $lloguer->factures()
             ->where('tipus', 'puntual')
@@ -376,7 +371,6 @@ class FacturaController extends Controller
             'any'              => $any,
             'mes'              => $mes,
             'tipus'            => 'puntual',
-            'numero_factura'   => sprintf('%d%02d', $any, $numero),
             'base'             => $fraccio->import,
             'iva_percentatge'  => $ivaPerc,
             'irpf_percentatge' => $irpfPerc,
@@ -401,19 +395,51 @@ class FacturaController extends Controller
     }
 
     /**
-     * L'últim número de l'any, que és des d'on continua la seqüència. A Joan
-     * Maragall coincideix amb el mes perquè no hi ha res intercalat; a Juli Garreta,
-     * no.
+     * El número és la seqüència d'emissió de l'any, i per això es reparteix seguint
+     * l'ordre de les dates: primer el mes, i dins del mes la mensual abans que la
+     * fracció d'escombraries que hi va a banda.
+     *
+     * Només es toquen les factures en **esborrany**. Una factura emesa ja ha sortit
+     * amb el seu número i no es pot renumerar: es respecta el que té, i cap
+     * esborrany no li prendrà. Així, quan al març se sap el que l'ajuntament cobrarà
+     * i es tornen a generar les factures de l'any, les fraccions noves s'intercalen
+     * on els toca i la resta d'esborranys es corren, sense tocar el que ja s'ha
+     * enviat.
      */
-    private function darrerNumero(Lloguer $lloguer, int $any): int
+    private function renumeraEsborranys(Lloguer $lloguer, int $any): void
     {
-        $darrer = $lloguer->factures()
+        $factures = $lloguer->factures()
             ->where('any', $any)
-            ->whereNotNull('numero_factura')
-            ->where('numero_factura', 'like', $any . '%')
-            ->max('numero_factura');
+            ->orderBy('mes')
+            ->orderByRaw("CASE WHEN tipus = 'mensual' THEN 0 ELSE 1 END")
+            ->orderBy('data_emissio')
+            ->orderBy('id')
+            ->get();
 
-        return $darrer ? (int) substr((string) $darrer, -2) : 0;
+        $ocupats = $factures
+            ->filter(fn ($f) => $f->estat !== 'esborrany')
+            ->pluck('numero_factura')
+            ->filter()
+            ->all();
+
+        $n = 0;
+
+        foreach ($factures as $factura) {
+            if ($factura->estat !== 'esborrany') {
+                $n = max($n, (int) substr((string) $factura->numero_factura, -2));
+
+                continue;
+            }
+
+            do {
+                $n++;
+                $nou = sprintf('%d%02d', $any, $n);
+            } while (in_array($nou, $ocupats, true));
+
+            if ($factura->numero_factura !== $nou) {
+                $factura->update(['numero_factura' => $nou]);
+            }
+        }
     }
 
     /** Els totals de la factura són sempre la suma de les seves línies. */
@@ -532,9 +558,17 @@ class FacturaController extends Controller
         ]);
     }
 
-    /** Les dades del correu i l'enllaç que n'obre l'esborrany a Gmail. */
-    public function correu(Factura $factura, FacturaCorreuService $servei): JsonResponse
+    /**
+     * Les dades del correu i l'enllaç que n'obre l'esborrany a Gmail. Amb `obrir`
+     * hi redirigeix: la finestra s'ha d'obrir dins del clic, perquè si abans s'ha
+     * d'esperar una resposta el navegador ja la bloqueja com a finestra emergent.
+     */
+    public function correu(Factura $factura, FacturaCorreuService $servei, Request $request)
     {
+        if ($request->boolean('obrir')) {
+            return redirect()->away($servei->enllacGmail($factura));
+        }
+
         return response()->json($servei->dades($factura) + [
             'url' => $servei->enllacGmail($factura),
         ]);

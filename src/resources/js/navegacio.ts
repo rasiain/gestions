@@ -156,6 +156,7 @@ export const grups: Grup[] = [
         color: colors.lila,
         accions: [
             { titol: 'Persones', ruta: 'persones.index' },
+            { titol: 'Llogaters', ruta: 'llogaters.index' },
             { titol: 'Proveïdors', ruta: 'proveidors.index' },
             { titol: 'Categories', ruta: 'categories.index' },
             { titol: 'Comunitats de Béns', ruta: 'comunitats-bens.index' },
