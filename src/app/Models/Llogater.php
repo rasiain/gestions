@@ -18,6 +18,9 @@ class Llogater extends Model
         'adreca',
         'codi_postal',
         'poblacio',
+        'email',
+        'email_cc',
+        'contacte',
     ];
 
     public function persona(): BelongsTo

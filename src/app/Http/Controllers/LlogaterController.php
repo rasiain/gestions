@@ -28,6 +28,9 @@ class LlogaterController extends Controller
                 'adreca'         => $l->adreca,
                 'codi_postal'    => $l->codi_postal,
                 'poblacio'       => $l->poblacio,
+                'email'          => $l->email,
+                'email_cc'       => $l->email_cc,
+                'contacte'       => $l->contacte,
             ])
             ->sortBy(fn($l) => $l['tipus'] === 'persona'
                 ? ($l['persona']['cognoms'] ?? '')

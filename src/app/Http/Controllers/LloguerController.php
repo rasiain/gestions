@@ -71,6 +71,14 @@ class LloguerController extends Controller
                     'irpf_percentatge'      => $lloguer->irpf_percentatge,
                     'ruta_descarrega'       => $lloguer->ruta_descarrega,
                     'ruta_export'           => $lloguer->ruta_export,
+                    'concepte_factura'      => $lloguer->concepte_factura,
+                    'condicions_pagament'   => $lloguer->condicions_pagament,
+                    'ruta_factures'         => $lloguer->ruta_factures,
+                    'patro_nom_fitxer'      => $lloguer->patro_nom_fitxer,
+                    'assumpte_correu'       => $lloguer->assumpte_correu,
+                    'cos_correu'            => $lloguer->cos_correu,
+                    'assumpte_correu_escombraries' => $lloguer->assumpte_correu_escombraries,
+                    'cos_correu_escombraries'      => $lloguer->cos_correu_escombraries,
                     // De l'immoble: el cobrament en pren la del seu dia, no la d'avui
                     'administracions'       => $lloguer->immoble
                         ? $lloguer->immoble->administracions->map->perAlClient()->values()

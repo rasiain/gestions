@@ -113,6 +113,51 @@ D'aquestes dues en surt la **previsió de tancament** —pagat + els càrrecs qu
 
 `g_assegurances_patrons` desa els patrons. Totes dues taules s'editen des de **`/impostos/assegurances/config`**, que llista els patrons i, sota, **un registre per camí de categoria** amb el que n'ha resolt el detector. Els ajustos s'editen **per camí i no per categoria**: el mateix camí existeix a cada compte que l'hagi importat i vol dir el mateix a tots, de manera que desar-ne un escriu una fila per cada categoria del camí i buidar-lo les esborra totes. Qui necessiti distingir dues categories del mateix camí ho ha de fer per tinker. La inclusió manual es fa cercant el camí al servidor (l'arbre té milers de categories i no s'envia sencer).
 
+### Factures dels locals: PDF i correu
+
+Els dos locals comercials (Joan Maragall 33 baixos i Juli Garreta 32) facturen cada mes:
+el dia 1 s'envia el PDF per correu i uns dies després arriba el cobrament, que es vincula
+a la factura com sempre. El PDF (`FacturaPdfService` + `resources/views/pdf/factura.blade.php`,
+dompdf) reprodueix el que s'emetia a mà des de 2017, i **la plantilla és una de sola**: el
+que canvia entre els dos locals és el contingut, no el disseny. Va amb **posicions
+absolutes en punts**, mesurades dels PDF antics, i no amb una `<table>`: dompdf no respecta
+`table-layout: fixed` i repartia les columnes pel contingut.
+
+Res del PDF es copia a la factura —l'arrendadora i el client surten del contracte cada
+vegada—, i el que no era enlloc s'ha afegit on toca: el **telèfon** a `g_comunitats_bens`
+(l'adreça hi va en dues línies, i per això el camp és un `textarea`), el **concepte**, les
+**condicions de pagament**, la **carpeta** i el **patró de nom de fitxer** a `g_lloguers`, i
+el **correu** a `g_llogaters` —mai a la plantilla del lloguer: si el client canvia
+d'adreça, es canvia en un lloc.
+
+La carpeta es desa amb `{any}` a dins (`…/Girona - Juli Garreta 32/{any}`) perquè n'hi ha
+una per any, i mana **l'any de la factura**, no el d'avui: una de desembre desada al gener
+va a la carpeta que li toca. El nom surt del patró (`T036 Factura Girona Juli Garreta 32 CB
+{numero}{sufix}`), on `{sufix}` és `_Escombraries` a les factures que només porten
+escombraries. Desar-la la passa d'`esborrany` a `emesa`, i el desat segueix el patró del
+llibre d'IVA: si el fitxer ja hi és, es demana confirmació.
+
+**Les escombraries industrials es configuren any per any** (`g_lloguers_escombraries` i les
+seves `fraccions`): el total, els mesos de cada fracció i **si van en una factura a banda**.
+A Joan Maragall són una línia de la mensual; a Juli Garreta, una factura pròpia que
+consumeix número, i per això l'any hi té més de dotze factures (2025: 202501…202515). El
+total i el nombre de terminis es **proposen** des de `g_taxes_rebuts`, que és qui sap què
+gira l'ajuntament, però es desen a part: el 2026 es repercuteixen 1.618,59 × 3 = 4.855,77
+contra els 4.856,25 del rebut. Els imports de les fraccions poden no ser iguals per
+arrodoniment, i per això cada una desa el seu.
+
+`FacturaController::generar()` crea, en una sola passada, les mensuals de l'any i les
+fraccions —com a línia o com a puntual—, i **no duplica res** si es torna a executar. El
+**número** és la seqüència de l'any comptant les d'escombraries intercalades
+(`max + 1`, format `{any}{NN}`), i els totals d'una factura són sempre la suma de les seves
+línies.
+
+Del **correu** només se'n prepara l'esborrany: `assumpte_correu` i `cos_correu` del lloguer
+(amb `{mes}`, `{any}`, `{numero}`, `{concepte}`, `{contacte}` i `{total}`; les factures
+d'escombraries poden tenir-ne de propis), el destinatari del llogater, i un enllaç *compose*
+de Gmail que ho obre tot escrit. **Gmail no deixa adjuntar per URL**, així que el botó baixa
+el PDF alhora per arrossegar-l'hi; adjuntar-lo sol demanaria l'API de Gmail amb OAuth.
+
 ### Model 184 (comunitats de béns)
 
 `Model184Service` munta la declaració d'atribució de rendes d'una comunitat de béns: un registre per immoble llogat (clau C, per referència cadastral) i el repartiment entre comuners. Afecta només els lloguers els contractes dels quals tenen una `ComunitatBens` com a arrendadora.

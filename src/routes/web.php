@@ -13,6 +13,7 @@ use App\Http\Controllers\ImmobleController;
 use App\Http\Controllers\LlogaterController;
 use App\Http\Controllers\ContracteController;
 use App\Http\Controllers\FacturaController;
+use App\Http\Controllers\LloguerEscombrariesController;
 use App\Http\Controllers\LlibreIvaController;
 use App\Http\Controllers\LloguerController;
 use App\Http\Controllers\LloguerRevisioIpcController;
@@ -82,6 +83,13 @@ Route::middleware('auth')->group(function () {
     Route::put('/factures/{factura}', [FacturaController::class, 'update']);
     Route::delete('/factures/{factura}', [FacturaController::class, 'destroy']);
     Route::post('/factures/{factura}/vincular-moviment', [FacturaController::class, 'vincularMoviment']);
+    Route::get('/factures/{factura}/pdf', [FacturaController::class, 'pdf'])->name('factures.pdf');
+    Route::get('/factures/{factura}/correu', [FacturaController::class, 'correu']);
+    Route::post('/factures/{factura}/desar-pdf', [FacturaController::class, 'desar']);
+    Route::post('/lloguers/{lloguer}/factures/desar-pdf', [FacturaController::class, 'desarAny']);
+    Route::get('/lloguers/{lloguer}/escombraries', [LloguerEscombrariesController::class, 'index']);
+    Route::post('/lloguers/{lloguer}/escombraries', [LloguerEscombrariesController::class, 'store']);
+    Route::delete('/lloguers/{lloguer}/escombraries', [LloguerEscombrariesController::class, 'destroy']);
 
     // Revisions IPC
     Route::get('/lloguers/{lloguer}/revisions-ipc', [LloguerRevisioIpcController::class, 'index']);

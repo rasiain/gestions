@@ -20,8 +20,16 @@ class Lloguer extends Model
         'retencio_irpf',
         'iva_percentatge',
         'irpf_percentatge',
+        'concepte_factura',
+        'condicions_pagament',
         'ruta_descarrega',
         'ruta_export',
+        'ruta_factures',
+        'patro_nom_fitxer',
+        'assumpte_correu',
+        'cos_correu',
+        'assumpte_correu_escombraries',
+        'cos_correu_escombraries',
     ];
 
     protected $casts = [
@@ -54,6 +62,17 @@ class Lloguer extends Model
     public function administracioA(\Carbon\CarbonInterface|string|null $data = null): ?AdministracioImmoble
     {
         return $this->immoble?->administracioA($data);
+    }
+
+    /** La repercussió de les escombraries, any per any. */
+    public function escombraries(): HasMany
+    {
+        return $this->hasMany(LloguerEscombraries::class);
+    }
+
+    public function escombrariesDe(int $any): ?LloguerEscombraries
+    {
+        return $this->escombraries()->with('fraccions')->where('any', $any)->first();
     }
 
     public function factures(): HasMany

@@ -19,6 +19,7 @@ class ComunitatBensController extends Controller
                 'nom'             => $c->nom,
                 'nif'             => $c->nif,
                 'adreca'          => $c->adreca,
+                'telefon'         => $c->telefon,
                 'activitat'       => $c->activitat,
                 'codi_activitat'  => $c->codi_activitat,
                 'epigraf_iae'     => $c->epigraf_iae,

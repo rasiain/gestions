@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Factura;
 use App\Models\FacturaLinia;
 use App\Models\Lloguer;
+use App\Services\FacturaCorreuService;
+use App\Services\FacturaPdfService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -233,6 +235,11 @@ class FacturaController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /**
+     * Les factures d'un rang de mesos: la renda de cada mes i, si l'any té
+     * escombraries configurades, les seves fraccions —com a línia de la mensual o
+     * com a factura a banda, segons el local.
+     */
     public function generar(Lloguer $lloguer, Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -240,6 +247,8 @@ class FacturaController extends Controller
             'mes_inici' => 'required|integer|min:1|max:12',
             'mes_fi'    => 'required|integer|min:1|max:12|gte:mes_inici',
         ]);
+
+        $any = $validated['any'];
 
         $contracteActiu = $lloguer->contractes()
             ->where(function ($q) {
@@ -251,49 +260,283 @@ class FacturaController extends Controller
         $ivaPerc = (float) $lloguer->iva_percentatge;
         $irpfPerc = $lloguer->retencio_irpf ? (float) $lloguer->irpf_percentatge : 0;
 
+        $numero = $this->darrerNumero($lloguer, $any);
+
+        $escombraries = $lloguer->escombrariesDe($any);
+        $fraccions = $escombraries?->fraccions ?? collect();
+        $totalFraccions = $fraccions->count();
+
         $creades = [];
+
         for ($mes = $validated['mes_inici']; $mes <= $validated['mes_fi']; $mes++) {
-            // Skip if already exists
-            $exists = $lloguer->factures()
+            $mensual = $lloguer->factures()
                 ->where('tipus', 'mensual')
-                ->where('any', $validated['any'])
+                ->where('any', $any)
                 ->where('mes', $mes)
-                ->exists();
+                ->first();
 
-            if ($exists) continue;
+            if (!$mensual) {
+                $numero++;
 
-            $ivaImport = round($base * $ivaPerc / 100, 2);
-            $irpfImport = round($base * $irpfPerc / 100, 2);
-            $total = round($base + $ivaImport - $irpfImport, 2);
+                $mensual = $lloguer->factures()->create([
+                    'contracte_id'     => $contracteActiu?->id,
+                    'any'              => $any,
+                    'mes'              => $mes,
+                    'tipus'            => 'mensual',
+                    'numero_factura'   => sprintf('%d%02d', $any, $numero),
+                    'base'             => $base,
+                    'iva_percentatge'  => $ivaPerc,
+                    'irpf_percentatge' => $irpfPerc,
+                    'iva_import'       => 0,
+                    'irpf_import'      => 0,
+                    'total'            => 0,
+                    'estat'            => 'esborrany',
+                    'data_emissio'     => sprintf('%d-%02d-01', $any, $mes),
+                ]);
 
-            $factura = $lloguer->factures()->create([
-                'contracte_id'     => $contracteActiu?->id,
-                'any'              => $validated['any'],
-                'mes'              => $mes,
-                'base'             => $base,
-                'iva_percentatge'  => $ivaPerc,
-                'iva_import'       => $ivaImport,
-                'irpf_percentatge' => $irpfPerc,
-                'irpf_import'      => $irpfImport,
-                'total'            => $total,
-                'estat'            => 'esborrany',
-                'data_emissio'     => sprintf('%d-%02d-01', $validated['any'], $mes),
+                $mensual->linies()->create([
+                    'concepte'    => 'lloguer_base',
+                    'descripcio'  => 'Lloguer base',
+                    'base'        => $base,
+                    'iva_import'  => round($base * $ivaPerc / 100, 2),
+                    'irpf_import' => round($base * $irpfPerc / 100, 2),
+                ]);
+
+                $this->recalcula($mensual);
+                $creades[] = $mensual->load('linies');
+            }
+
+            $fraccio = $fraccions->firstWhere('mes', $mes);
+
+            if (!$fraccio) {
+                continue;
+            }
+
+            $descripcio = $fraccio->descripcio($totalFraccions);
+
+            if ($escombraries->factura_separada) {
+                $puntual = $this->facturaEscombraries($lloguer, $any, $mes, $descripcio, $contracteActiu?->id, $fraccio, $numero + 1);
+
+                if ($puntual) {
+                    $numero++;
+                    $creades[] = $puntual;
+                }
+
+                continue;
+            }
+
+            // Com a línia de la mensual: només si encara no la porta.
+            if ($mensual->linies()->where('concepte', 'escombraries')->exists()) {
+                continue;
+            }
+
+            $mensual->linies()->create([
+                'concepte'    => 'escombraries',
+                'descripcio'  => $descripcio,
+                'base'        => $fraccio->import,
+                'iva_import'  => round((float) $fraccio->import * $ivaPerc / 100, 2),
+                'irpf_import' => round((float) $fraccio->import * $irpfPerc / 100, 2),
             ]);
 
-            $factura->linies()->create([
-                'concepte'   => 'lloguer_base',
-                'descripcio' => 'Lloguer base',
-                'base'       => $base,
-                'iva_import' => $ivaImport,
-                'irpf_import' => $irpfImport,
-            ]);
-
-            $creades[] = $factura->load('linies');
+            $this->recalcula($mensual);
         }
 
         return response()->json([
             'creades' => count($creades),
             'data'    => $creades,
+        ]);
+    }
+
+    /** La fracció d'escombraries en una factura pròpia, com a Juli Garreta. */
+    private function facturaEscombraries(
+        Lloguer $lloguer,
+        int $any,
+        int $mes,
+        string $descripcio,
+        ?int $contracteId,
+        $fraccio,
+        int $numero,
+    ): ?Factura {
+        $jaHiEs = $lloguer->factures()
+            ->where('tipus', 'puntual')
+            ->where('any', $any)
+            ->where('mes', $mes)
+            ->whereHas('linies', fn ($q) => $q->where('concepte', 'escombraries'))
+            ->exists();
+
+        if ($jaHiEs) {
+            return null;
+        }
+
+        $ivaPerc = (float) $lloguer->iva_percentatge;
+        $irpfPerc = $lloguer->retencio_irpf ? (float) $lloguer->irpf_percentatge : 0;
+
+        $factura = $lloguer->factures()->create([
+            'contracte_id'     => $contracteId,
+            'any'              => $any,
+            'mes'              => $mes,
+            'tipus'            => 'puntual',
+            'numero_factura'   => sprintf('%d%02d', $any, $numero),
+            'base'             => $fraccio->import,
+            'iva_percentatge'  => $ivaPerc,
+            'irpf_percentatge' => $irpfPerc,
+            'iva_import'       => 0,
+            'irpf_import'      => 0,
+            'total'            => 0,
+            'estat'            => 'esborrany',
+            'data_emissio'     => sprintf('%d-%02d-01', $any, $mes),
+        ]);
+
+        $factura->linies()->create([
+            'concepte'    => 'escombraries',
+            'descripcio'  => $descripcio,
+            'base'        => $fraccio->import,
+            'iva_import'  => round((float) $fraccio->import * $ivaPerc / 100, 2),
+            'irpf_import' => round((float) $fraccio->import * $irpfPerc / 100, 2),
+        ]);
+
+        $this->recalcula($factura);
+
+        return $factura->load('linies');
+    }
+
+    /**
+     * L'últim número de l'any, que és des d'on continua la seqüència. A Joan
+     * Maragall coincideix amb el mes perquè no hi ha res intercalat; a Juli Garreta,
+     * no.
+     */
+    private function darrerNumero(Lloguer $lloguer, int $any): int
+    {
+        $darrer = $lloguer->factures()
+            ->where('any', $any)
+            ->whereNotNull('numero_factura')
+            ->where('numero_factura', 'like', $any . '%')
+            ->max('numero_factura');
+
+        return $darrer ? (int) substr((string) $darrer, -2) : 0;
+    }
+
+    /** Els totals de la factura són sempre la suma de les seves línies. */
+    private function recalcula(Factura $factura): void
+    {
+        $linies = $factura->linies()->get();
+
+        $base = round($linies->sum(fn ($l) => (float) $l->base), 2);
+        $iva = round($linies->sum(fn ($l) => (float) $l->iva_import), 2);
+        $irpf = round($linies->sum(fn ($l) => (float) $l->irpf_import), 2);
+
+        $factura->update([
+            'base'        => $base,
+            'iva_import'  => $iva,
+            'irpf_import' => $irpf,
+            'total'       => round($base + $iva - $irpf, 2),
+        ]);
+    }
+
+    /** El PDF de la factura, per veure'l al navegador o baixar-lo. */
+    public function pdf(Factura $factura, FacturaPdfService $servei, Request $request)
+    {
+        $pdf = $servei->pdf($factura);
+        $nom = $servei->nomFitxer($factura);
+
+        return $request->boolean('baixa')
+            ? $pdf->download($nom)
+            : $pdf->stream($nom);
+    }
+
+    /**
+     * Desa el PDF a la carpeta de l'any de l'immoble, com fa el llibre d'IVA: si el
+     * fitxer ja hi és, es demana confirmació abans de trepitjar-lo.
+     */
+    public function desar(Factura $factura, FacturaPdfService $servei, Request $request): JsonResponse
+    {
+        $dir = $servei->directori($factura);
+
+        if (!$dir) {
+            return response()->json([
+                'error' => "Aquest lloguer no té carpeta de factures: s'indica a la seva fitxa.",
+            ], 422);
+        }
+
+        $nom = $servei->nomFitxer($factura);
+        $cami = $dir . DIRECTORY_SEPARATOR . $nom;
+
+        if (file_exists($cami) && !$request->boolean('force')) {
+            return response()->json(['exists' => true, 'filename' => $nom]);
+        }
+
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+
+        file_put_contents($cami, $servei->pdf($factura)->output());
+
+        // Desar-la és emetre-la; si ja s'ha cobrat, l'estat no es toca.
+        if ($factura->estat === 'esborrany') {
+            $factura->update(['estat' => 'emesa']);
+        }
+
+        return response()->json(['saved' => true, 'filename' => $nom, 'directori' => $dir]);
+    }
+
+    /** Totes les factures d'un any de cop, per no haver-les de desar una per una. */
+    public function desarAny(Lloguer $lloguer, FacturaPdfService $servei, Request $request): JsonResponse
+    {
+        $any = $request->integer('any') ?: (int) date('Y');
+
+        $factures = $lloguer->factures()
+            ->with('linies')
+            ->where(function ($q) use ($any) {
+                $q->where('any', $any)
+                    ->orWhere(fn ($q2) => $q2->whereNull('any')->whereYear('data_emissio', $any));
+            })
+            ->get();
+
+        $desades = [];
+        $existents = [];
+
+        foreach ($factures as $factura) {
+            $dir = $servei->directori($factura);
+
+            if (!$dir) {
+                return response()->json([
+                    'error' => "Aquest lloguer no té carpeta de factures: s'indica a la seva fitxa.",
+                ], 422);
+            }
+
+            $nom = $servei->nomFitxer($factura);
+            $cami = $dir . DIRECTORY_SEPARATOR . $nom;
+
+            if (file_exists($cami) && !$request->boolean('force')) {
+                $existents[] = $nom;
+
+                continue;
+            }
+
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0755, true);
+            }
+
+            file_put_contents($cami, $servei->pdf($factura)->output());
+
+            if ($factura->estat === 'esborrany') {
+                $factura->update(['estat' => 'emesa']);
+            }
+
+            $desades[] = $nom;
+        }
+
+        return response()->json([
+            'desades'   => $desades,
+            'existents' => $existents,
+        ]);
+    }
+
+    /** Les dades del correu i l'enllaç que n'obre l'esborrany a Gmail. */
+    public function correu(Factura $factura, FacturaCorreuService $servei): JsonResponse
+    {
+        return response()->json($servei->dades($factura) + [
+            'url' => $servei->enllacGmail($factura),
         ]);
     }
 

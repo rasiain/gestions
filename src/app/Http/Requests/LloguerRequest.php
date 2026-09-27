@@ -19,7 +19,7 @@ class LloguerRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
-        foreach (['ruta_descarrega', 'ruta_export'] as $camp) {
+        foreach (['ruta_descarrega', 'ruta_export', 'ruta_factures'] as $camp) {
             if (is_string($this->input($camp))) {
                 $ruta = trim($this->input($camp), " \t\n\r\0\x0B'\"");
                 $ruta = preg_replace('/\\\\(.)/u', '$1', $ruta);
@@ -42,6 +42,14 @@ class LloguerRequest extends FormRequest
             'irpf_percentatge'      => ['nullable', 'numeric', 'min:0', 'max:100'],
             'ruta_descarrega'       => ['nullable', 'string', 'max:500'],
             'ruta_export'           => ['nullable', 'string', 'max:500'],
+            'concepte_factura'      => ['nullable', 'string', 'max:200'],
+            'condicions_pagament'   => ['nullable', 'string'],
+            'ruta_factures'         => ['nullable', 'string', 'max:500'],
+            'patro_nom_fitxer'      => ['nullable', 'string', 'max:200'],
+            'assumpte_correu'       => ['nullable', 'string', 'max:200'],
+            'cos_correu'            => ['nullable', 'string'],
+            'assumpte_correu_escombraries' => ['nullable', 'string', 'max:200'],
+            'cos_correu_escombraries'      => ['nullable', 'string'],
         ];
     }
 

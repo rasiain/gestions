@@ -14,6 +14,7 @@ class ComunitatBens extends Model
         'nom',
         'nif',
         'adreca',
+        'telefon',
         'activitat',
         'codi_activitat',
         'epigraf_iae',

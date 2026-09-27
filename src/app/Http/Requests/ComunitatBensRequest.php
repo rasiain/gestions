@@ -25,6 +25,7 @@ class ComunitatBensRequest extends FormRequest
                 Rule::unique('g_comunitats_bens', 'nif')->ignore($id),
             ],
             'adreca'          => ['nullable', 'string', 'max:255'],
+            'telefon'         => ['nullable', 'string', 'max:30'],
             'activitat'       => ['nullable', 'string', 'max:50'],
             'codi_activitat'  => ['nullable', 'string', 'max:3'],
             'epigraf_iae'     => ['nullable', 'integer', 'min:0', 'max:9999'],

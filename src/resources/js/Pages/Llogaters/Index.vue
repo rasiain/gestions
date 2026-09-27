@@ -25,6 +25,9 @@ interface Llogater {
     adreca: string | null;
     codi_postal: string | null;
     poblacio: string | null;
+    email: string | null;
+    email_cc: string | null;
+    contacte: string | null;
 }
 
 interface Props {
@@ -46,6 +49,9 @@ const form = useForm({
     adreca: '',
     codi_postal: '',
     poblacio: '',
+    email: '',
+    email_cc: '',
+    contacte: '',
 });
 
 const openCreateModal = () => {
@@ -65,6 +71,9 @@ const openEditModal = (llogater: Llogater) => {
     form.adreca = llogater.adreca || '';
     form.codi_postal = llogater.codi_postal || '';
     form.poblacio = llogater.poblacio || '';
+    form.email = llogater.email || '';
+    form.email_cc = llogater.email_cc || '';
+    form.contacte = llogater.contacte || '';
     showModal.value = true;
 };
 
@@ -335,6 +344,43 @@ const adrecaDisplay = (llogater: Llogater): string => {
                                         </div>
                                     </div>
                                 </template>
+
+                                <!-- El destinatari de les factures: d'aquí surt el correu
+                                     que es prepara cada mes. -->
+                                <div>
+                                    <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Correu electrònic</label>
+                                    <input
+                                        id="email"
+                                        v-model="form.email"
+                                        type="email"
+                                        maxlength="150"
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                    />
+                                    <div v-if="form.errors.email" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.email }}</div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label for="email_cc" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Còpia a</label>
+                                        <input
+                                            id="email_cc"
+                                            v-model="form.email_cc"
+                                            type="email"
+                                            maxlength="150"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        />
+                                        <div v-if="form.errors.email_cc" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.email_cc }}</div>
+                                    </div>
+                                    <div>
+                                        <label for="contacte" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Persona de contacte</label>
+                                        <input
+                                            id="contacte"
+                                            v-model="form.contacte"
+                                            type="text"
+                                            maxlength="100"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        />
+                                    </div>
+                                </div>
                             </div>
                         </div>
 

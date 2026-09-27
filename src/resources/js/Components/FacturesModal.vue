@@ -156,6 +156,170 @@ const generarFactures = async () => {
     }
 };
 
+// La configuració de les escombraries de l'any: quant se'n repercuteix, en quins
+// mesos i si va en una factura a banda. D'aquí les treu el generador.
+interface Fraccio { mes: number; import: number | null }
+
+const showEscombraries = ref(false);
+const escombrariesLoading = ref(false);
+const escombrariesForm = ref({
+    import_total: null as number | null,
+    factura_separada: false,
+    fraccions: [] as Fraccio[],
+});
+const escombrariesProposta = ref<{ import_total: number; terminis: number; import: number } | null>(null);
+const escombrariesMissatge = ref<string | null>(null);
+
+const fetchEscombraries = async () => {
+    escombrariesLoading.value = true;
+    escombrariesMissatge.value = null;
+    try {
+        const res = await fetch(`/lloguers/${props.lloguer.id}/escombraries?any=${filterAny.value}`, {
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+        });
+        const json = await res.json();
+        escombrariesProposta.value = json.proposta;
+
+        if (json.data) {
+            escombrariesForm.value = {
+                import_total: json.data.import_total ? parseFloat(json.data.import_total) : null,
+                factura_separada: !!json.data.factura_separada,
+                fraccions: (json.data.fraccions ?? []).map((f: any) => ({ mes: f.mes, import: parseFloat(f.import) })),
+            };
+        } else {
+            escombrariesForm.value = { import_total: null, factura_separada: false, fraccions: [] };
+        }
+    } finally {
+        escombrariesLoading.value = false;
+    }
+};
+
+// El rebut de l'ajuntament diu el total i els terminis; els mesos els posa qui ho
+// configura, que és el que s'ha pactat amb el llogater.
+const aplicarProposta = () => {
+    const p = escombrariesProposta.value;
+    if (!p) return;
+    escombrariesForm.value.import_total = p.import_total;
+    escombrariesForm.value.fraccions = Array.from({ length: p.terminis }, () => ({ mes: 1, import: p.import }));
+};
+
+const afegirFraccio = () => {
+    escombrariesForm.value.fraccions.push({ mes: 1, import: null });
+};
+
+const desarEscombraries = async () => {
+    escombrariesLoading.value = true;
+    escombrariesMissatge.value = null;
+    try {
+        const res = await fetch(`/lloguers/${props.lloguer.id}/escombraries`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            body: JSON.stringify({ any: filterAny.value, ...escombrariesForm.value }),
+        });
+        escombrariesMissatge.value = res.ok
+            ? 'Desat. En generar les factures de l\'any, les fraccions hi aniran.'
+            : 'No s\'ha pogut desar.';
+    } finally {
+        escombrariesLoading.value = false;
+    }
+};
+
+// El PDF es desa a la carpeta de l'any de l'immoble. Si el fitxer ja hi és, el
+// servidor no el trepitja i torna `exists`: es pregunta i es repeteix amb `force`.
+const desantPdf = ref<number | null>(null);
+const desantAny = ref(false);
+const missatgePdf = ref<string | null>(null);
+
+const veurePdf = (factura: Factura) => {
+    window.open(`/factures/${factura.id}/pdf`, '_blank');
+};
+
+const desarPdf = async (factura: Factura, force = false) => {
+    desantPdf.value = factura.id;
+    missatgePdf.value = null;
+    try {
+        const res = await fetch(`/factures/${factura.id}/desar-pdf${force ? '?force=1' : ''}`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+        });
+        const json = await res.json();
+
+        if (json.exists) {
+            if (confirm(`«${json.filename}» ja existeix. El vols substituir?`)) {
+                await desarPdf(factura, true);
+            }
+            return;
+        }
+
+        if (!res.ok) {
+            missatgePdf.value = json.error ?? 'No s\'ha pogut desar el PDF.';
+            return;
+        }
+
+        missatgePdf.value = `Desat: ${json.filename}`;
+        await fetchFactures();
+    } finally {
+        desantPdf.value = null;
+    }
+};
+
+const desarPdfAny = async (force = false) => {
+    desantAny.value = true;
+    missatgePdf.value = null;
+    try {
+        const params = new URLSearchParams({ any: String(filterAny.value) });
+        if (force) params.set('force', '1');
+        const res = await fetch(`/lloguers/${props.lloguer.id}/factures/desar-pdf?${params}`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+        });
+        const json = await res.json();
+
+        if (!res.ok) {
+            missatgePdf.value = json.error ?? 'No s\'han pogut desar els PDF.';
+            return;
+        }
+
+        if (json.existents?.length && !force) {
+            if (confirm(`${json.existents.length} fitxer(s) ja existeixen. Els vols substituir?`)) {
+                await desarPdfAny(true);
+                return;
+            }
+        }
+
+        missatgePdf.value = `${json.desades.length} PDF desats`
+            + (json.existents?.length && !force ? `, ${json.existents.length} ja hi eren` : '');
+        await fetchFactures();
+    } finally {
+        desantAny.value = false;
+    }
+};
+
+// L'esborrany s'obre a Gmail amb tot escrit; el PDF es baixa alhora perquè Gmail
+// no deixa adjuntar per URL i s'hi ha d'arrossegar.
+const preparantCorreu = ref<number | null>(null);
+
+const prepararCorreu = async (factura: Factura) => {
+    preparantCorreu.value = factura.id;
+    missatgePdf.value = null;
+    try {
+        const res = await fetch(`/factures/${factura.id}/correu`, {
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+        });
+        const json = await res.json();
+
+        if (!json.to) {
+            missatgePdf.value = 'El llogater no té correu electrònic: s\'indica a la seva fitxa.';
+            return;
+        }
+
+        window.open(`/factures/${factura.id}/pdf?baixa=1`, '_blank');
+        window.open(json.url, '_blank');
+    } finally {
+        preparantCorreu.value = null;
+    }
+};
+
 const openEditFactura = (factura: Factura) => {
     editingFactura.value = factura;
     editForm.value = {
@@ -403,6 +567,72 @@ const anys = computed(() => {
                     >
                         Nova factura puntual
                     </button>
+                    <button
+                        @click="desarPdfAny(false)"
+                        :disabled="desantAny || factures.length === 0"
+                        class="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                    >
+                        {{ desantAny ? 'Desant...' : 'Desar PDF de l\'any' }}
+                    </button>
+                    <button
+                        @click="() => { showEscombraries = !showEscombraries; if (showEscombraries) fetchEscombraries(); }"
+                        class="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                    >
+                        Escombraries
+                    </button>
+                    <span v-if="missatgePdf" class="text-sm text-gray-500 dark:text-gray-400">{{ missatgePdf }}</span>
+                </div>
+
+                <!-- Escombraries de l'any -->
+                <div v-if="showEscombraries" class="border-b border-gray-200 bg-gray-50 px-6 py-4 dark:border-gray-700 dark:bg-gray-900/40">
+                    <div class="flex items-end gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Total de l'any</label>
+                            <input
+                                v-model.number="escombrariesForm.import_total"
+                                type="text"
+                                class="mt-1 block w-32 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                            />
+                        </div>
+                        <label class="flex items-center gap-2 pb-2 text-sm text-gray-700 dark:text-gray-300">
+                            <input v-model="escombrariesForm.factura_separada" type="checkbox" class="rounded border-gray-300 text-amber-600 focus:ring-amber-500" />
+                            Factura a banda
+                        </label>
+                        <button
+                            v-if="escombrariesProposta"
+                            @click="aplicarProposta"
+                            class="pb-2 text-sm text-amber-600 hover:underline dark:text-amber-400"
+                        >
+                            Proposar del rebut ({{ escombrariesProposta.import_total }} € en {{ escombrariesProposta.terminis }})
+                        </button>
+                    </div>
+
+                    <div class="mt-3 space-y-2">
+                        <div v-for="(fraccio, i) in escombrariesForm.fraccions" :key="i" class="flex items-center gap-2">
+                            <span class="w-16 text-sm text-gray-500 dark:text-gray-400">{{ i + 1 }} de {{ escombrariesForm.fraccions.length }}</span>
+                            <select v-model.number="fraccio.mes" class="rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                                <option v-for="m in 12" :key="m" :value="m">{{ nomMes(m) }}</option>
+                            </select>
+                            <input
+                                v-model.number="fraccio.import"
+                                type="text"
+                                class="w-32 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                            />
+                            <button @click="escombrariesForm.fraccions.splice(i, 1)" class="text-sm text-red-600 hover:underline dark:text-red-400">Treure</button>
+                        </div>
+                        <button @click="afegirFraccio" class="text-sm text-amber-600 hover:underline dark:text-amber-400">Afegir fracció</button>
+                    </div>
+
+                    <div class="mt-3 flex items-center gap-3">
+                        <button
+                            @click="desarEscombraries"
+                            :disabled="escombrariesLoading"
+                            class="inline-flex items-center rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-amber-700 disabled:opacity-50"
+                        >
+                            {{ escombrariesLoading ? 'Desant...' : 'Desar' }}
+                        </button>
+                        <span v-if="escombrariesMissatge" class="text-sm text-gray-500 dark:text-gray-400">{{ escombrariesMissatge }}</span>
+                    </div>
                 </div>
 
                 <!-- Generar form -->
@@ -485,6 +715,21 @@ const anys = computed(() => {
                                         <button @click="openEditFactura(factura)" class="text-amber-600 hover:text-amber-900 dark:text-amber-400 mr-2">Editar</button>
                                         <button @click="openVincularModal(factura)" :class="factura.moviment_id ? 'text-green-600 hover:text-green-800 dark:text-green-400' : 'text-blue-600 hover:text-blue-900 dark:text-blue-400'" class="mr-2">
                                             {{ factura.moviment_id ? 'Vinculat' : 'Vincular' }}
+                                        </button>
+                                        <button @click="veurePdf(factura)" class="mr-2 text-gray-600 hover:text-gray-900 dark:text-gray-300">PDF</button>
+                                        <button
+                                            @click="desarPdf(factura)"
+                                            :disabled="desantPdf === factura.id"
+                                            class="mr-2 text-gray-600 hover:text-gray-900 disabled:opacity-50 dark:text-gray-300"
+                                        >
+                                            {{ desantPdf === factura.id ? 'Desant...' : 'Desar' }}
+                                        </button>
+                                        <button
+                                            @click="prepararCorreu(factura)"
+                                            :disabled="preparantCorreu === factura.id"
+                                            class="mr-2 text-gray-600 hover:text-gray-900 disabled:opacity-50 dark:text-gray-300"
+                                        >
+                                            Correu
                                         </button>
                                         <button v-if="factura.estat === 'esborrany'" @click="deleteFactura(factura)" class="text-red-600 hover:text-red-900 dark:text-red-400">Eliminar</button>
                                     </td>

@@ -94,6 +94,14 @@ interface Lloguer {
     irpf_percentatge: string | null;
     ruta_descarrega: string | null;
     ruta_export: string | null;
+    concepte_factura: string | null;
+    condicions_pagament: string | null;
+    ruta_factures: string | null;
+    patro_nom_fitxer: string | null;
+    assumpte_correu: string | null;
+    cos_correu: string | null;
+    assumpte_correu_escombraries: string | null;
+    cos_correu_escombraries: string | null;
     /** Els trams d'administració de l'immoble: la gestoria és la del dia de cada cobrament. */
     administracions: Administracio[];
     propietaris: PersonaBasic[];
@@ -131,6 +139,14 @@ const lloguerForm = useForm({
     irpf_percentatge: 19.00 as number | null,
     ruta_descarrega: '' as string,
     ruta_export: '' as string,
+    concepte_factura: '' as string,
+    condicions_pagament: '' as string,
+    ruta_factures: '' as string,
+    patro_nom_fitxer: '' as string,
+    assumpte_correu: '' as string,
+    cos_correu: '' as string,
+    assumpte_correu_escombraries: '' as string,
+    cos_correu_escombraries: '' as string,
 });
 
 /** L'administradora d'avui de l'immoble del lloguer, per a la llista. */
@@ -167,6 +183,14 @@ const openEditLloguerModal = (lloguer: Lloguer) => {
     lloguerForm.irpf_percentatge = lloguer.irpf_percentatge ? parseFloat(lloguer.irpf_percentatge) : 19.00;
     lloguerForm.ruta_descarrega = lloguer.ruta_descarrega || '';
     lloguerForm.ruta_export = lloguer.ruta_export || '';
+    lloguerForm.concepte_factura = lloguer.concepte_factura || '';
+    lloguerForm.condicions_pagament = lloguer.condicions_pagament || '';
+    lloguerForm.ruta_factures = lloguer.ruta_factures || '';
+    lloguerForm.patro_nom_fitxer = lloguer.patro_nom_fitxer || '';
+    lloguerForm.assumpte_correu = lloguer.assumpte_correu || '';
+    lloguerForm.cos_correu = lloguer.cos_correu || '';
+    lloguerForm.assumpte_correu_escombraries = lloguer.assumpte_correu_escombraries || '';
+    lloguerForm.cos_correu_escombraries = lloguer.cos_correu_escombraries || '';
     showLloguerModal.value = true;
 };
 
@@ -2452,6 +2476,113 @@ const formatCurrency = (value: string | null): string => {
                                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                     />
                                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Directori on es desa el fitxer XLSX del resum. Si és buit: per a no habitatge usa la ruta de l'IVA; altrament, usa Downloads.</p>
+                                </div>
+
+                                <!-- Les factures en PDF són cosa dels locals: un habitatge no en genera -->
+                                <div v-if="!lloguerForm.es_habitatge" class="sm:col-span-2 rounded-md border border-gray-200 p-4 dark:border-gray-600">
+                                    <h4 class="mb-3 text-sm font-medium text-gray-700 dark:text-gray-300">Factura</h4>
+
+                                    <div>
+                                        <label for="concepte_factura" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Concepte</label>
+                                        <input
+                                            id="concepte_factura"
+                                            v-model="lloguerForm.concepte_factura"
+                                            type="text"
+                                            maxlength="200"
+                                            placeholder="Lloguer Local Joan Maragall, 33 Baixos, GIRONA"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        />
+                                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">La línia de la renda, tal com ha de sortir al PDF.</p>
+                                    </div>
+
+                                    <div class="mt-4">
+                                        <label for="condicions_pagament" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Condicions de pagament</label>
+                                        <textarea
+                                            id="condicions_pagament"
+                                            v-model="lloguerForm.condicions_pagament"
+                                            rows="5"
+                                            class="mt-1 block w-full rounded-md border-gray-300 font-mono text-xs shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                                        ></textarea>
+                                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">El peu de la factura, tal qual. Un tabulador separa l'etiqueta de l'esquerra del text de la dreta.</p>
+                                    </div>
+
+                                    <div class="mt-4">
+                                        <label for="ruta_factures" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Carpeta de les factures</label>
+                                        <input
+                                            id="ruta_factures"
+                                            v-model="lloguerForm.ruta_factures"
+                                            type="text"
+                                            placeholder="/ruta/a/l'immoble/{any}"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        />
+                                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Amb <code>{any}</code>: hi ha una carpeta per any, i mana l'any de la factura, no el d'avui.</p>
+                                    </div>
+
+                                    <div class="mt-4">
+                                        <label for="patro_nom_fitxer" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nom del fitxer</label>
+                                        <input
+                                            id="patro_nom_fitxer"
+                                            v-model="lloguerForm.patro_nom_fitxer"
+                                            type="text"
+                                            maxlength="200"
+                                            placeholder="Factura Hereus Puigvert Comalada CB {numero}{sufix}"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        />
+                                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Sense l'extensió. <code>{numero}</code>, <code>{sufix}</code> (_Escombraries), <code>{any}</code> i <code>{mes}</code>.</p>
+                                    </div>
+                                </div>
+
+                                <!-- El correu que acompanya la factura. El destinatari no hi és:
+                                     surt de les dades del llogater. -->
+                                <div v-if="!lloguerForm.es_habitatge" class="sm:col-span-2 rounded-md border border-gray-200 p-4 dark:border-gray-600">
+                                    <h4 class="mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">Correu</h4>
+                                    <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
+                                        Variables: <code>{mes}</code>, <code>{any}</code>, <code>{numero}</code>, <code>{concepte}</code>, <code>{contacte}</code> i <code>{total}</code>.
+                                    </p>
+
+                                    <div>
+                                        <label for="assumpte_correu" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Assumpte</label>
+                                        <input
+                                            id="assumpte_correu"
+                                            v-model="lloguerForm.assumpte_correu"
+                                            type="text"
+                                            maxlength="200"
+                                            placeholder="Factura {mes} {any} - Lloguer local Joan Maragall 33 de Girona"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        />
+                                    </div>
+
+                                    <div class="mt-4">
+                                        <label for="cos_correu" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Cos</label>
+                                        <textarea
+                                            id="cos_correu"
+                                            v-model="lloguerForm.cos_correu"
+                                            rows="5"
+                                            class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                                        ></textarea>
+                                    </div>
+
+                                    <div class="mt-4">
+                                        <label for="assumpte_correu_escombraries" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Assumpte de les escombraries</label>
+                                        <input
+                                            id="assumpte_correu_escombraries"
+                                            v-model="lloguerForm.assumpte_correu_escombraries"
+                                            type="text"
+                                            maxlength="200"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        />
+                                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Només per a les factures d'escombraries que van a banda. Si és buit, es fa servir el general.</p>
+                                    </div>
+
+                                    <div class="mt-4">
+                                        <label for="cos_correu_escombraries" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Cos de les escombraries</label>
+                                        <textarea
+                                            id="cos_correu_escombraries"
+                                            v-model="lloguerForm.cos_correu_escombraries"
+                                            rows="4"
+                                            class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                                        ></textarea>
+                                    </div>
                                 </div>
 
                             </div>

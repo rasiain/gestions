@@ -13,6 +13,7 @@ interface ComunitatBens {
     nom: string;
     nif: string | null;
     adreca: string | null;
+    telefon: string | null;
     activitat: string | null;
     codi_activitat: string | null;
     epigraf_iae: number | null;
@@ -35,6 +36,7 @@ const form = useForm({
     nom: '',
     nif: '',
     adreca: '',
+    telefon: '',
     activitat: '',
     codi_activitat: '',
     epigraf_iae: null as number | null,
@@ -54,6 +56,7 @@ const openEditModal = (comunitat: ComunitatBens) => {
     form.nom = comunitat.nom;
     form.nif = comunitat.nif || '';
     form.adreca = comunitat.adreca || '';
+    form.telefon = comunitat.telefon || '';
     form.activitat = comunitat.activitat || '';
     form.codi_activitat = comunitat.codi_activitat || '';
     form.epigraf_iae = comunitat.epigraf_iae;
@@ -236,12 +239,22 @@ const availableComuners = computed(() =>
                                         <div v-if="form.errors.nif" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.nif }}</div>
                                     </div>
 
-                                    <div class="sm:col-span-2">
+                                    <div>
                                         <label for="adreca" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Adreça</label>
-                                        <input id="adreca" v-model="form.adreca" type="text" maxlength="255"
+                                        <textarea id="adreca" v-model="form.adreca" rows="2" maxlength="255"
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
+                                        ></textarea>
+                                        <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">Una línia per ratlla: a la factura surt tal com s'escriu aquí.</p>
+                                        <div v-if="form.errors.adreca" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.adreca }}</div>
+                                    </div>
+
+                                    <div>
+                                        <label for="telefon" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Telèfon</label>
+                                        <input id="telefon" v-model="form.telefon" type="text" maxlength="30"
                                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 sm:text-sm"
                                         />
-                                        <div v-if="form.errors.adreca" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.adreca }}</div>
+                                        <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">Surt a les factures dels locals.</p>
+                                        <div v-if="form.errors.telefon" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.telefon }}</div>
                                     </div>
 
                                     <!-- Activitat econòmica -->

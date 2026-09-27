@@ -19,6 +19,12 @@ class LlogaterRequest extends FormRequest
             'tipus' => ['required', 'in:persona,empresa'],
         ];
 
+        // El correu és de qualsevol llogater, sigui persona o empresa: és qui rep
+        // la factura.
+        $rules['email']    = ['nullable', 'email', 'max:150'];
+        $rules['email_cc'] = ['nullable', 'email', 'max:150'];
+        $rules['contacte'] = ['nullable', 'string', 'max:100'];
+
         if ($tipus === 'persona') {
             $rules['persona_id'] = ['required', 'exists:g_persones,id'];
         } else {
@@ -41,6 +47,8 @@ class LlogaterRequest extends FormRequest
             'persona_id.exists'       => 'La persona seleccionada no existeix.',
             'nom_rao_social.required' => 'La raó social és obligatòria.',
             'nom_rao_social.max'      => 'La raó social no pot superar els :max caràcters.',
+            'email.email'             => "El correu electrònic no té un format vàlid.",
+            'email_cc.email'          => "El correu electrònic de còpia no té un format vàlid.",
         ];
     }
 }
