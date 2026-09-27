@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
+import { num } from '@/formularis';
 
 interface FacturaLinia {
     id?: number;
@@ -158,12 +159,13 @@ const generarFactures = async () => {
 
 // La configuració de les escombraries de l'any: quant se'n repercuteix, en quins
 // mesos i si va en una factura a banda. D'aquí les treu el generador.
-interface Fraccio { mes: number; import: number | null }
+// Els imports van com a text —«1.618,59» amb coma— i es llegeixen amb num().
+interface Fraccio { mes: number; import: string }
 
 const showEscombraries = ref(false);
 const escombrariesLoading = ref(false);
 const escombrariesForm = ref({
-    import_total: null as number | null,
+    import_total: '' as string,
     factura_separada: false,
     fraccions: [] as Fraccio[],
 });
@@ -182,12 +184,12 @@ const fetchEscombraries = async () => {
 
         if (json.data) {
             escombrariesForm.value = {
-                import_total: json.data.import_total ? parseFloat(json.data.import_total) : null,
+                import_total: json.data.import_total ? String(json.data.import_total) : '',
                 factura_separada: !!json.data.factura_separada,
-                fraccions: (json.data.fraccions ?? []).map((f: any) => ({ mes: f.mes, import: parseFloat(f.import) })),
+                fraccions: (json.data.fraccions ?? []).map((f: any) => ({ mes: f.mes, import: String(f.import) })),
             };
         } else {
-            escombrariesForm.value = { import_total: null, factura_separada: false, fraccions: [] };
+            escombrariesForm.value = { import_total: '', factura_separada: false, fraccions: [] };
         }
     } finally {
         escombrariesLoading.value = false;
@@ -199,13 +201,37 @@ const fetchEscombraries = async () => {
 const aplicarProposta = () => {
     const p = escombrariesProposta.value;
     if (!p) return;
-    escombrariesForm.value.import_total = p.import_total;
-    escombrariesForm.value.fraccions = Array.from({ length: p.terminis }, () => ({ mes: 1, import: p.import }));
+    escombrariesForm.value.import_total = String(p.import_total);
+
+    // El residu de la divisió va a l'última, perquè la proposta sumi el total exacte.
+    escombrariesForm.value.fraccions = Array.from({ length: p.terminis }, (_, i) => ({
+        mes: 1,
+        import: String(
+            i === p.terminis - 1
+                ? parseFloat((p.import_total - p.import * (p.terminis - 1)).toFixed(2))
+                : p.import,
+        ),
+    }));
 };
 
 const afegirFraccio = () => {
-    escombrariesForm.value.fraccions.push({ mes: 1, import: null });
+    escombrariesForm.value.fraccions.push({ mes: 1, import: '' });
 };
+
+// L'ajuntament no reparteix els terminis a parts iguals, i la suma de les fraccions
+// pot no fer el total. Es diu, però no es bloqueja: el que mana és el que es cobra.
+const sumaFraccions = computed(() =>
+    escombrariesForm.value.fraccions.reduce((s, f) => s + (num(f.import) ?? 0), 0)
+);
+
+const diferenciaEscombraries = computed(() => {
+    const total = num(escombrariesForm.value.import_total);
+    if (total === null || escombrariesForm.value.fraccions.length === 0) return null;
+
+    const diferencia = parseFloat((sumaFraccions.value - total).toFixed(2));
+
+    return diferencia === 0 ? null : diferencia;
+});
 
 const desarEscombraries = async () => {
     escombrariesLoading.value = true;
@@ -214,7 +240,12 @@ const desarEscombraries = async () => {
         const res = await fetch(`/lloguers/${props.lloguer.id}/escombraries`, {
             method: 'POST',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
-            body: JSON.stringify({ any: filterAny.value, ...escombrariesForm.value }),
+            body: JSON.stringify({
+                any: filterAny.value,
+                import_total: num(escombrariesForm.value.import_total),
+                factura_separada: escombrariesForm.value.factura_separada,
+                fraccions: escombrariesForm.value.fraccions.map((f) => ({ mes: f.mes, import: num(f.import) })),
+            }),
         });
         escombrariesMissatge.value = res.ok
             ? 'Desat. En generar les factures de l\'any, les fraccions hi aniran.'
@@ -619,6 +650,14 @@ const anys = computed(() => {
                         </div>
                         <button @click="afegirFraccio" class="text-sm text-amber-600 hover:underline dark:text-amber-400">Afegir fracció</button>
                     </div>
+
+                    <p v-if="escombrariesForm.fraccions.length" class="mt-2 text-sm" :class="diferenciaEscombraries ? 'text-amber-700 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'">
+                        Suma de les fraccions: {{ formatCurrency(sumaFraccions.toFixed(2)) }}
+                        <template v-if="diferenciaEscombraries">
+                            · {{ diferenciaEscombraries > 0 ? 'passa del total en' : 'falten' }}
+                            {{ formatCurrency(Math.abs(diferenciaEscombraries).toFixed(2)) }}
+                        </template>
+                    </p>
 
                     <div class="mt-3 flex items-center gap-3">
                         <button
