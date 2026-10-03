@@ -755,9 +755,20 @@ class MovementImportService
             // l'ajuntament per a dos immobles), i el concepte no les pot distingir.
             $categoriaId = $categoriaId ?? $previousMovement->categoria_id;
 
-            // Reuse the manually cleaned-up concept from previous movement
-            if ($previousMovement->concepte_id) {
-                $concepteModel = MovimentConcepte::find($previousMovement->concepte_id) ?? $concepteModel;
+            // Reuse the manually cleaned-up concept. No ha de ser el de l'últim moviment, sinó el
+            // de l'últim que el tingui net: si l'últim va quedar amb el text brut, copiar-lo
+            // propagaria el brut a totes les importacions següents.
+            $cleanMovement = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)
+                ->where('concepte_original', $concepteOriginal)
+                ->whereHas('concepte', fn ($q) => $q->whereColumn(
+                    'g_moviments_conceptes.concepte', '!=', 'g_moviments_comptes_corrents.concepte_original'
+                ))
+                ->orderBy('data_moviment', 'desc')
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if ($cleanMovement) {
+                $concepteModel = MovimentConcepte::find($cleanMovement->concepte_id) ?? $concepteModel;
             }
 
             Log::info('Movement concept matched with previous movement', [
@@ -1030,11 +1041,12 @@ class MovementImportService
             ->orderBy('id', 'desc')
             ->get();
 
-        // Build map: concepte_original => concepte text
+        // Build map: concepte_original => concepte text. Com a createMovement(), mana l'últim
+        // concepte net, no l'últim moviment: els que van quedar amb el text brut se salten.
         $concepteMap = [];
         foreach ($dbMovements as $dbMov) {
             $orig = $dbMov->concepte_original;
-            if ($orig && !isset($concepteMap[$orig]) && $dbMov->concepte) {
+            if ($orig && !isset($concepteMap[$orig]) && $dbMov->concepte && $dbMov->concepte->concepte !== $orig) {
                 $concepteMap[$orig] = $dbMov->concepte->concepte;
             }
         }
