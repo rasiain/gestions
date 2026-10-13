@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { xsrfToken } from '@/xsrf';
 import { ref, watch, computed } from 'vue';
 
 interface RevisioIpc {
@@ -43,8 +44,6 @@ const baseNova = computed(() => {
     return parseFloat((baseAnterior.value * (1 + form.value.ipc_percentatge / 100)).toFixed(2));
 });
 
-const csrfToken = (): string =>
-    (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
 
 const formatCurrency = (value: string | number | null): string => {
     if (value === null) return '-';
@@ -56,7 +55,7 @@ const fetchRevisions = async () => {
     loading.value = true;
     try {
         const res = await fetch(`/lloguers/${props.lloguer.id}/revisions-ipc`, {
-            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
         const json = await res.json();
         revisions.value = json.data;
@@ -74,7 +73,7 @@ const submitRevisio = async () => {
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': csrfToken(),
+                'X-XSRF-TOKEN': xsrfToken(),
             },
             body: JSON.stringify(form.value),
         });

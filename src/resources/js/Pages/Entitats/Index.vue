@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { xsrfToken } from '@/xsrf';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head } from '@inertiajs/vue3';
 import { ref } from 'vue';
@@ -11,7 +12,6 @@ interface Entitat {
 
 const props = defineProps<{ entitats: Entitat[] }>();
 
-const csrf = () => document.querySelector('meta[name=csrf-token]')?.getAttribute('content') ?? '';
 
 const llista = ref<Entitat[]>(JSON.parse(JSON.stringify(props.entitats)));
 
@@ -35,7 +35,7 @@ const saveEdit = async (e: Entitat) => {
     try {
         const res = await fetch(`/entitats/${e.id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
+            headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify({ nom: editingNom.value.trim() }),
         });
         if (!res.ok) {
@@ -57,7 +57,7 @@ const saveCreate = async () => {
     try {
         const res = await fetch('/entitats', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
+            headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify({ nom: newNom.value.trim() }),
         });
         if (!res.ok) {
@@ -78,7 +78,7 @@ const deleteEntitat = async (e: Entitat) => {
     error.value = null;
     const res = await fetch(`/entitats/${e.id}`, {
         method: 'DELETE',
-        headers: { 'X-CSRF-TOKEN': csrf() },
+        headers: { 'X-XSRF-TOKEN': xsrfToken() },
     });
     if (!res.ok) {
         const err = await res.json();

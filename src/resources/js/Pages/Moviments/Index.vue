@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { xsrfToken } from '@/xsrf';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
 import BulkEditModal from '@/Components/BulkEditModal.vue';
@@ -115,7 +116,7 @@ const fetchSuggeriments = async (concepteIds: number[]) => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content,
+                'X-XSRF-TOKEN': xsrfToken(),
             },
             body: JSON.stringify({ concepte_ids: concepteIds }),
         });
@@ -156,13 +157,12 @@ const createCategory = async () => {
     newCatCreating.value = true;
     newCatError.value = '';
     try {
-        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
         const response = await fetch(route('categories.store'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
-                'X-CSRF-TOKEN': csrf,
+                'X-XSRF-TOKEN': xsrfToken(),
             },
             body: JSON.stringify({
                 compte_corrent_id: props.selectedCompteCorrentId,
@@ -341,9 +341,8 @@ const verificaSaldos = async () => {
     if (filterForm.tipus)        params.set('tipus', filterForm.tipus);
 
     try {
-        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
         const res = await fetch(`/moviments/verifica-saldos?${params}`, {
-            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
+            headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
         const data = await res.json();
         verificaTotal.value      = data.total ?? 0;
@@ -478,10 +477,9 @@ const handleBulkEdit = async (payload: { concepte: string; notes: string; catego
         if (payload.notes !== '')          body.notes        = payload.notes;
         if (payload.categoria_id !== null) body.categoria_id = payload.categoria_id;
 
-        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
         const res = await fetch(route('moviments.bulk-edit'), {
             method:  'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body:    JSON.stringify(body),
         });
         const json = await res.json();
@@ -538,10 +536,9 @@ watch(() => props.moviments.data, (data) => {
 });
 
 const toggleConciliat = async (moviment: MovimentCompteCorrent) => {
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
     const res = await fetch(route('moviments.toggle-conciliat', moviment.id), {
         method: 'PATCH',
-        headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
+        headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
     });
     if (res.ok) {
         const data = await res.json();
@@ -550,10 +547,9 @@ const toggleConciliat = async (moviment: MovimentCompteCorrent) => {
 };
 
 const bulkConciliar = async (conciliat: boolean) => {
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
     await fetch(route('moviments.bulk-conciliar'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         body: JSON.stringify({ moviment_ids: Array.from(selectedIds.value), conciliat }),
     });
     selectedIds.value = new Set();
@@ -563,10 +559,9 @@ const bulkConciliar = async (conciliat: boolean) => {
 const conciliarPagina = async (conciliat: boolean) => {
     const ids = props.moviments.data.map(m => m.id);
     if (ids.length === 0) return;
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
     await fetch(route('moviments.bulk-conciliar'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         body: JSON.stringify({ moviment_ids: ids, conciliat }),
     });
     router.reload({ only: ['moviments'] });

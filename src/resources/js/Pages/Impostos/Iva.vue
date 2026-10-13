@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { xsrfToken } from '@/xsrf';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import { Head, router } from '@inertiajs/vue3';
@@ -147,7 +148,6 @@ function tancaArrendador() {
 }
 
 async function exportarLlibre(lloguer: LloguerIva) {
-    const csrfToken = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
 
     // Sempre fem POST: el servidor decideix si desa al disc o si cal fer descàrrega
     const postUrl = `/lloguers/${lloguer.id}/desar-llibre-iva?any=${props.any}`;
@@ -157,7 +157,7 @@ async function exportarLlibre(lloguer: LloguerIva) {
         const url = force ? postUrl + '&force=1' : postUrl;
         return fetch(url, {
             method: 'POST',
-            headers: { 'X-CSRF-TOKEN': csrfToken },
+            headers: { 'X-XSRF-TOKEN': xsrfToken() },
         }).then(r => r.json()).catch(() => null);
     };
 

@@ -276,6 +276,7 @@ D'aquí també ve una regla de disseny d'aquests formularis: **el botó de desar
 ### Components reutilitzables destacats
 - `Services\Concerns\ResolPerArbre`: resolució d'immoble i municipi des de l'arbre de categories, compartida per `TaxesService` i `AssegurancesService` (si divergissin, el mateix immoble sortiria amb dos noms segons la vista). `Http\Controllers\Concerns\CategoriesPerCompte` fa el mateix amb el selector de categories de les dues vistes.
 - `resources/js/formularis.ts`: `num()` llegeix un número tal com s'escriu aquí (coma decimal, punt de milers) perquè els imports van en camps de **text** —un `type=number` rebutja «100,00» en silenci i deixa el camp buit—, `queFalta()` diu quin camp falta perquè aquests botons de desar **no es deshabiliten mai**, i `perAlServidor()` envia el camp `dia` com a `data`. Usat a capital social, renda fixa i vehicles.
+- `resources/js/xsrf.ts`: `xsrfToken()` per a les crides `fetch`, enviat com a `X-XSRF-TOKEN`. Es llegeix de la galeta i no del `<meta name="csrf-token">`, que és el de quan es va carregar la pàgina: si la sessió es renova sense recarregar (un login amb Inertia), el meta queda vell i cada petició torna un 419.
 - `BulkEditModal.vue`: modal d'edició múltiple (concepte, notes, categoria). Gestiona el formulari internament; emet `@submit(payload)` i `v-model:open`. El pare conserva `saving` i `error` i fa la crida API. Usat a `Moviments/Index.vue` i `Lloguers/Index.vue`.
 
 ## Mapa de relacions del domini

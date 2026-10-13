@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { xsrfToken } from '@/xsrf';
 import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
 import { ref, computed, watch } from 'vue';
 
@@ -80,13 +81,12 @@ const createCategory = async () => {
     newCatCreating.value = true;
     newCatError.value = '';
     try {
-        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
         const response = await fetch(route('categories.store'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
-                'X-CSRF-TOKEN': csrf,
+                'X-XSRF-TOKEN': xsrfToken(),
             },
             body: JSON.stringify({
                 compte_corrent_id: props.compteCorrentId,

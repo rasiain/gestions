@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { xsrfToken } from '@/xsrf';
 import { ref, watch, computed } from 'vue';
 import { num } from '@/formularis';
 
@@ -80,6 +81,7 @@ const showVincularModal = ref(false);
 const movimentsDisponibles = ref<MovimentOption[]>([]);
 const movimentsLoading = ref(false);
 const selectedMovimentId = ref<number | null>(null);
+const errorVincular = ref<string | null>(null);
 
 const editForm = ref({
     tipus: 'mensual' as 'mensual' | 'puntual',
@@ -98,8 +100,6 @@ const editForm = ref({
     linies: [] as { concepte: string; descripcio: string | null; base: number; iva_import: number; irpf_import: number }[],
 });
 
-const csrfToken = (): string =>
-    (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
 
 const formatCurrency = (value: string | null): string => {
     if (value === null) return '-';
@@ -126,7 +126,7 @@ const fetchFactures = async () => {
         const params = new URLSearchParams();
         if (filterAny.value) params.set('any', String(filterAny.value));
         const res = await fetch(`/lloguers/${props.lloguer.id}/factures?${params}`, {
-            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
         const json = await res.json();
         factures.value = json.data;
@@ -143,7 +143,7 @@ const generarFactures = async () => {
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': csrfToken(),
+                'X-XSRF-TOKEN': xsrfToken(),
             },
             body: JSON.stringify(generarForm.value),
         });
@@ -177,7 +177,7 @@ const fetchEscombraries = async () => {
     escombrariesMissatge.value = null;
     try {
         const res = await fetch(`/lloguers/${props.lloguer.id}/escombraries?any=${filterAny.value}`, {
-            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
         const json = await res.json();
         escombrariesProposta.value = json.proposta;
@@ -239,7 +239,7 @@ const desarEscombraries = async () => {
     try {
         const res = await fetch(`/lloguers/${props.lloguer.id}/escombraries`, {
             method: 'POST',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify({
                 any: filterAny.value,
                 import_total: num(escombrariesForm.value.import_total),
@@ -271,7 +271,7 @@ const desarPdf = async (factura: Factura, force = false) => {
     try {
         const res = await fetch(`/factures/${factura.id}/desar-pdf${force ? '?force=1' : ''}`, {
             method: 'POST',
-            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
         const json = await res.json();
 
@@ -302,7 +302,7 @@ const desarPdfAny = async (force = false) => {
         if (force) params.set('force', '1');
         const res = await fetch(`/lloguers/${props.lloguer.id}/factures/desar-pdf?${params}`, {
             method: 'POST',
-            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
         const json = await res.json();
 
@@ -465,7 +465,7 @@ const submitEditFactura = async () => {
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': csrfToken(),
+                'X-XSRF-TOKEN': xsrfToken(),
             },
             body: JSON.stringify(editForm.value),
         });
@@ -485,7 +485,7 @@ const deleteFactura = async (factura: Factura) => {
     if (!confirm('Estàs segur que vols eliminar aquesta factura?')) return;
     const res = await fetch(`/factures/${factura.id}`, {
         method: 'DELETE',
-        headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+        headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
     });
     if (res.ok) {
         await fetchFactures();
@@ -495,13 +495,14 @@ const deleteFactura = async (factura: Factura) => {
 const openVincularModal = async (factura: Factura) => {
     vincularFactura.value = factura;
     selectedMovimentId.value = factura.moviment_id;
+    errorVincular.value = null;
     showVincularModal.value = true;
     movimentsLoading.value = true;
     try {
         const params = new URLSearchParams({ page: '1', per_vincular_factura: String(factura.id) });
         if (filterAny.value) params.set('any', String(filterAny.value));
         const res = await fetch(`/lloguers/${props.lloguer.id}/moviments?${params}`, {
-            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
         const json = await res.json();
         movimentsDisponibles.value = json.data
@@ -524,13 +525,18 @@ const submitVincular = async () => {
         headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': csrfToken(),
+            'X-XSRF-TOKEN': xsrfToken(),
         },
         body: JSON.stringify({ moviment_id: selectedMovimentId.value }),
     });
     if (res.ok) {
         showVincularModal.value = false;
         await fetchFactures();
+    } else {
+        const json = await res.json().catch(() => ({}));
+        errorVincular.value = res.status === 419
+            ? 'La sessió ha caducat. Recarrega la pàgina i torna-ho a provar.'
+            : (json.message ?? `No s'ha pogut vincular (error ${res.status}).`);
     }
 };
 
@@ -957,6 +963,7 @@ const anys = computed(() => {
                                 </option>
                             </select>
                         </div>
+                        <p v-if="errorVincular" class="mt-3 text-sm text-red-600">{{ errorVincular }}</p>
                     </div>
                     <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
                         <button @click="submitVincular" class="inline-flex w-full justify-center rounded-md bg-blue-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-blue-700 sm:ml-3 sm:w-auto sm:text-sm">

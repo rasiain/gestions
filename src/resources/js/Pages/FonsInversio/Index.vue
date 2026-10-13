@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { xsrfToken } from '@/xsrf';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
@@ -183,7 +184,6 @@ const classeRend = (v: number | null) =>
 const formatPct = (v: number | null) =>
     v === null ? '—' : new Intl.NumberFormat('ca-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + ' %';
 
-const csrf = () => document.querySelector('meta[name=csrf-token]')?.getAttribute('content') ?? '';
 
 // === GRÀFIQUES ===
 const personesAmbFI = computed(() => {
@@ -605,7 +605,7 @@ const submitContracte = async () => {
             data_fi: contracteForm.value.data_fi || null };
         const res = await fetch(url, {
             method: isEditingContracte.value ? 'PUT' : 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
+            headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify(payload),
         });
         if (!res.ok) {
@@ -628,7 +628,7 @@ const submitContracte = async () => {
 
 const deleteContracte = async (c: Contracte) => {
     if (!confirm('Estàs segur que vols eliminar aquest contracte?')) return;
-    await fetch(`/fons-inversio/contractes/${c.id}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': csrf() } });
+    await fetch(`/fons-inversio/contractes/${c.id}`, { method: 'DELETE', headers: { 'X-XSRF-TOKEN': xsrfToken() } });
     const fons = getFons(c.fons_id);
     fons.contractes = fons.contractes.filter(x => x.id !== c.id);
     recalcFons(fons);
@@ -660,7 +660,7 @@ const submitValor = async () => {
         const url = isEditingValor.value ? `/fons-inversio/valors/${editingValorId.value}` : '/fons-inversio/valors';
         const res = await fetch(url, {
             method: isEditingValor.value ? 'PUT' : 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
+            headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify({ ...valorForm.value, valor_participacio: parseFloat(valorForm.value.valor_participacio) }),
         });
         if (!res.ok) {
@@ -680,7 +680,7 @@ const submitValor = async () => {
 
 const deleteValor = async (v: ValorParticipacio) => {
     if (!confirm('Estàs segur que vols eliminar aquest valor?')) return;
-    await fetch(`/fons-inversio/valors/${v.id}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': csrf() } });
+    await fetch(`/fons-inversio/valors/${v.id}`, { method: 'DELETE', headers: { 'X-XSRF-TOKEN': xsrfToken() } });
     const fons = getFons(v.fons_id);
     fons.valors = fons.valors.filter(x => x.id !== v.id);
     recalcFons(fons);
@@ -723,7 +723,7 @@ const parseImport = async () => {
     try {
         const res = await fetch('/fons-inversio/valors/import/parse', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
+            headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify({ text: importText.value }),
         });
         if (!res.ok) {
@@ -751,7 +751,7 @@ const submitImport = async () => {
     try {
         const res = await fetch('/fons-inversio/valors/import', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
+            headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify({ valors }),
         });
         if (!res.ok) { importError.value = 'Error en desar els valors.'; return; }
@@ -796,7 +796,7 @@ const submitAportacio = async () => {
         const url = isEditingAportacio.value ? `/fons-inversio/aportacions/${editingAportacioId.value}` : '/fons-inversio/aportacions';
         const res = await fetch(url, {
             method: isEditingAportacio.value ? 'PUT' : 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
+            headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify({ ...aportacioForm.value, import: parseFloat(aportacioForm.value.import), participacions: parseFloat(aportacioForm.value.participacions) }),
         });
         if (!res.ok) {
@@ -821,7 +821,7 @@ const submitAportacio = async () => {
 
 const deleteAportacio = async (a: Aportacio, fonsId: number) => {
     if (!confirm('Estàs segur que vols eliminar aquesta aportació?')) return;
-    await fetch(`/fons-inversio/aportacions/${a.id}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': csrf() } });
+    await fetch(`/fons-inversio/aportacions/${a.id}`, { method: 'DELETE', headers: { 'X-XSRF-TOKEN': xsrfToken() } });
     const fons = getFons(fonsId);
     const contracte = fons.contractes.find(c => c.id === a.contracte_id)!;
     contracte.aportacions = contracte.aportacions.filter(x => x.id !== a.id);
@@ -857,7 +857,7 @@ const submitDespesa = async () => {
         const url = isEditingDespesa.value ? `/fons-inversio/despeses/${editingDespesaId.value}` : '/fons-inversio/despeses';
         const res = await fetch(url, {
             method: isEditingDespesa.value ? 'PUT' : 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
+            headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify({ ...despesaForm.value, import: parseFloat(despesaForm.value.import) }),
         });
         if (!res.ok) {
@@ -882,7 +882,7 @@ const submitDespesa = async () => {
 
 const deleteDespesa = async (d: DespesaFons, fonsId: number) => {
     if (!confirm('Estàs segur que vols eliminar aquesta despesa?')) return;
-    await fetch(`/fons-inversio/despeses/${d.id}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': csrf() } });
+    await fetch(`/fons-inversio/despeses/${d.id}`, { method: 'DELETE', headers: { 'X-XSRF-TOKEN': xsrfToken() } });
     const fons = getFons(fonsId);
     const contracte = fons.contractes.find(c => c.id === d.contracte_id)!;
     contracte.despeses = contracte.despeses.filter(x => x.id !== d.id);
