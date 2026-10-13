@@ -738,8 +738,9 @@ class MovementImportService
         $categoriaId = $movement['categoria_id'] ?? null;
         $notes = $movement['notes'] ?? $concepteOriginal; // Use original concept as notes fallback
 
-        // Find or create concept in g_moviments_conceptes table
-        $concepteModel = MovimentConcepte::findOrCreateByConcepte($concepteOriginal);
+        // Reuse the manually cleaned-up concept from history, or create the raw one
+        $concepteModel = $this->previousCleanConcepte($concepteOriginal, $compteCorrentId)
+            ?? MovimentConcepte::findOrCreateByConcepte($concepteOriginal);
 
         // Search for previous movement with same original concept to reuse manual category assignment
         $previousMovement = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)
@@ -754,22 +755,6 @@ class MovementImportService
             // diferents categories poden compartir concepte_original (ex. un mateix rebut de
             // l'ajuntament per a dos immobles), i el concepte no les pot distingir.
             $categoriaId = $categoriaId ?? $previousMovement->categoria_id;
-
-            // Reuse the manually cleaned-up concept. No ha de ser el de l'últim moviment, sinó el
-            // de l'últim que el tingui net: si l'últim va quedar amb el text brut, copiar-lo
-            // propagaria el brut a totes les importacions següents.
-            $cleanMovement = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)
-                ->where('concepte_original', $concepteOriginal)
-                ->whereHas('concepte', fn ($q) => $q->whereColumn(
-                    'g_moviments_conceptes.concepte', '!=', 'g_moviments_comptes_corrents.concepte_original'
-                ))
-                ->orderBy('data_moviment', 'desc')
-                ->orderBy('id', 'desc')
-                ->first();
-
-            if ($cleanMovement) {
-                $concepteModel = MovimentConcepte::find($cleanMovement->concepte_id) ?? $concepteModel;
-            }
 
             Log::info('Movement concept matched with previous movement', [
                 'concepte_original' => $concepteOriginal,
@@ -793,6 +778,61 @@ class MovementImportService
         ]);
 
         return true;
+    }
+
+    /**
+     * Concepte net que ja es va posar a un moviment anterior del compte amb el mateix text del banc.
+     *
+     * Primer, per text idèntic: l'últim moviment amb el mateix concepte_original que tingui el
+     * concepte net —no l'últim a seques: si l'últim va quedar amb el text brut, copiar-lo
+     * propagaria el brut a totes les importacions següents.
+     *
+     * Si no n'hi ha cap i és un pagament amb targeta, es busca com la categoria
+     * (matchCategoryByNotes): a les notes i sense el prefix «TARGETA *XXXX». El mateix comerç
+     * pagat amb una altra targeta és un altre text, i les importacions antigues van desar el
+     * concepte net com a concepte_original i el text del banc només a les notes.
+     */
+    private function previousCleanConcepte(string $concepteOriginal, int $compteCorrentId): ?MovimentConcepte
+    {
+        $exact = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)
+            ->where('concepte_original', $concepteOriginal)
+            ->whereHas('concepte', fn ($q) => $q->whereColumn(
+                'g_moviments_conceptes.concepte', '!=', 'g_moviments_comptes_corrents.concepte_original'
+            ))
+            ->orderBy('data_moviment', 'desc')
+            ->orderBy('id', 'desc')
+            ->first();
+
+        if ($exact) {
+            return $exact->concepte;
+        }
+
+        $searchTerm = $this->extractConceptWithoutCard($concepteOriginal);
+
+        // Només per als pagaments amb targeta: un text genèric (BIZUM ENVIAT, TRASPAS) trobaria
+        // a les notes conceptes que no són seus.
+        if ($searchTerm === $concepteOriginal || strlen($searchTerm) < 5) {
+            return null;
+        }
+
+        $similar = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)
+            ->where('notes', 'LIKE', '%' . $searchTerm . '%')
+            // Net vol dir sense el prefix: el text brut d'una altra targeta no serveix
+            ->whereHas('concepte', fn ($q) => $q->where('concepte', 'NOT LIKE', '%TARGETA *%'))
+            ->orderBy('data_moviment', 'desc')
+            ->orderBy('id', 'desc')
+            ->first();
+
+        if ($similar) {
+            Log::info('Movement concept matched by notes similarity', [
+                'concepte_original' => $concepteOriginal,
+                'search_term' => $searchTerm,
+                'concepte_id' => $similar->concepte_id,
+                'previous_movement_id' => $similar->id,
+            ]);
+        }
+
+        return $similar?->concepte;
     }
 
     /**
@@ -1015,7 +1055,7 @@ class MovementImportService
     }
 
     /**
-     * Match concepts from previous movements with the same concepte_original.
+     * Match concepts from previous movements (see previousCleanConcepte()).
      * Adds 'concepte_net' (the previously-assigned clean concept) to each movement for preview display.
      * Does NOT modify 'concepte' (the raw bank text used as concepte_original at import time).
      *
@@ -1029,26 +1069,11 @@ class MovementImportService
             return;
         }
 
-        // Collect all unique raw concepts (which become concepte_original in DB)
-        $originals = array_unique(array_column($movements, 'concepte'));
-
-        // Query DB for movements with these concepte_original values
-        $dbMovements = MovimentCompteCorrent::where('compte_corrent_id', $compteCorrentId)
-            ->whereIn('concepte_original', $originals)
-            ->whereNotNull('concepte_id')
-            ->with('concepte')
-            ->orderBy('data_moviment', 'desc')
-            ->orderBy('id', 'desc')
-            ->get();
-
-        // Build map: concepte_original => concepte text. Com a createMovement(), mana l'últim
-        // concepte net, no l'últim moviment: els que van quedar amb el text brut se salten.
+        // Mateixa cerca que createMovement(), perquè la previsualització mostri el concepte que
+        // després s'aplicarà. Una cerca per text diferent, no per moviment.
         $concepteMap = [];
-        foreach ($dbMovements as $dbMov) {
-            $orig = $dbMov->concepte_original;
-            if ($orig && !isset($concepteMap[$orig]) && $dbMov->concepte && $dbMov->concepte->concepte !== $orig) {
-                $concepteMap[$orig] = $dbMov->concepte->concepte;
-            }
+        foreach (array_unique(array_column($movements, 'concepte')) as $original) {
+            $concepteMap[$original] = $this->previousCleanConcepte($original, $compteCorrentId)?->concepte;
         }
 
         foreach ($movements as &$movement) {
