@@ -2537,7 +2537,7 @@ const formatCurrency = (value: string | null): string => {
                                 <div v-if="!lloguerForm.es_habitatge" class="sm:col-span-2 rounded-md border border-gray-200 p-4 dark:border-gray-600">
                                     <h4 class="mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">Correu</h4>
                                     <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
-                                        Variables: <code>{mes}</code>, <code>{any}</code>, <code>{numero}</code>, <code>{concepte}</code>, <code>{contacte}</code> i <code>{total}</code>.
+                                        Variables: <code>{mes}</code>, <code>{any}</code>, <code>{numero}</code>, <code>{concepte}</code>, <code>{contacte}</code>, <code>{total}</code> i <code>{escombraries}</code> (« i a la fracció de les escombraries industrials (…)» quan la factura del mes en porta; si no, res).
                                     </p>
 
                                     <div>

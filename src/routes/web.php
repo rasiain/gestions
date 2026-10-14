@@ -33,6 +33,7 @@ use App\Http\Controllers\ProveidorController;
 use App\Http\Controllers\RendaFixaController;
 use App\Http\Controllers\TotalsMobiliarisController;
 use App\Http\Controllers\VehicleController;
+use App\Http\Controllers\GoogleController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -85,6 +86,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/factures/{factura}/vincular-moviment', [FacturaController::class, 'vincularMoviment']);
     Route::get('/factures/{factura}/pdf', [FacturaController::class, 'pdf'])->name('factures.pdf');
     Route::get('/factures/{factura}/correu', [FacturaController::class, 'correu']);
+    Route::post('/factures/{factura}/esborrany-gmail', [FacturaController::class, 'esborranyGmail']);
+    Route::get('/google/connectar', [GoogleController::class, 'connectar'])->name('google.connectar');
+    Route::get('/google/callback', [GoogleController::class, 'callback']);
     Route::post('/factures/{factura}/desar-pdf', [FacturaController::class, 'desar']);
     Route::post('/lloguers/{lloguer}/factures/desar-pdf', [FacturaController::class, 'desarAny']);
     Route::get('/lloguers/{lloguer}/escombraries', [LloguerEscombrariesController::class, 'index']);

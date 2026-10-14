@@ -7,6 +7,8 @@ use App\Models\FacturaLinia;
 use App\Models\Lloguer;
 use App\Services\FacturaCorreuService;
 use App\Services\FacturaPdfService;
+use App\Services\GmailDesconnectat;
+use App\Services\GmailService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -572,6 +574,34 @@ class FacturaController extends Controller
         return response()->json($servei->dades($factura) + [
             'url' => $servei->enllacGmail($factura),
         ]);
+    }
+
+    /**
+     * Crea l'esborrany a Gmail amb el PDF adjunt i en torna l'adreça. Si no hi ha cap
+     * compte connectat, torna on s'ha d'anar per connectar-lo: la pantalla hi porta la
+     * mateixa finestra que havia de mostrar l'esborrany.
+     */
+    public function esborranyGmail(
+        Factura $factura,
+        FacturaCorreuService $correu,
+        FacturaPdfService $pdf,
+        GmailService $gmail,
+    ): JsonResponse {
+        try {
+            $url = $gmail->crearEsborrany(
+                $correu->dades($factura),
+                $pdf->pdf($factura)->output(),
+                $pdf->nomFitxer($factura),
+            );
+        } catch (GmailDesconnectat) {
+            return response()->json(['connectar' => route('google.connectar')], 409);
+        } catch (\RuntimeException $e) {
+            report($e);
+
+            return response()->json(['error' => $e->getMessage()], 502);
+        }
+
+        return response()->json(['url' => $url]);
     }
 
     public function vincularMoviment(Factura $factura, Request $request): JsonResponse

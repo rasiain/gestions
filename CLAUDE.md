@@ -162,10 +162,19 @@ esborranys de després es corren i el que ja s'ha enviat no es mou. Sense això 
 anaven a parar al final de l'any, amb números posteriors als de desembre.
 
 Del **correu** només se'n prepara l'esborrany: `assumpte_correu` i `cos_correu` del lloguer
-(amb `{mes}`, `{any}`, `{numero}`, `{concepte}`, `{contacte}` i `{total}`; les factures
-d'escombraries poden tenir-ne de propis), el destinatari del llogater, i un enllaç *compose*
-de Gmail que ho obre tot escrit. **Gmail no deixa adjuntar per URL**, així que el botó baixa
-el PDF alhora per arrossegar-l'hi; adjuntar-lo sol demanaria l'API de Gmail amb OAuth.
+(amb `{mes}`, `{any}`, `{numero}`, `{concepte}`, `{contacte}`, `{total}` i `{escombraries}`, que diu la fracció quan va com a línia de la factura del mes; les factures
+d'escombraries poden tenir-ne de propis), el destinatari del llogater i el PDF adjunt. L'esborrany es crea **amb l'API de Gmail**
+(`GmailService`, només amb el permís `gmail.compose`) i s'obre a Gmail sencer
+(`#drafts?compose=<id>`). Un enllaç *compose* no servia: no pot portar adjunts i obre una
+pàgina de redacció sola, sense la resta de Gmail. La connexió és una de sola
+(`g_google_connexions`, tokens xifrats) i es fa el primer cop que es clica «Correu»: la
+finestra va a `/google/connectar`, Google demana permís i torna a `/google/callback`. Cal
+`GOOGLE_CLIENT_ID` i `GOOGLE_CLIENT_SECRET` al `.env`, d'un client OAuth de tipus «Aplicació
+web» amb `http://localhost:8080/google/callback` com a URI de redirecció; l'aplicació de Google
+Cloud ha d'estar **en proves** («Testing») amb el compte com a usuari de proves: `gmail.compose`
+és un permís restringit i, publicada sense la verificació de Google, l'aplicació queda bloquejada
+(«Access blocked»). El preu és que en proves Google fa caducar el permís als set dies; quan
+passa, la connexió s'esborra i el clic següent a «Correu» porta la finestra a tornar-lo a donar.
 
 ### Model 184 (comunitats de béns)
 

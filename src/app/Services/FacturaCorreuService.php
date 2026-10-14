@@ -66,12 +66,34 @@ class FacturaCorreuService
             : '';
 
         return [
+            // «de {mes}» s'apostrofa davant de vocal (d'abril, d'agost, d'octubre). strtr()
+            // prova primer la clau més llarga, i per això aquesta mana sobre «{mes}» sol.
+            'de {mes}'   => $factura->mes ? FacturaPdfService::deMes((int) $factura->mes) : 'de ',
             '{mes}'      => $mes,
             '{any}'      => (string) ($factura->any ?: ''),
             '{numero}'   => (string) ($factura->numero_factura ?: ''),
             '{concepte}' => (string) ($factura->lloguer->concepte_factura ?: ''),
             '{contacte}' => (string) ($client?->contacte ?: ''),
             '{total}'    => number_format((float) $factura->total, 2, ',', '.') . ' €',
+            '{escombraries}' => $this->escombraries($factura),
         ];
+    }
+
+    /**
+     * La fracció d'escombraries quan va com a línia de la factura del mes (Joan Maragall), per
+     * dir-ho al correu. Buit a les que no en porten i a les que només són d'escombraries, que ja
+     * tenen el seu text.
+     */
+    private function escombraries(Factura $factura): string
+    {
+        $linies = $factura->linies->where('concepte', 'escombraries');
+
+        if ($linies->isEmpty() || $linies->count() === $factura->linies->count()) {
+            return '';
+        }
+
+        $import = number_format((float) $linies->sum('base'), 2, ',', '.') . ' €';
+
+        return " i a la fracció de les escombraries industrials ({$import})";
     }
 }

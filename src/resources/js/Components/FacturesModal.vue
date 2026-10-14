@@ -332,20 +332,36 @@ const desarPdfAny = async (force = false) => {
 // Les dues coses van síncrones dins del clic i en aquest ordre: si abans s'espera
 // cap resposta del servidor, el navegador ja no lliga la finestra al clic i la
 // bloqueja com a emergent. La redirecció cap a Gmail la fa el servidor.
-const prepararCorreu = (factura: Factura) => {
-    const finestra = window.open(`/factures/${factura.id}/correu?obrir=1`, '_blank');
+// L'esborrany es crea a Gmail amb el PDF adjunt. La finestra s'obre dins del clic i després
+// s'hi porta l'esborrany: si s'obrís en tornar la resposta, el navegador la blocaria.
+const prepararCorreu = async (factura: Factura) => {
+    missatgePdf.value = null;
+    const finestra = window.open('', '_blank');
 
     if (!finestra) {
         missatgePdf.value = 'El navegador ha blocat la finestra de Gmail: permet-les per a aquest lloc.';
+        return;
     }
+    finestra.document.title = 'Preparant l\'esborrany…';
+    finestra.document.body.textContent = 'Preparant l\'esborrany a Gmail…';
 
-    // Una descàrrega no obre finestra i no es bloqueja.
-    const enllac = document.createElement('a');
-    enllac.href = `/factures/${factura.id}/pdf?baixa=1`;
-    enllac.download = '';
-    document.body.appendChild(enllac);
-    enllac.click();
-    enllac.remove();
+    const res = await fetch(`/factures/${factura.id}/esborrany-gmail`, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
+    });
+    const json = await res.json().catch(() => ({}));
+
+    if (res.ok) {
+        finestra.location.href = json.url;
+    } else if (res.status === 409) {
+        // Sense compte connectat: la mateixa finestra va a demanar permís a Google
+        finestra.location.href = json.connectar;
+    } else {
+        finestra.close();
+        missatgePdf.value = res.status === 419
+            ? 'La sessió ha caducat. Recarrega la pàgina i torna-ho a provar.'
+            : (json.error ?? `No s'ha pogut crear l'esborrany (error ${res.status}).`);
+    }
 };
 
 const openEditFactura = (factura: Factura) => {

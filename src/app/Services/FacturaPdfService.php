@@ -21,7 +21,7 @@ class FacturaPdfService
     ];
 
     /** Els mesos que comencen amb vocal volen «d'» i no «de». */
-    private static function deMes(int $mes): string
+    public static function deMes(int $mes): string
     {
         $nom = self::MESOS[$mes];
 
