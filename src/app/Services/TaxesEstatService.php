@@ -126,7 +126,9 @@ class TaxesEstatService
     {
         $resultat = [];
 
-        $linies = FacturaLinia::whereHas('factura', fn ($q) => $q->where('any', $any))
+        // Els esborranys no compten: generar les factures de l'any les crea totes de cop, i
+        // fins que no surten no s'ha passat res al llogater
+        $linies = FacturaLinia::whereHas('factura', fn ($q) => $q->where('any', $any)->where('estat', '!=', 'esborrany'))
             ->with('factura:id,lloguer_id,any')
             ->get();
 
