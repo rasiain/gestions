@@ -72,6 +72,7 @@ Route::middleware('auth')->group(function () {
     ]);
     Route::get('/lloguers/{lloguer}/moviments', [LloguerController::class, 'moviments'])->name('lloguers.moviments');
     Route::post('/lloguers/{lloguer}/desar-export', [LloguerController::class, 'desarExport'])->name('lloguers.desar-export');
+    Route::get('/lloguers/{lloguer}/veure-export', [LloguerController::class, 'veureExport'])->name('lloguers.veure-export');
     Route::get('/lloguers/{lloguer}/exportar', [LloguerController::class, 'exportar'])->name('lloguers.exportar');
     Route::post('/lloguers/{lloguer}/desar-llibre-iva', [LlibreIvaController::class, 'desar'])->name('lloguers.desar-llibre-iva');
     Route::get('/lloguers/{lloguer}/exportar-llibre-iva', [LlibreIvaController::class, 'exportar'])->name('lloguers.exportar-llibre-iva');

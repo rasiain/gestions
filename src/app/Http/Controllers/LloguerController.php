@@ -18,6 +18,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Writer\Html;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
@@ -494,16 +496,8 @@ class LloguerController extends Controller
 
     public function desarExport(Lloguer $lloguer, Request $request): JsonResponse
     {
-        $any      = $request->integer('any') ?: null;
-        $anyLabel = $any ?? 'tots';
-        $filename = sprintf('lloguer-%s-%s.xlsx', $lloguer->acronim ?? $lloguer->id, $anyLabel);
-
-        $rutaDir = match(true) {
-            (bool) $lloguer->ruta_export    => rtrim($lloguer->ruta_export, '/\\'),
-            !$lloguer->es_habitatge && (bool) $lloguer->ruta_descarrega
-                                            => rtrim($lloguer->ruta_descarrega, '/\\'),
-            default                         => env('IMPORT_SCAN_PATH', getenv('HOME') . '/Downloads'),
-        };
+        $any = $request->integer('any') ?: null;
+        [$rutaDir, $filename] = $this->rutaExport($lloguer, $any);
 
         $rutaFitxer = $rutaDir . DIRECTORY_SEPARATOR . $filename;
 
@@ -517,7 +511,55 @@ class LloguerController extends Controller
 
         (new Xlsx($this->buildExportSpreadsheet($lloguer, $any)))->save($rutaFitxer);
 
-        return response()->json(['saved' => true, 'filename' => $filename]);
+        return response()->json([
+            'saved' => true,
+            'filename' => $filename,
+            'numbers_url' => 'gestions://open?path=' . rawurlencode($rutaFitxer),
+        ]);
+    }
+
+    /**
+     * El fitxer desat, per examinar-lo. El navegador no pot obrir un fitxer del disc i un
+     * .xlsx no el mostra: es llegeix el que hi ha desat —no es torna a calcular— i se'n
+     * fa una pàgina amb tots els fulls.
+     */
+    public function veureExport(Lloguer $lloguer, Request $request)
+    {
+        [$rutaDir, $filename] = $this->rutaExport($lloguer, $request->integer('any') ?: null);
+        $rutaFitxer = $rutaDir . DIRECTORY_SEPARATOR . $filename;
+
+        abort_unless(is_file($rutaFitxer), 404, "No hi ha cap fitxer desat a {$rutaFitxer}.");
+
+        $html = new Html(IOFactory::load($rutaFitxer));
+        $html->writeAllSheets();
+
+        ob_start();
+        $html->save('php://output');
+        $contingut = ob_get_clean();
+
+        // El títol de la pestanya i on és el fitxer, per saber què s'està mirant
+        $capcalera = '<div style="font-family: system-ui, sans-serif; padding: 12px 16px; background: #f3f4f6; border-bottom: 1px solid #d1d5db">'
+            . '<strong>' . e($filename) . '</strong><br><small>' . e($rutaDir) . '</small></div>';
+
+        $contingut = preg_replace('/<title>.*?<\/title>/s', '<title>' . e($filename) . '</title>', $contingut, 1);
+        $contingut = preg_replace('/<body[^>]*>/', '$0' . $capcalera, $contingut, 1);
+
+        return response($contingut);
+    }
+
+    /** @return array{0: string, 1: string} directori i nom del fitxer exportat */
+    private function rutaExport(Lloguer $lloguer, ?int $any): array
+    {
+        $filename = sprintf('lloguer-%s-%s.xlsx', $lloguer->acronim ?? $lloguer->id, $any ?? 'tots');
+
+        $rutaDir = match(true) {
+            (bool) $lloguer->ruta_export    => rtrim($lloguer->ruta_export, '/\\'),
+            !$lloguer->es_habitatge && (bool) $lloguer->ruta_descarrega
+                                            => rtrim($lloguer->ruta_descarrega, '/\\'),
+            default                         => env('IMPORT_SCAN_PATH', getenv('HOME') . '/Downloads'),
+        };
+
+        return [$rutaDir, $filename];
     }
 
     public function exportar(Lloguer $lloguer, Request $request): StreamedResponse

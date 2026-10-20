@@ -37,6 +37,7 @@ Gestió d'immobles en règim de lloguer: propietats, contractes, llogaters i seg
 - **[Importació Automàtica via Agent](docs/agent-importacio-automatica.md)** - Importar i classificar moviments des de la línia de comandes amb Claude Code
 
 ### Lloguers
+- **[Obrir exportacions amb Numbers](docs/obrir-exportacions-numbers.md)** - Configuració de l’auxiliar local de macOS
 - **[Gestió de Lloguers](docs/gestio-lloguers.md)** - Lloguers, contractes, llogaters i moviments associats
 - **[Gestió d'Immobles](docs/gestio-immobles.md)** - Immobles disponibles per assignar a lloguers
 - **[Gestió de Proveïdors](docs/gestio-proveidors.md)** - Proveïdors de serveis associats als immobles

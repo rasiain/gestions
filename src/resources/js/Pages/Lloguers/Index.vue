@@ -213,11 +213,14 @@ const submitLloguer = () => {
     }
 };
 
-const llibreIvaMsg = ref<{ text: string; ok: boolean } | null>(null);
+const llibreIvaMsg = ref<{ text: string; ok: boolean; obrir?: string; numbers?: string } | null>(null);
+let llibreIvaMsgTimer: ReturnType<typeof setTimeout> | undefined;
 
-function mostrarLlibreIvaMsg(text: string, ok: boolean) {
-    llibreIvaMsg.value = { text, ok };
-    setTimeout(() => { llibreIvaMsg.value = null; }, 4000);
+// Amb `obrir`, el missatge porta l'enllaç per examinar el fitxer i dura més, que s'hi ha de clicar
+function mostrarLlibreIvaMsg(text: string, ok: boolean, obrir?: string, numbers?: string) {
+    clearTimeout(llibreIvaMsgTimer);
+    llibreIvaMsg.value = { text, ok, obrir, numbers };
+    llibreIvaMsgTimer = setTimeout(() => { llibreIvaMsg.value = null; }, obrir ? 15000 : 4000);
 }
 
 async function desarFitxer(postUrl: string, force = false): Promise<any> {
@@ -258,7 +261,9 @@ async function exportarResum(lloguerEl: Lloguer, any: number | null) {
 
     mostrarLlibreIvaMsg(
         result?.saved ? `Fitxer desat: ${result.filename}` : 'Error en desar el fitxer.',
-        result?.saved ?? false
+        result?.saved ?? false,
+        result?.saved ? `/lloguers/${lloguerEl.id}/veure-export${anyParam}` : undefined,
+        result?.saved ? result.numbers_url : undefined,
     );
 }
 
@@ -2616,6 +2621,12 @@ const formatCurrency = (value: string | null): string => {
             :class="llibreIvaMsg.ok ? 'bg-green-600 text-white' : 'bg-red-600 text-white'"
         >
             {{ llibreIvaMsg.text }}
+            <a v-if="llibreIvaMsg.obrir" :href="llibreIvaMsg.obrir" target="_blank" rel="noopener"
+                class="rounded bg-white/20 px-2 py-0.5 underline-offset-2 hover:bg-white/30 hover:underline">Veure a la web</a>
+            <a v-if="llibreIvaMsg.numbers" :href="llibreIvaMsg.numbers"
+                class="rounded bg-white/20 px-2 py-0.5 underline-offset-2 hover:bg-white/30 hover:underline">Obrir amb Numbers</a>
+            <button v-if="llibreIvaMsg.obrir" type="button" @click="llibreIvaMsg = null" aria-label="Tanca"
+                class="ml-1 opacity-80 hover:opacity-100">✕</button>
         </div>
 
         <!-- Edició Moviment Modal -->
