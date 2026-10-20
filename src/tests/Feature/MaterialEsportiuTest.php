@@ -1,0 +1,95 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\MaterialEsportiu;
+use App\Models\Vehicle;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+/**
+ * El material esportiu ve de l'exportació de Garmin tal com és: es reconeix pel seu
+ * identificador a l'origen, i les bicis s'enllacen amb la del catàleg pel nom.
+ */
+class MaterialEsportiuTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private function gear(array $peces): string
+    {
+        $fitxer = tempnam(sys_get_temp_dir(), 'gear') . '_gear.json';
+        file_put_contents($fitxer, json_encode([['gearDTOS' => $peces, 'gearActivityDTOs' => []]]));
+
+        return $fitxer;
+    }
+
+    private const GIANT = [
+        'gearPk' => 20040750, 'uuid' => '14dd', 'gearTypeName' => 'Bike', 'gearStatusName' => 'active',
+        'displayName' => 'Giant Anthem 2', 'customMakeModel' => 'Giant Anthem 29 2 NX Eagle 2019',
+        'dateBegin' => '2019-10-25',
+    ];
+
+    public function test_importa_el_material_i_enllaca_la_bici_pel_nom(): void
+    {
+        $giant = Vehicle::create(['nom' => 'Giant Anthem 2', 'tipus' => 'bici']);
+
+        $this->artisan('material:importa', ['fitxer' => $this->gear([
+            self::GIANT,
+            ['gearPk' => 1, 'gearTypeName' => 'Other', 'gearStatusName' => 'retired', 'customMakeModel' => 'Coberta davant -&gt; darrera', 'dateBegin' => '2022-02-19', 'dateEnd' => '2025-07-31'],
+        ])])->assertSuccessful();
+
+        $bici = MaterialEsportiu::where('id_extern', '20040750')->first();
+        $this->assertSame('garmin', $bici->origen);
+        $this->assertSame('bici', $bici->tipus);
+        $this->assertSame('Giant Anthem 2', $bici->nom);
+        $this->assertSame('Giant Anthem 29 2 NX Eagle 2019', $bici->model);
+        $this->assertSame($giant->id, $bici->vehicle_id);
+        $this->assertSame('14dd', $bici->dades_originals['uuid']);
+
+        // Sense «displayName» el nom és el model, i les entitats HTML de Garmin es desfan
+        $coberta = MaterialEsportiu::where('id_extern', '1')->first();
+        $this->assertSame('Coberta davant -> darrera', $coberta->nom);
+        $this->assertSame('retirat', $coberta->estat);
+        $this->assertSame('altres', $coberta->tipus);
+        $this->assertNull($coberta->vehicle_id);
+    }
+
+    public function test_tornar_a_importar_actualitza_i_no_trepitja_ni_el_tipus_ni_l_enllac_corregits(): void
+    {
+        $giant = Vehicle::create(['nom' => 'Giant Anthem 2', 'tipus' => 'bici']);
+        $altra = Vehicle::create(['nom' => 'La de la muntanya', 'tipus' => 'bici']);
+        $fitxer = $this->gear([self::GIANT]);
+
+        $this->artisan('material:importa', ['fitxer' => $fitxer])->assertSuccessful();
+        MaterialEsportiu::first()->update(['vehicle_id' => $altra->id, 'tipus' => 'altres']);
+
+        $this->artisan('material:importa', ['fitxer' => $this->gear([['gearStatusName' => 'retired', 'dateEnd' => '2026-01-01'] + self::GIANT])])
+            ->assertSuccessful();
+
+        $this->assertSame(1, MaterialEsportiu::count());
+        $peca = MaterialEsportiu::first();
+        $this->assertSame('retirat', $peca->estat);
+        $this->assertSame($altra->id, $peca->vehicle_id);
+        $this->assertSame('altres', $peca->tipus);
+        $this->assertNotSame($giant->id, $peca->vehicle_id);
+    }
+
+    public function test_amb_prova_no_desa_res(): void
+    {
+        $this->artisan('material:importa', ['fitxer' => $this->gear([self::GIANT]), '--prova' => true])->assertSuccessful();
+
+        $this->assertSame(0, MaterialEsportiu::count());
+    }
+
+    public function test_el_motiu_de_baixa_demana_data_de_baixa(): void
+    {
+        $this->actingAs(\App\Models\User::factory()->create())
+            ->post(route('vehicles.store'), ['nom' => 'Bici', 'tipus' => 'bici', 'motiu_baixa' => 'venut'])
+            ->assertSessionHasErrors('motiu_baixa');
+
+        $this->post(route('vehicles.store'), ['nom' => 'Bici', 'tipus' => 'bici', 'modalitat' => 'btt', 'data_baixa' => '2026-01-01', 'motiu_baixa' => 'venut'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('venut', Vehicle::where('nom', 'Bici')->first()->motiu_baixa);
+    }
+}

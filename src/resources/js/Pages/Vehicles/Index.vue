@@ -64,6 +64,9 @@ interface Vehicle {
     nom: string;
     tipus: string;
     combustible: string | null;
+    /** Només a les bicis: btt, carretera, gravel, urbana o rodets. */
+    modalitat: string | null;
+    motiu_baixa: string | null;
     repostatges: Repostatge[];
     despeses: Despesa[];
     per_any: Any[];
@@ -87,6 +90,8 @@ interface Vehicle {
 interface Props {
     vehicles: Vehicle[];
     combustibles: string[];
+    modalitats: Record<string, string>;
+    motiusBaixa: Record<string, string>;
     tipusDespesa: Record<string, string>;
     /** Tipus que admet aquesta llista: cotxe i moto, o bici. */
     tipus: string[];
@@ -468,12 +473,14 @@ const form = useForm({
     nom: '',
     tipus: props.tipus[0],
     combustible: '' as string | null,
+    modalitat: '' as string | null,
     marca: '',
     model: '',
     matricula: '',
     any_fabricacio: null as number | null,
     data_alta: '' as string | null,
     data_baixa: '' as string | null,
+    motiu_baixa: '' as string | null,
     notes: '',
     ordre: 0,
 });
@@ -492,12 +499,14 @@ function obreEdicio(vehicle: Vehicle) {
     form.nom = vehicle.nom;
     form.tipus = vehicle.tipus;
     form.combustible = vehicle.combustible ?? '';
+    form.modalitat = vehicle.modalitat ?? '';
     form.marca = vehicle.marca ?? '';
     form.model = vehicle.model ?? '';
     form.matricula = vehicle.matricula ?? '';
     form.any_fabricacio = vehicle.any_fabricacio;
     form.data_alta = vehicle.data_alta ?? '';
     form.data_baixa = vehicle.data_baixa ?? '';
+    form.motiu_baixa = vehicle.motiu_baixa ?? '';
     form.notes = vehicle.notes ?? '';
     form.ordre = vehicle.ordre;
     showModal.value = true;
@@ -505,13 +514,16 @@ function obreEdicio(vehicle: Vehicle) {
 
 function desa() {
     const opcions = { onSuccess: () => (showModal.value = false) };
+    // El motiu només es veu amb data de baixa: si se n'ha esborrat la data, no s'ha d'enviar
+    const dades = (d: Record<string, any>) =>
+        ({ ...d, motiu_baixa: d.data_baixa ? d.motiu_baixa : null });
 
     if (editant.value) {
-        form.put(route('vehicles.update', editant.value.id), opcions);
+        form.transform(dades).put(route('vehicles.update', editant.value.id), opcions);
         return;
     }
 
-    form.post(route('vehicles.store'), opcions);
+    form.transform(dades).post(route('vehicles.store'), opcions);
 }
 
 function elimina(vehicle: Vehicle) {
@@ -572,8 +584,11 @@ function elimina(vehicle: Vehicle) {
                                                 <span v-if="v.any_fabricacio">· {{ v.any_fabricacio }}</span>
                                             </span>
                                             <span v-if="v.combustible" class="ml-2 text-xs text-gray-400 dark:text-gray-500">{{ v.combustible }}</span>
+                                            <span v-if="v.modalitat" class="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                                {{ props.modalitats[v.modalitat] ?? v.modalitat }}
+                                            </span>
                                             <span v-if="!v.actiu" class="ml-2 rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-400">
-                                                de baixa {{ v.data_baixa }}
+                                                de baixa {{ v.data_baixa }}<template v-if="v.motiu_baixa"> · {{ (props.motiusBaixa[v.motiu_baixa] ?? v.motiu_baixa).toLowerCase() }}</template>
                                             </span>
                                         </td>
                                         <td v-if="props.tipus.length > 1" class="px-4 py-3">
@@ -968,6 +983,15 @@ function elimina(vehicle: Vehicle) {
                             <input v-model="form.model" type="text"
                                 class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
                         </div>
+                        <div v-if="!props.esMotor">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Modalitat</label>
+                            <select v-model="form.modalitat"
+                                class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                                <option value="">— cap —</option>
+                                <option v-for="(nom, clau) in props.modalitats" :key="clau" :value="clau">{{ nom }}</option>
+                            </select>
+                            <p v-if="form.errors.modalitat" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.modalitat }}</p>
+                        </div>
                         <div v-if="props.esMotor">
                             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Combustible</label>
                             <select v-model="form.combustible"
@@ -999,6 +1023,15 @@ function elimina(vehicle: Vehicle) {
                                 class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
                             <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">Deixa-ho buit mentre sigui teu.</p>
                             <p v-if="form.errors.data_baixa" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.data_baixa }}</p>
+                        </div>
+                        <div v-if="form.data_baixa">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Motiu de la baixa</label>
+                            <select v-model="form.motiu_baixa"
+                                class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                                <option value="">— sense dir —</option>
+                                <option v-for="(nom, clau) in props.motiusBaixa" :key="clau" :value="clau">{{ nom }}</option>
+                            </select>
+                            <p v-if="form.errors.motiu_baixa" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ form.errors.motiu_baixa }}</p>
                         </div>
                     </div>
 
