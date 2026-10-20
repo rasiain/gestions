@@ -43,6 +43,16 @@ return [
             'transaction_mode' => 'DEFERRED',
         ],
 
+        // Els punts dels recorreguts de les sortides: milions de files que no es creuen mai
+        // amb la resta, en un fitxer a part perquè la BD principal no passi de 9 a 130 MB.
+        // Es pot reconstruir sencer des dels FIT de storage/app/sortides.
+        'recorreguts' => [
+            'driver' => 'sqlite',
+            'database' => env('DB_RECORREGUTS_DATABASE', database_path('recorreguts.sqlite')),
+            'prefix' => '',
+            'foreign_key_constraints' => false,
+        ],
+
         'mysql' => [
             'driver' => 'mysql',
             'url' => env('DB_URL'),

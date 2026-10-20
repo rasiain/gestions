@@ -33,6 +33,7 @@ use App\Http\Controllers\ProveidorController;
 use App\Http\Controllers\RendaFixaController;
 use App\Http\Controllers\TotalsMobiliarisController;
 use App\Http\Controllers\VehicleController;
+use App\Http\Controllers\SortidaBiciController;
 use App\Http\Controllers\GoogleController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -147,6 +148,8 @@ Route::middleware('auth')->group(function () {
     // Vehicles: dues llistes (els de motor, les bicis) sobre el mateix catàleg
     Route::get('/vehicles-motor', [VehicleController::class, 'vehiclesMotor'])->name('vehicles-motor.index');
     Route::get('/bicis', [VehicleController::class, 'bicis'])->name('bicis.index');
+    Route::get('/bicis/{vehicle}/fitxa', [SortidaBiciController::class, 'fitxa'])->name('bicis.fitxa');
+    Route::get('/bicis/{vehicle}/sortides', [SortidaBiciController::class, 'index'])->name('bicis.sortides');
     Route::post('/vehicles', [VehicleController::class, 'store'])->name('vehicles.store');
     Route::put('/vehicles/{vehicle}', [VehicleController::class, 'update'])->name('vehicles.update');
     Route::delete('/vehicles/{vehicle}', [VehicleController::class, 'destroy'])->name('vehicles.destroy');

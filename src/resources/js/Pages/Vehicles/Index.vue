@@ -8,6 +8,7 @@ import { Line } from 'vue-chartjs';
 import { Chart as ChartJS, registerables } from 'chart.js';
 import type { ChartData, ChartOptions } from 'chart.js';
 import 'chartjs-adapter-date-fns';
+import FitxaBici from '@/Components/Bicis/FitxaBici.vue';
 
 ChartJS.register(...registerables);
 
@@ -85,6 +86,8 @@ interface Vehicle {
     ordre: number;
     /** Fals quan té data de baixa: continua al catàleg però ja no és nostre. */
     actiu: boolean;
+    /** Només a les bicis amb sortides: el detall és a la fitxa. */
+    sortides: { nombre: number; km: number; darrera: string } | null;
 }
 
 interface Props {
@@ -126,6 +129,8 @@ const donatsDeBaixa = computed(() => props.vehicles.filter((v) => !v.actiu).leng
 
 // ---- Panell del vehicle ----
 const repostatgesOberts = ref<number | null>(null);
+/** La bici amb la fitxa oberta. */
+const fitxaOberta = ref<number | null>(null);
 const pestanya = ref<'anys' | 'repostatges' | 'despeses' | 'grafiques'>('anys');
 
 const despesaForm = useForm({
@@ -571,6 +576,9 @@ function elimina(vehicle: Vehicle) {
                                         <th v-if="props.tipus.length > 1" class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Tipus</th>
                                         <th v-if="props.esMotor" class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Matrícula</th>
                                         <th class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Des de</th>
+                                        <th v-if="!props.esMotor" class="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Sortides</th>
+                                        <th v-if="!props.esMotor" class="px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Km</th>
+                                        <th v-if="!props.esMotor" class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Darrera</th>
                                         <th class="w-28 px-4 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300">Accions</th>
                                     </tr>
                                 </thead>
@@ -598,12 +606,25 @@ function elimina(vehicle: Vehicle) {
                                         </td>
                                         <td v-if="props.esMotor" class="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400">{{ v.matricula ?? '—' }}</td>
                                         <td class="px-4 py-3 text-gray-600 dark:text-gray-400">{{ v.data_alta ?? '—' }}</td>
+                                        <td v-if="!props.esMotor" class="px-4 py-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ v.sortides?.nombre.toLocaleString('ca-ES') ?? '—' }}</td>
+                                        <td v-if="!props.esMotor" class="px-4 py-3 text-right tabular-nums text-gray-900 dark:text-gray-100">{{ v.sortides?.km.toLocaleString('ca-ES') ?? '—' }}</td>
+                                        <td v-if="!props.esMotor" class="whitespace-nowrap px-4 py-3 tabular-nums text-gray-600 dark:text-gray-400">{{ v.sortides?.darrera ?? '—' }}</td>
                                         <td class="whitespace-nowrap px-4 py-3 text-right">
+                                            <button v-if="v.tipus === 'bici'" @click="fitxaOberta = fitxaOberta === v.id ? null : v.id" class="mr-3 text-sm text-sky-600 hover:text-sky-800 dark:text-sky-400">
+                                                {{ fitxaOberta === v.id ? 'Tanca' : 'Fitxa' }}
+                                            </button>
                                             <button v-if="v.combustible" @click="obreRepostatges(v)" class="mr-3 text-sm text-sky-600 hover:text-sky-800 dark:text-sky-400">
                                                 {{ repostatgesOberts === v.id ? 'Tanca' : 'Repostatges' }}
                                             </button>
                                             <button @click="obreEdicio(v)" class="text-sm text-sky-600 hover:text-sky-800 dark:text-sky-400">Edita</button>
                                             <button @click="elimina(v)" class="ml-3 text-sm text-red-600 hover:text-red-800 dark:text-red-400">Elimina</button>
+                                        </td>
+                                    </tr>
+
+                                    <!-- Fitxa de la bici: el que diuen les sortides -->
+                                    <tr v-if="fitxaOberta === v.id" class="bg-gray-50 dark:bg-gray-700/30">
+                                        <td :colspan="(props.tipus.length > 1 ? 1 : 0) + (props.esMotor ? 4 : 6)" class="px-4 py-3">
+                                            <FitxaBici :vehicle-id="v.id" />
                                         </td>
                                     </tr>
 

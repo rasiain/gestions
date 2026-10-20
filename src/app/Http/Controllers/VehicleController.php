@@ -39,6 +39,13 @@ class VehicleController extends Controller
      */
     private function llista(array $tipus, string $titol, string $descripcio)
     {
+        // A les bicis, el resum de les sortides: el detall va a la fitxa, per JSON
+        $sortides = \App\Models\SortidaBici::query()
+            ->selectRaw('vehicle_id, count(*) as sortides, sum(distancia_m) / 1000.0 as km, max(data_local) as darrera')
+            ->groupBy('vehicle_id')
+            ->get()
+            ->keyBy('vehicle_id');
+
         $vehicles = Vehicle::whereIn('tipus', $tipus)
             ->with([
                 'repostatges' => fn ($q) => $q->orderBy('data')->orderBy('id'),
@@ -76,6 +83,11 @@ class VehicleController extends Controller
                     'moviment_id' => $d->moviment_id,
                 ])->values(),
                 'resum'          => $this->resum($vehicle),
+                'sortides'       => isset($sortides[$vehicle->id]) ? [
+                    'nombre'  => (int) $sortides[$vehicle->id]->sortides,
+                    'km'      => (int) round((float) $sortides[$vehicle->id]->km),
+                    'darrera' => substr((string) $sortides[$vehicle->id]->darrera, 0, 10),
+                ] : null,
                 'per_any'        => $this->perAny($vehicle),
             ]);
 
