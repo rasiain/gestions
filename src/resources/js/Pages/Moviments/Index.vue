@@ -195,6 +195,15 @@ const form = useForm({
     categoria_id: null as number | null,
 });
 
+// Els filtres ocupen mitja pantalla i la majoria de vegades no es toquen: van
+// plegats, i només s'obren sols quan s'arriba amb algun de posat, que aleshores és
+// el que s'està mirant.
+const filtresOberts = ref(
+    !!(props.filters.search || props.filters.import_exacte || props.filters.categoria_id
+        || props.filters.data_inici || props.filters.data_fi || props.filters.tipus
+        || props.filters.conciliat)
+);
+
 const filterForm = useForm({
     compte_corrent_id: props.selectedCompteCorrentId,
     search: props.filters.search || '',
@@ -275,6 +284,22 @@ const setDateRange = (range: 'week' | 'month' | 'year') => {
     filterForm.data_inici = formatLocalDate(inici);
     filterForm.data_fi = formatLocalDate(fi);
 };
+
+const resumFiltres = computed(() => {
+    const f = filterForm;
+    const parts: string[] = [];
+
+    if (f.search) parts.push(`«${f.search}»`);
+    if (f.import_exacte) parts.push(`${f.import_exacte} €`);
+    // Les categories venen planes, amb categoria_pare_id: n'hi ha prou amb el nom.
+    if (f.categoria_id) parts.push(localCategories.value.find(c => c.id === f.categoria_id)?.nom ?? 'Categoria');
+    if (f.tipus) parts.push(f.tipus === 'ingressos' ? 'Ingressos' : 'Despeses');
+    if (f.conciliat) parts.push(f.conciliat === 'conciliats' ? 'Revisats' : 'Pendents');
+    if (f.data_inici) parts.push(`des del ${f.data_inici}`);
+    if (f.data_fi) parts.push(`fins al ${f.data_fi}`);
+
+    return parts;
+});
 
 // Netejar filtres torna a la URL neta del compte. Buidar els camps un a un
 // deixava rastre: el cercador i els nodes desplegats de l'arbre de categories
@@ -643,10 +668,44 @@ const conciliarPagina = async (conciliat: boolean) => {
                 <!-- Filters -->
                 <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg dark:bg-gray-800">
                     <div class="p-6">
-                        <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
-                            Filtres
-                        </h3>
-                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <button
+                                type="button"
+                                @click="filtresOberts = !filtresOberts"
+                                class="flex min-w-0 items-center gap-2 text-left"
+                            >
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    class="h-4 w-4 shrink-0 text-gray-400 transition-transform"
+                                    :class="filtresOberts ? 'rotate-90' : ''"
+                                    fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                                >
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                                </svg>
+                                <span class="text-lg font-medium text-gray-900 dark:text-gray-100">Filtres</span>
+                                <span
+                                    v-if="!filtresOberts"
+                                    class="truncate text-sm"
+                                    :class="resumFiltres.length ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400 dark:text-gray-500'"
+                                >
+                                    {{ resumFiltres.length ? resumFiltres.join(' · ') : 'cap' }}
+                                </span>
+                            </button>
+
+                            <button
+                                v-if="resumFiltres.length"
+                                @click="clearFilters"
+                                type="button"
+                                class="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-transparent bg-amber-700 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-600 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                Netejar
+                            </button>
+                        </div>
+
+                        <div v-show="filtresOberts" class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
                             <!-- Search -->
                             <div>
                                 <label for="search" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -784,19 +843,6 @@ const conciliarPagina = async (conciliat: boolean) => {
                                     <option value="asc">Més antic primer</option>
                                 </select>
                             </div>
-                        </div>
-
-                        <div class="mt-4 flex gap-3">
-                            <button
-                                @click="clearFilters"
-                                type="button"
-                                class="inline-flex items-center gap-1.5 justify-center rounded-md border border-transparent bg-amber-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-600 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                                Netejar filtres
-                            </button>
                         </div>
                     </div>
                 </div>
