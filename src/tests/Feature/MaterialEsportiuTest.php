@@ -92,4 +92,68 @@ class MaterialEsportiuTest extends TestCase
 
         $this->assertSame('venut', Vehicle::where('nom', 'Bici')->first()->motiu_baixa);
     }
+
+    public function test_s_hi_poden_afegir_peces_propies_i_esborrar_les_que_no_tenen_sortides(): void
+    {
+        $giant = Vehicle::create(['nom' => 'Giant Anthem 2', 'tipus' => 'bici']);
+        $this->actingAs(\App\Models\User::factory()->create())
+            ->post(route('bicis.material.store'), [
+                'nom' => 'Cadena KMC X12', 'tipus' => 'component', 'estat' => 'actiu',
+                'data_inici' => '2026-10-01', 'muntat_a_vehicle_id' => $giant->id,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $peca = MaterialEsportiu::where('nom', 'Cadena KMC X12')->first();
+        $this->assertSame('manual', $peca->origen);
+        $this->assertNotEmpty($peca->id_extern);
+        $this->assertSame($giant->id, $peca->muntat_a_vehicle_id);
+
+        $this->delete(route('bicis.material.destroy', $peca))->assertSessionHasNoErrors();
+        $this->assertNull($peca->fresh());
+    }
+
+    public function test_les_peces_de_garmin_no_s_esborren_i_corregides_la_importacio_no_les_toca(): void
+    {
+        $this->artisan('material:importa', ['fitxer' => $this->gear([
+            ['gearPk' => 1, 'gearTypeName' => 'Other', 'gearStatusName' => 'active', 'customMakeModel' => 'Cadena20250510', 'dateBegin' => '2025-05-08'],
+        ])])->assertSuccessful();
+        $peca = MaterialEsportiu::first();
+
+        $this->actingAs(\App\Models\User::factory()->create())
+            ->delete(route('bicis.material.destroy', $peca))
+            ->assertSessionHasErrors('esborrar');
+        $this->assertNotNull($peca->fresh());
+
+        $this->put(route('bicis.material.update', $peca), [
+            'nom' => 'Cadena SRAM NX', 'model' => 'NX Eagle', 'tipus' => 'component', 'estat' => 'retirat',
+            'data_inici' => '2025-05-10', 'data_fi' => '2025-07-31',
+        ])->assertSessionHasNoErrors();
+        $this->assertTrue($peca->fresh()->editat);
+
+        // Garmin la torna a dur amb el nom i les dates d'abans: no les recupera
+        $this->artisan('material:importa', ['fitxer' => $this->gear([
+            ['gearPk' => 1, 'gearTypeName' => 'Other', 'gearStatusName' => 'active', 'customMakeModel' => 'Cadena20250510', 'dateBegin' => '2025-05-08', 'nou' => 'x'],
+        ])])->assertSuccessful();
+
+        $peca->refresh();
+        $this->assertSame('Cadena SRAM NX', $peca->nom);
+        $this->assertSame('retirat', $peca->estat);
+        $this->assertSame('2025-05-10', $peca->data_inici->toDateString());
+        $this->assertSame('2025-07-31', $peca->data_fi->toDateString());
+        // El registre original sí que s'actualitza
+        $this->assertSame('x', $peca->dades_originals['nou']);
+    }
+
+    public function test_la_pantalla_de_material_no_inclou_les_bicis(): void
+    {
+        $this->artisan('material:importa', ['fitxer' => $this->gear([
+            self::GIANT,
+            ['gearPk' => 1, 'gearTypeName' => 'Shoes', 'gearStatusName' => 'active', 'customMakeModel' => 'Spiuk 2024'],
+        ])])->assertSuccessful();
+
+        $this->actingAs(\App\Models\User::factory()->create())
+            ->get(route('bicis.material.index'))
+            ->assertOk()
+            ->assertInertia(fn ($pagina) => $pagina->component('Bicis/Material')->has('peces', 1)->where('peces.0.nom', 'Spiuk 2024'));
+    }
 }

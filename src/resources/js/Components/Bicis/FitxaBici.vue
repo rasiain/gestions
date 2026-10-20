@@ -4,6 +4,7 @@
  * —són milers de sortides i no viatgen amb la pàgina— i les sortides, any per any.
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { Link } from '@inertiajs/vue3';
 import { Bar } from 'vue-chartjs';
 import { Chart as ChartJS, registerables } from 'chart.js';
 import type { ChartData, ChartOptions } from 'chart.js';
@@ -33,6 +34,8 @@ interface Component {
     id: number;
     nom: string;
     estat: string;
+    /** Muntat ara a aquesta bici («muntat a» de la peça). */
+    muntat: boolean;
     data_inici: string | null;
     data_fi: string | null;
     sortides: number;
@@ -326,7 +329,7 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                                     {{ s.data }} <span class="text-xs text-gray-400 dark:text-gray-500">{{ s.hora }}</span>
                                 </td>
                                 <td class="py-1 pr-3 text-gray-900 dark:text-gray-100">
-                                    {{ s.nom ?? '—' }}
+                                    <Link :href="route('bicis.sortida', s.id)" class="text-sky-700 hover:text-sky-900 hover:underline dark:text-sky-400">{{ s.nom ?? 'Sortida' }}</Link>
                                     <span class="ml-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-300">{{ etiquetaTipus(s.tipus) }}</span>
                                     <span v-if="!s.amb_recorregut" class="ml-1 text-xs text-gray-400 dark:text-gray-500" title="Garmin no en va donar el fitxer original: hi ha el resum però no els punts">sense recorregut</span>
                                 </td>
@@ -369,6 +372,7 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                                 <td class="py-1 pr-3 text-gray-900 dark:text-gray-100">
                                     {{ c.nom }}
                                     <span v-if="c.estat === 'retirat'" class="ml-1 rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-400">retirat</span>
+                                    <span v-else-if="c.muntat" class="ml-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">muntat</span>
                                 </td>
                                 <td class="whitespace-nowrap py-1 pr-3 tabular-nums text-gray-600 dark:text-gray-400">{{ c.data_inici ?? '—' }}</td>
                                 <td class="whitespace-nowrap py-1 pr-3 tabular-nums text-gray-600 dark:text-gray-400">{{ c.data_fi ?? '—' }}</td>
@@ -384,7 +388,8 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                         </tbody>
                     </table>
                     <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                        Els km són els de les sortides on el component es va marcar a Garmin. <strong>Sense marcar</strong> són
+                        Els components es corregeixen i se n'afegeixen de nous a <Link :href="route('bicis.material.index')" class="text-sky-600 hover:underline dark:text-sky-400">Material</Link>.
+                        Els km són els de les sortides on el component es va marcar. <strong>Sense marcar</strong> són
                         les sortides de la bici (sense comptar els rodets) entre les dates del component on no s'hi va
                         marcar: si n'hi ha, els km reals poden ser més.
                     </p>

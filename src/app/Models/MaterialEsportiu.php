@@ -27,6 +27,8 @@ class MaterialEsportiu extends Model
         'data_inici',
         'data_fi',
         'vehicle_id',
+        'editat',
+        'muntat_a_vehicle_id',
         'dades_originals',
     ];
 
@@ -36,11 +38,23 @@ class MaterialEsportiu extends Model
             'data_inici'      => 'date',
             'data_fi'         => 'date',
             'dades_originals' => 'array',
+            'editat'          => 'boolean',
         ];
     }
 
     public function vehicle(): BelongsTo
     {
         return $this->belongsTo(Vehicle::class);
+    }
+
+    /** La bici on va muntat (només els components). */
+    public function muntatA(): BelongsTo
+    {
+        return $this->belongsTo(Vehicle::class, 'muntat_a_vehicle_id');
+    }
+
+    public function sortides(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(SortidaBici::class, 'g_sortida_material', 'material_id', 'sortida_id');
     }
 }

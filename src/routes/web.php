@@ -34,6 +34,7 @@ use App\Http\Controllers\RendaFixaController;
 use App\Http\Controllers\TotalsMobiliarisController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\SortidaBiciController;
+use App\Http\Controllers\MaterialEsportiuController;
 use App\Http\Controllers\GoogleController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -148,8 +149,15 @@ Route::middleware('auth')->group(function () {
     // Vehicles: dues llistes (els de motor, les bicis) sobre el mateix catàleg
     Route::get('/vehicles-motor', [VehicleController::class, 'vehiclesMotor'])->name('vehicles-motor.index');
     Route::get('/bicis', [VehicleController::class, 'bicis'])->name('bicis.index');
+    Route::get('/bicis/material', [MaterialEsportiuController::class, 'index'])->name('bicis.material.index');
+    Route::post('/bicis/material', [MaterialEsportiuController::class, 'store'])->name('bicis.material.store');
+    Route::put('/bicis/material/{material}', [MaterialEsportiuController::class, 'update'])->name('bicis.material.update');
+    Route::delete('/bicis/material/{material}', [MaterialEsportiuController::class, 'destroy'])->name('bicis.material.destroy');
     Route::get('/bicis/{vehicle}/fitxa', [SortidaBiciController::class, 'fitxa'])->name('bicis.fitxa');
     Route::get('/bicis/{vehicle}/sortides', [SortidaBiciController::class, 'index'])->name('bicis.sortides');
+    Route::get('/bicis/sortides/{sortida}', [SortidaBiciController::class, 'show'])->name('bicis.sortida');
+    Route::get('/bicis/sortides/{sortida}/punts', [SortidaBiciController::class, 'punts'])->name('bicis.sortida.punts');
+    Route::put('/bicis/sortides/{sortida}/material', [SortidaBiciController::class, 'material'])->name('bicis.sortida.material');
     Route::post('/vehicles', [VehicleController::class, 'store'])->name('vehicles.store');
     Route::put('/vehicles/{vehicle}', [VehicleController::class, 'update'])->name('vehicles.update');
     Route::delete('/vehicles/{vehicle}', [VehicleController::class, 'destroy'])->name('vehicles.destroy');

@@ -113,7 +113,8 @@ class SortidesGarminService
     /**
      * Desa una sortida —o l'actualitza, si ja hi és— amb el seu material i, si hi ha FIT, els
      * punts. Els punts d'una sortida que ja en té no es tornen a escriure: són els originals,
-     * i en un futur hi pot haver ajustos al costat.
+     * i en un futur hi pot haver ajustos al costat. El material d'una sortida corregida a mà
+     * (`material_editat`) tampoc: ni la bici ni els components.
      *
      * @param  array{activitat: array, material: array<int, int>, vehicle_id: int}  $sortida
      * @param  array|null  $fit  una línia de scripts/llegeix-fit.mjs
@@ -133,11 +134,17 @@ class SortidesGarminService
         }
 
         return DB::transaction(function () use ($a, $dades, $sortida, $fit, $rutaFit) {
-            $model = SortidaBici::updateOrCreate(
-                ['origen' => self::ORIGEN, 'id_extern' => (string) $a['activityId']],
-                $dades,
-            );
-            $model->material()->sync($sortida['material']);
+            $model = SortidaBici::firstOrNew(['origen' => self::ORIGEN, 'id_extern' => (string) $a['activityId']]);
+
+            if ($model->material_editat) {
+                unset($dades['vehicle_id']);
+            }
+
+            $model->fill($dades)->save();
+
+            if (! $model->material_editat) {
+                $model->material()->sync($sortida['material']);
+            }
 
             if ($rutaFit !== null && $model->fitxer === null) {
                 $model->fitxer = $this->copiaFit($rutaFit, $model);

@@ -15,6 +15,7 @@ use ZipArchive;
  * s'actualitza en lloc de duplicar-se. Les bicis s'enllacen amb la del catàleg que es diu
  * igual. El tipus i l'enllaç d'una peça que ja hi és no es toquen: són classificació
  * nostra —Garmin posa quasi tots els components com a «Other»— i s'hi han pogut corregir.
+ * D'una peça editada a mà (`editat`) tampoc el nom, el model, l'estat ni les dates.
  */
 class ImportaMaterialEsportiu extends Command
 {
@@ -49,6 +50,13 @@ class ImportaMaterialEsportiu extends Command
 
             if ($existent) {
                 $peca['tipus'] = $existent->tipus;
+            }
+
+            // Una peça corregida a mà només rep el registre original: la resta és nostra
+            if ($existent?->editat) {
+                $peca = array_merge($peca, $existent->only(['nom', 'model', 'estat', 'data_inici', 'data_fi']));
+                $peca['data_inici'] = $existent->data_inici?->toDateString();
+                $peca['data_fi'] = $existent->data_fi?->toDateString();
             }
 
             if ($existent?->vehicle_id) {

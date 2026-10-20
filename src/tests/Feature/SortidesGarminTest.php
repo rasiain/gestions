@@ -209,4 +209,74 @@ class SortidesGarminTest extends TestCase
         $this->assertSame('09:00', $llista[1]['hora']);
         $this->assertEquals(18.1, $llista[0]['kmh']);
     }
+
+    public function test_la_pagina_de_la_sortida_porta_els_dos_resums_i_els_punts_en_unitats_de_lectura(): void
+    {
+        $servei = app(SortidesGarminService::class);
+        $sortides = $servei->sortidesDeBici([$this->activitat(1)], $this->gear([[100, 1], [200, 1]]));
+        $model = $servei->desa($sortides[1], $this->fit());
+
+        $this->actingAs(\App\Models\User::factory()->create())
+            ->get(route('bicis.sortida', $model))
+            ->assertOk()
+            ->assertInertia(fn ($pagina) => $pagina
+                ->component('Bicis/Sortida')
+                ->where('sortida.punts', 3)
+                ->where('resums.garmin.pujada', 980)
+                ->where('resums.dispositiu.pujada', 950)
+                ->has('sortida.material', 2)
+                ->where('anterior', null));
+
+        $punts = $this->getJson(route('bicis.sortida.punts', $model))->assertOk()->json();
+
+        $this->assertSame([0, 1, 3], $punts['t']);
+        // Semicercles → graus, cm → m i km, mm/s → km/h
+        $this->assertEqualsWithDelta(41.982576, $punts['lat'][0], 0.00001);
+        $this->assertEquals(118.2, $punts['alt'][0]);
+        $this->assertEquals(0.006, $punts['km'][1]);
+        $this->assertEquals(20.9, $punts['kmh'][0]);
+        $this->assertNull($punts['lat'][2]);
+    }
+
+    public function test_corregir_el_material_canvia_la_bici_i_les_peces_i_la_importacio_ja_no_el_toca(): void
+    {
+        $servei = app(SortidesGarminService::class);
+        $sortida = $servei->sortidesDeBici([$this->activitat(1)], $this->gear([[100, 1], [200, 1]]))[1];
+        $model = $servei->desa($sortida, null);
+
+        $altra = Vehicle::create(['nom' => 'BH 1992', 'tipus' => 'bici']);
+        $biciAltra = MaterialEsportiu::create(['origen' => 'garmin', 'id_extern' => '400', 'tipus' => 'bici', 'nom' => 'BH', 'estat' => 'actiu', 'vehicle_id' => $altra->id]);
+        $sabates = MaterialEsportiu::where('tipus', 'sabates')->first();
+
+        $this->actingAs(\App\Models\User::factory()->create())
+            ->put(route('bicis.sortida.material', $model), ['vehicle_id' => $altra->id, 'material_ids' => [$sabates->id]])
+            ->assertSessionHasNoErrors();
+
+        $model->refresh();
+        $this->assertTrue($model->material_editat);
+        $this->assertSame($altra->id, $model->vehicle_id);
+        // La peça de la bici segueix la bici triada; la cadena, que no s'ha marcat, marxa
+        $this->assertEqualsCanonicalizing([$biciAltra->id, $sabates->id], $model->material->pluck('id')->all());
+
+        // Una importació nova actualitza el resum però no el material ni la bici
+        $sortida['activitat']['name'] = 'Reimportada';
+        $servei->desa($sortida, null);
+        $model->refresh();
+        $this->assertSame('Reimportada', $model->nom);
+        $this->assertSame($altra->id, $model->vehicle_id);
+        $this->assertEqualsCanonicalizing([$biciAltra->id, $sabates->id], $model->material->pluck('id')->all());
+    }
+
+    public function test_el_material_d_una_sortida_no_admet_cotxes_ni_bicis_a_la_llista_de_peces(): void
+    {
+        $servei = app(SortidesGarminService::class);
+        $model = $servei->desa($servei->sortidesDeBici([$this->activitat(1)], $this->gear([[100, 1]]))[1], null);
+        $cotxe = Vehicle::create(['nom' => 'Partner', 'tipus' => 'cotxe']);
+
+        $this->actingAs(\App\Models\User::factory()->create())
+            ->put(route('bicis.sortida.material', $model), ['vehicle_id' => $cotxe->id, 'material_ids' => [$this->bici->id]])
+            ->assertSessionHasErrors(['vehicle_id', 'material_ids.0']);
+
+        $this->assertFalse($model->fresh()->material_editat);
+    }
 }

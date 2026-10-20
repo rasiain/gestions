@@ -20,6 +20,7 @@ class SortidaBici extends Model
     protected $attributes = [
         'punts'              => 0,
         'desnivell_corregit' => false,
+        'material_editat'    => false,
     ];
 
     protected function casts(): array
@@ -28,6 +29,7 @@ class SortidaBici extends Model
             'inici'              => 'datetime',
             'data_local'         => 'date',
             'desnivell_corregit' => 'boolean',
+            'material_editat'    => 'boolean',
             'resum_dispositiu'   => 'array',
             'dades_originals'    => 'array',
         ];

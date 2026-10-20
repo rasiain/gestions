@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import Modal from '@/Components/Modal.vue';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { perAlServidor } from '@/formularis';
 import { Line } from 'vue-chartjs';
@@ -546,12 +546,18 @@ function elimina(vehicle: Vehicle) {
                 <h2 class="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200">
                     {{ props.titol }}
                 </h2>
-                <button
-                    @click="obreNou"
-                    class="inline-flex items-center rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-sky-700"
-                >
-                    Afegeix-ne un
-                </button>
+                <div class="flex items-center gap-2">
+                    <Link v-if="!props.esMotor" :href="route('bicis.material.index')"
+                        class="inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
+                        Material
+                    </Link>
+                    <button
+                        @click="obreNou"
+                        class="inline-flex items-center rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-sky-700"
+                    >
+                        Afegeix-ne un
+                    </button>
+                </div>
             </div>
         </template>
 
