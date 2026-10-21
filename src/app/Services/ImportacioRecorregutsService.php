@@ -3,12 +3,14 @@
 namespace App\Services;
 
 use App\Models\SortidaBici;
+use App\Support\LectorGpx;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\Process\Process;
 
 /**
  * Importa fitxers FIT baixats de Garmin Connect («Export Original»): el ZIP o el .fit de cada
- * activitat. Per a cada sessió de ciclisme:
+ * activitat. També GPX (d'altres aplicacions: Runtastic, OruxMaps, Strava…), que `LectorGpx` posa en
+ * la mateixa forma. Per a cada sessió de ciclisme:
  *
  * - si la sortida ja hi és i no té recorregut (l'exportació completa no en va portar el FIT),
  *   l'hi afegeix;
@@ -28,7 +30,7 @@ class ImportacioRecorregutsService
     public function __construct(private SortidesGarminService $garmin) {}
 
     /**
-     * @param  array<int, string>  $fitxers  rutes de .fit o .zip
+     * @param  array<int, string>  $fitxers  rutes de .fit, .gpx o .zip
      * @return array<int, array{fitxer: string, estat: string, missatge: string, sortida_id: ?int}>
      */
     public function importa(array $fitxers, ?int $biciPerNoves): array
@@ -52,7 +54,7 @@ class ImportacioRecorregutsService
         }
     }
 
-    /** Un .fit es copia tal qual; d'un ZIP, se'n treuen els .fit que porti. */
+    /** Un .fit o un .gpx es copia tal qual; d'un ZIP, se'n treuen els que porti. */
     private function desplega(string $fitxer, string $carpeta): void
     {
         if (str_ends_with(strtolower($fitxer), '.zip')) {
@@ -60,7 +62,7 @@ class ImportacioRecorregutsService
             if ($zip->open($fitxer) === true) {
                 for ($i = 0; $i < $zip->numFiles; $i++) {
                     $nom = $zip->getNameIndex($i);
-                    if (str_ends_with(strtolower($nom), '.fit')) {
+                    if (preg_match('/\.(fit|gpx)$/i', $nom)) {
                         copy("zip://{$fitxer}#{$nom}", $carpeta . '/' . basename($nom));
                     }
                 }
@@ -73,16 +75,22 @@ class ImportacioRecorregutsService
         copy($fitxer, $carpeta . '/' . basename($fitxer));
     }
 
-    /** @return array<int, array> les sessions d'activitat, una per línia de scripts/llegeix-fit.mjs */
+    /** @return array<int, array> les sessions d'activitat, en la forma de scripts/llegeix-fit.mjs */
     private function llegeix(string $carpeta): array
     {
         $proces = new Process(['node', base_path('scripts/llegeix-fit.mjs'), $carpeta], base_path());
         $proces->setTimeout(300)->mustRun();
 
-        return array_values(array_filter(array_map(
+        $sessions = array_values(array_filter(array_map(
             fn ($l) => json_decode($l, true),
             explode("\n", trim($proces->getOutput())),
         )));
+
+        foreach (glob("{$carpeta}/*.[gG][pP][xX]") as $gpx) {
+            $sessions[] = LectorGpx::llegeix($gpx) ?? ['fitxer' => basename($gpx), 'error' => 'no porta cap punt amb hora'];
+        }
+
+        return $sessions;
     }
 
     /** @return array{estat: string, missatge: string, sortida_id: ?int} */
@@ -114,8 +122,12 @@ class ImportacioRecorregutsService
             return $resultat('afegit', sprintf('Recorregut afegit (%s punts).', number_format($sortida->punts, 0, ',', '.')), $sortida);
         }
 
+        $esGpx = ($fit['sessio']['format'] ?? null) === 'gpx';
+
         if ($biciPerNoves === null) {
-            return $resultat('cal_bici', 'És una sortida nova: cal triar-ne la bici per importar-la.');
+            return $resultat('cal_bici', $esGpx
+                ? 'No hi ha cap sortida a aquesta hora. Un GPX no diu de quin esport és: si és en bici, tria-la per importar-lo.'
+                : 'És una sortida nova: cal triar-ne la bici per importar-la.');
         }
 
         $nova = $this->garmin->creaDesDeFit($fit, $ruta, $biciPerNoves, $idActivitat ?? 'fit-' . $fit['inici']);

@@ -18,8 +18,8 @@ class ImportacioSortidesRequest extends FormRequest
             'fitxers'    => ['required', 'array', 'max:200'],
             // El FIT no té cap tipus MIME conegut: es mira l'extensió
             'fitxers.*'  => ['file', 'max:102400', function ($atribut, $fitxer, $falla) {
-                if (! in_array(strtolower($fitxer->getClientOriginalExtension()), ['fit', 'zip'], true)) {
-                    $falla("«{$fitxer->getClientOriginalName()}» no és un .fit ni un .zip.");
+                if (! in_array(strtolower($fitxer->getClientOriginalExtension()), ['fit', 'gpx', 'zip'], true)) {
+                    $falla("«{$fitxer->getClientOriginalName()}» no és un .fit, un .gpx ni un .zip.");
                 }
             }],
             'vehicle_id' => ['nullable', 'integer', Rule::exists('g_vehicles', 'id')->where('tipus', 'bici')],

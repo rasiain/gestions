@@ -325,7 +325,9 @@ class SortidesGarminService
             return null;
         }
 
-        $relativa = $sortida->data_local->format('Y') . '/' . self::ORIGEN . '-' . $sortida->id_extern . '.fit';
+        // L'extensió de l'original: un GPX continua sent un GPX
+        $extensio = strtolower(pathinfo($origen, PATHINFO_EXTENSION)) ?: 'fit';
+        $relativa = $sortida->data_local->format('Y') . '/' . self::ORIGEN . '-' . $sortida->id_extern . '.' . $extensio;
         $desti = storage_path('app/sortides/' . $relativa);
 
         if (! is_dir(dirname($desti))) {

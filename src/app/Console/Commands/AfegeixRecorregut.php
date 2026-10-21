@@ -13,7 +13,7 @@ use Illuminate\Console\Command;
 class AfegeixRecorregut extends Command
 {
     protected $signature = 'sortides:afegeix-recorregut
-                            {fitxers* : FIT originals o els ZIP que en baixa Garmin Connect}
+                            {fitxers* : FIT originals o els ZIP que en baixa Garmin Connect, o GPX}
                             {--bici= : Id de la bici per a les sortides que no hi són}';
 
     protected $description = 'Afegeix recorreguts de FIT a les sortides que no en tenen, i crea les que falten';

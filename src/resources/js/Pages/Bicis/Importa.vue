@@ -31,9 +31,9 @@ const sobre = ref(false);
 
 function afegeix(llista: FileList | null | undefined) {
     if (!llista) return;
-    const nous = [...llista].filter((f) => /\.(fit|zip)$/i.test(f.name));
+    const nous = [...llista].filter((f) => /\.(fit|gpx|zip)$/i.test(f.name));
     const ignorats = llista.length - nous.length;
-    error.value = ignorats ? `${ignorats} fitxers no són .fit ni .zip i no s'hi han afegit.` : null;
+    error.value = ignorats ? `${ignorats} fitxers no són .fit, .gpx ni .zip i no s'hi han afegit.` : null;
     // Sense repetits: el mateix nom no s'hi posa dos cops
     const noms = new Set(fitxers.value.map((f) => f.name));
     fitxers.value = [...fitxers.value, ...nous.filter((f) => !noms.has(f.name))];
@@ -47,7 +47,7 @@ function deixa(e: DragEvent) {
 async function importa() {
     // El botó no es deshabilita: si falta alguna cosa, es diu què
     if (!fitxers.value.length) {
-        error.value = 'Tria primer algun fitxer .fit o .zip.';
+        error.value = 'Tria primer algun fitxer .fit, .gpx o .zip.';
         return;
     }
     important.value = true;
@@ -118,8 +118,8 @@ const mida = (bytes: number) => (bytes < 1048576 ? `${Math.round(bytes / 1024)} 
                             class="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-8 text-center text-sm transition-colors"
                             :class="sobre ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20' : 'border-gray-300 text-gray-500 hover:border-sky-400 dark:border-gray-600 dark:text-gray-400'">
                             <span class="font-medium text-gray-700 dark:text-gray-300">Arrossega aquí els fitxers</span>
-                            <span class="text-xs">o clica per triar-los (.fit o .zip)</span>
-                            <input type="file" multiple accept=".fit,.zip" class="hidden" @change="afegeix(($event.target as HTMLInputElement).files); ($event.target as HTMLInputElement).value = ''" />
+                            <span class="text-xs">o clica per triar-los (.fit, .gpx o .zip)</span>
+                            <input type="file" multiple accept=".fit,.gpx,.zip" class="hidden" @change="afegeix(($event.target as HTMLInputElement).files); ($event.target as HTMLInputElement).value = ''" />
                         </label>
 
                         <ul v-if="fitxers.length" class="mt-3 max-h-40 space-y-0.5 overflow-y-auto text-sm">
