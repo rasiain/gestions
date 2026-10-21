@@ -37,7 +37,7 @@ class SortidesGarminService
      * @return array<int, array{activitat: array, material: array<int, int>, vehicle_id: int}>
      *         per activityId
      */
-    public function sortidesDeBici(array $activitats, array $gear): array
+    public function sortidesDeBici(array $activitats, array $gear, array $assignacions = []): array
     {
         $material = MaterialEsportiu::where('origen', self::ORIGEN)->get()->keyBy('id_extern');
 
@@ -56,14 +56,19 @@ class SortidesGarminService
             $peces = collect($perActivitat[$a['activityId']] ?? []);
             $bici = $peces->first(fn (MaterialEsportiu $p) => $p->tipus === 'bici' && $p->vehicle_id !== null);
 
-            if ($bici === null) {
+            // Una activitat sense bici a Garmin (una bici de lloguer, una que no es va marcar)
+            // només entra si se li ha dit amb quina es va fer; queda com a corregida a mà
+            $assignada = $bici === null && isset($assignacions[$a['activityId']]);
+
+            if ($bici === null && ! $assignada) {
                 continue;
             }
 
             $sortides[$a['activityId']] = [
                 'activitat'  => $a,
                 'material'   => $peces->pluck('id')->unique()->values()->all(),
-                'vehicle_id' => $bici->vehicle_id,
+                'vehicle_id' => $assignada ? $assignacions[$a['activityId']] : $bici->vehicle_id,
+                'assignada'  => $assignada,
             ];
         }
 
@@ -122,16 +127,8 @@ class SortidesGarminService
     public function desa(array $sortida, ?array $fit, ?string $rutaFit = null): SortidaBici
     {
         $a = $sortida['activitat'];
-        $dades = ['vehicle_id' => $sortida['vehicle_id']] + $this->resum($a);
-
-        if ($fit !== null) {
-            $dades['resum_dispositiu'] = $fit['sessio'];
-            $dades['recorregut_simplificat'] = $fit['simplificat'];
-            // El rectangle dels punts és exacte; el del resum, Garmin només el porta de vegades
-            if ($fit['rectangle'] !== null) {
-                $dades = array_merge($dades, $fit['rectangle']);
-            }
-        }
+        // El del FIT mana sobre el del resum (el rectangle exacte sobre el que Garmin porta de vegades)
+        $dades = array_merge(['vehicle_id' => $sortida['vehicle_id']] + $this->resum($a), $fit !== null ? $this->delFit($fit) : []);
 
         return DB::transaction(function () use ($a, $dades, $sortida, $fit, $rutaFit) {
             $model = SortidaBici::firstOrNew(['origen' => self::ORIGEN, 'id_extern' => (string) $a['activityId']]);
@@ -140,20 +137,154 @@ class SortidesGarminService
                 unset($dades['vehicle_id']);
             }
 
+            // La bici la va dir l'usuari, no Garmin: una importació posterior no l'ha de tocar
+            if ($sortida['assignada'] ?? false) {
+                $dades['material_editat'] = true;
+            }
+
             $model->fill($dades)->save();
 
             if (! $model->material_editat) {
                 $model->material()->sync($sortida['material']);
             }
 
-            if ($rutaFit !== null && $model->fitxer === null) {
-                $model->fitxer = $this->copiaFit($rutaFit, $model);
-            }
+            $this->desaFitIPunts($model, $fit, $rutaFit);
+            $model->save();
 
-            if ($fit !== null && $model->punts === 0 && $fit['punts'] !== []) {
-                $model->punts = $this->desaPunts($model->id, $fit['punts']);
-            }
+            return $model;
+        });
+    }
 
+    /** El que una sortida treu del seu FIT: el resum del dispositiu, el traçat i el rectangle. */
+    private function delFit(array $fit): array
+    {
+        return [
+            'resum_dispositiu'       => $fit['sessio'],
+            'recorregut_simplificat' => $fit['simplificat'],
+        ] + ($fit['rectangle'] ?? []);   // exacte; el del resum, Garmin només el porta de vegades
+    }
+
+    private function desaFitIPunts(SortidaBici $model, ?array $fit, ?string $rutaFit): void
+    {
+        if ($rutaFit !== null && $model->fitxer === null) {
+            $model->fitxer = $this->copiaFit($rutaFit, $model);
+        }
+
+        if ($fit !== null && $model->punts === 0 && $fit['punts'] !== []) {
+            $model->punts = $this->desaPunts($model->id, $fit['punts']);
+        }
+    }
+
+    /**
+     * Crea una sortida que no és a la BD només amb el FIT —sense el resum de Garmin Connect al
+     * costat—: el resum de les columnes és el del dispositiu, i el que la sessió no porta (altituds
+     * i temperatures extremes) surt dels punts. La bici la diu l'usuari, i els components són els
+     * muntats a la bici aquell dia.
+     *
+     * @param  array  $fit  una línia de scripts/llegeix-fit.mjs
+     */
+    public function creaDesDeFit(array $fit, string $rutaFit, int $vehicleId, string $idExtern): SortidaBici
+    {
+        $s = $fit['sessio'];
+        $punts = $fit['punts'];
+        $inici = Carbon::createFromTimestamp($fit['inici'], 'UTC');
+        // Sense el desfasament de l'hora local, el de Catalunya: és on es fan gairebé totes
+        $local = $fit['desfas_local'] !== null
+            ? $inici->copy()->addSeconds($fit['desfas_local'])
+            : $inici->copy()->setTimezone('Europe/Madrid');
+
+        $columna = fn (int $i) => array_values(array_filter(array_column($punts, $i), fn ($v) => $v !== null));
+        $alts = $columna(3);
+        $temps = $columna(8);
+        $semi = 180 / 2 ** 31;
+
+        $dades = [
+            'vehicle_id'       => $vehicleId,
+            'nom'              => self::NOMS_TIPUS[$this->tipusActivitat($s)] ?? 'Sortida en bici',
+            'tipus_activitat'  => $this->tipusActivitat($s),
+            'inici'            => $inici,
+            'data_local'       => $local->toDateString(),
+            'distancia_m'      => $s['totalDistance'] ?? null,
+            'temps_s'          => isset($s['totalTimerTime']) ? (int) round($s['totalTimerTime']) : null,
+            'temps_moviment_s' => isset($s['totalMovingTime']) ? (int) round($s['totalMovingTime']) : null,
+            'temps_total_s'    => isset($s['totalElapsedTime']) ? (int) round($s['totalElapsedTime']) : null,
+            'desnivell_pos_m'  => $s['totalAscent'] ?? null,
+            'desnivell_neg_m'  => $s['totalDescent'] ?? null,
+            'alt_min_m'        => $s['enhancedMinAltitude'] ?? ($alts ? min($alts) / 100 : null),
+            'alt_max_m'        => $s['enhancedMaxAltitude'] ?? ($alts ? max($alts) / 100 : null),
+            'vel_mitjana'      => $s['enhancedAvgSpeed'] ?? $s['avgSpeed'] ?? null,
+            'vel_max'          => $s['enhancedMaxSpeed'] ?? $s['maxSpeed'] ?? null,
+            'fc_mitjana'       => $s['avgHeartRate'] ?? null,
+            'fc_max'           => $s['maxHeartRate'] ?? null,
+            'cadencia_mitjana' => $s['avgCadence'] ?? null,
+            'calories'         => $s['totalCalories'] ?? null,
+            'temp_min'         => $s['minTemperature'] ?? ($temps ? min($temps) : null),
+            'temp_max'         => $s['maxTemperature'] ?? ($temps ? max($temps) : null),
+            'lat_inici'        => isset($s['startPositionLat']) ? $s['startPositionLat'] * $semi : null,
+            'lon_inici'        => isset($s['startPositionLong']) ? $s['startPositionLong'] * $semi : null,
+        ] + $this->delFit($fit);
+
+        return DB::transaction(function () use ($dades, $fit, $rutaFit, $idExtern, $vehicleId, $local) {
+            $model = SortidaBici::create(['origen' => self::ORIGEN, 'id_extern' => $idExtern] + $dades);
+
+            // La bici (la peça de Garmin que la representa) i els components muntats aquell dia
+            $dia = $local->toDateString();
+            $material = MaterialEsportiu::where(fn ($q) => $q->where('tipus', 'bici')->where('vehicle_id', $vehicleId))
+                ->orWhere(fn ($q) => $q->where('muntat_a_vehicle_id', $vehicleId)
+                    ->where(fn ($q) => $q->whereNull('data_inici')->orWhere('data_inici', '<=', $dia))
+                    ->where(fn ($q) => $q->whereNull('data_fi')->orWhere('data_fi', '>=', $dia)))
+                ->pluck('id');
+            $model->material()->sync($material);
+
+            $this->desaFitIPunts($model, $fit, $rutaFit);
+            $model->save();
+
+            return $model;
+        });
+    }
+
+    /** Les sessions de ciclisme del FIT, amb el nom que Garmin Connect dona a l'activitat. */
+    public function tipusActivitat(array $sessio): ?string
+    {
+        if (($sessio['sport'] ?? null) !== 'cycling') {
+            return null;
+        }
+
+        return match ($sessio['subSport'] ?? null) {
+            'mountain'      => 'mountain_biking',
+            'road'          => 'road_biking',
+            'gravelCycling' => 'gravel_cycling',
+            'indoorCycling' => 'indoor_cycling',
+            'track'         => 'track_cycling',
+            'downhill'      => 'downhill_biking',
+            default         => 'cycling',
+        };
+    }
+
+    private const NOMS_TIPUS = [
+        'mountain_biking' => 'Sortida de BTT',
+        'road_biking'     => 'Sortida de carretera',
+        'gravel_cycling'  => 'Sortida de gravel',
+        'indoor_cycling'  => 'Rodets',
+        'cycling'         => 'Sortida en bici',
+    ];
+
+    /**
+     * Afegeix el recorregut a una sortida que ja hi és però que no en té: la que l'exportació de
+     * Garmin no va portar el FIT i se n'ha baixat l'original a part. El resum de les columnes no es
+     * toca —continua sent el de Garmin—; s'hi afegeixen el del dispositiu, el traçat i els punts.
+     *
+     * @param  array  $fit  una línia de scripts/llegeix-fit.mjs
+     */
+    public function afegeixRecorregut(SortidaBici $model, array $fit, string $rutaFit): SortidaBici
+    {
+        if ($model->punts > 0) {
+            throw new \RuntimeException('Aquesta sortida ja té recorregut: els punts originals no es reescriuen.');
+        }
+
+        return DB::transaction(function () use ($model, $fit, $rutaFit) {
+            $model->fill($this->delFit($fit));
+            $this->desaFitIPunts($model, $fit, $rutaFit);
             $model->save();
 
             return $model;
@@ -187,9 +318,13 @@ class SortidesGarminService
         return $desats;
     }
 
-    /** Copia el FIT a storage/app/sortides/{any}/ i en torna la ruta relativa. */
-    private function copiaFit(string $origen, SortidaBici $sortida): string
+    /** Copia el FIT a storage/app/sortides/{any}/ i en torna la ruta relativa (null si no hi és). */
+    private function copiaFit(string $origen, SortidaBici $sortida): ?string
     {
+        if (! is_file($origen)) {
+            return null;
+        }
+
         $relativa = $sortida->data_local->format('Y') . '/' . self::ORIGEN . '-' . $sortida->id_extern . '.fit';
         $desti = storage_path('app/sortides/' . $relativa);
 

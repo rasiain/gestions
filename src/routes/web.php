@@ -34,6 +34,8 @@ use App\Http\Controllers\RendaFixaController;
 use App\Http\Controllers\TotalsMobiliarisController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\SortidaBiciController;
+use App\Http\Controllers\RutaController;
+use App\Http\Controllers\ImportacioSortidesController;
 use App\Http\Controllers\MaterialEsportiuController;
 use App\Http\Controllers\GoogleController;
 use Illuminate\Foundation\Application;
@@ -149,6 +151,10 @@ Route::middleware('auth')->group(function () {
     // Vehicles: dues llistes (els de motor, les bicis) sobre el mateix catàleg
     Route::get('/vehicles-motor', [VehicleController::class, 'vehiclesMotor'])->name('vehicles-motor.index');
     Route::get('/bicis', [VehicleController::class, 'bicis'])->name('bicis.index');
+    Route::get('/bicis/importa', [ImportacioSortidesController::class, 'index'])->name('bicis.importa.index');
+    Route::post('/bicis/importa', [ImportacioSortidesController::class, 'store'])->name('bicis.importa.store');
+    Route::get('/bicis/rutes', [RutaController::class, 'index'])->name('bicis.rutes.index');
+    Route::get('/bicis/rutes/{ruta}', [RutaController::class, 'show'])->name('bicis.rutes.show');
     Route::get('/bicis/material', [MaterialEsportiuController::class, 'index'])->name('bicis.material.index');
     Route::post('/bicis/material', [MaterialEsportiuController::class, 'store'])->name('bicis.material.store');
     Route::put('/bicis/material/{material}', [MaterialEsportiuController::class, 'update'])->name('bicis.material.update');

@@ -21,6 +21,8 @@ const inicis = fitxerInicis ? new Set(JSON.parse(fs.readFileSync(fitxerInicis, '
 const MARGE_S = 5;
 
 const SEMI = 180 / 2 ** 31;
+/** Segons entre l'origen Unix i el dels FIT (1989-12-31 00:00 UTC). */
+const ORIGEN_FIT = 631065600;
 const arrodoneix = (v, factor) => (v == null ? null : Math.round(v * factor));
 
 function interessa(inici) {
@@ -86,6 +88,14 @@ for (const nom of fs.readdirSync(carpeta)) {
     const sessions = missatges.sessionMesgs ?? [];
     const registres = missatges.recordMesgs ?? [];
 
+    // Desfasament de l'hora local (s): el missatge «activity» porta l'hora UTC i la local, aquesta
+    // en segons des de l'origen dels FIT (1989-12-31). Serveix per a la data local d'una sortida
+    // que no té el resum de Garmin al costat.
+    const activitat = missatges.activityMesgs?.[0];
+    const desfasLocal = activitat?.timestamp && activitat?.localTimestamp != null
+        ? activitat.localTimestamp - (activitat.timestamp.getTime() / 1000 - ORIGEN_FIT)
+        : null;
+
     for (const sessio of sessions) {
         if (!sessio.startTime) continue;
         const inici = Math.round(sessio.startTime.getTime() / 1000);
@@ -126,6 +136,7 @@ for (const nom of fs.readdirSync(carpeta)) {
         process.stdout.write(JSON.stringify({
             fitxer: nom,
             inici,
+            desfas_local: desfasLocal,
             sessio: serialitza(sessio),
             punts,
             rectangle: coords.length ? { lat_min: latMin, lat_max: latMax, lon_min: lonMin, lon_max: lonMax } : null,

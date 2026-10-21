@@ -13,6 +13,7 @@ import { Line } from 'vue-chartjs';
 import { Chart as ChartJS, registerables } from 'chart.js';
 import type { Chart, ChartData, ChartOptions, Plugin } from 'chart.js';
 import zoomPlugin from 'chartjs-plugin-zoom';
+import { SERIE_AMBRE, SERIE_BLAU, TRAMS_PENDENT, colorPendent, pendents } from '@/bicis/recorregut';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -103,36 +104,9 @@ function indexDeX(x: number): number {
 /** El punt assenyalat, comú al mapa i a totes les gràfiques. */
 const actiu = ref<number | null>(null);
 
-/** Amplada del tram sobre el qual es mesura el pendent de cada punt. */
-const TRAM_PENDENT_KM = 0.1;
-
-/**
- * El pendent (%) de cada punt: el que puja o baixa l'altitud en els 100 m centrats en ell.
- * No el dona el dispositiu, es calcula. Punt a punt seria soroll —l'altímetre va de 0,2 m en
- * 0,2 m i entre dos punts hi ha pocs metres—, i el tram l'esmorteeix. Amb menys de 20 m de
- * recorregut dins del tram (aturat) no es diu res.
- */
-const pendent = computed<(number | null)[]>(() => {
-    const p = punts.value;
-    if (!p || !perDistancia.value) return [];
-    const d = xs.value, alt = p.alt, n = d.length, mig = TRAM_PENDENT_KM / 2;
-    const sortida: (number | null)[] = new Array(n).fill(null);
-    let a = 0, b = 0;
-    for (let i = 0; i < n; i++) {
-        while (a < i && d[a] < d[i] - mig) a++;
-        if (b < i) b = i;
-        while (b < n - 1 && d[b + 1] <= d[i] + mig) b++;
-        // Els extrems del tram han de tenir altitud
-        let ia = a, ib = b;
-        while (ia < i && alt[ia] === null) ia++;
-        while (ib > i && alt[ib] === null) ib--;
-        const llarg = d[ib] - d[ia];
-        if (alt[ia] !== null && alt[ib] !== null && llarg >= 0.02) {
-            sortida[i] = Math.round(((alt[ib]! - alt[ia]!) / (llarg * 1000)) * 1000) / 10;
-        }
-    }
-    return sortida;
-});
+/** El pendent de cada punt (vegeu `pendents()`), només amb distància real. */
+const pendent = computed<(number | null)[]>(() =>
+    punts.value && perDistancia.value ? pendents(xs.value, punts.value.alt) : []);
 
 /** Quant ha de pujar l'altitud des de l'últim punt de referència perquè compti com a pujada. */
 const LLINDAR_PUJADA_M = 2.5;
@@ -171,8 +145,6 @@ const lectura = computed(() => {
 });
 
 // ---- Mapa ----
-const SERIE_BLAU = '#0284c7';
-const SERIE_AMBRE = '#d97706';
 
 const contenidorMapa = ref<HTMLElement | null>(null);
 let mapa: L.Map | null = null;
@@ -183,20 +155,6 @@ const capaTraca = L.layerGroup();
 /** Els marcadors (inici, final, punt assenyalat), que han de quedar sempre per sobre del recorregut. */
 const marcadors: L.Path[] = [];
 
-/**
- * Trams de pendent del mapa: escala divergent, baixades en blau i pujades de l'ambre al
- * marró, amb el pla en gris. Validada (separació amb visió normal i amb daltonisme entre
- * trams veïns); sobre les teselles, el recorregut porta una vora blanca que li dona contrast.
- */
-const TRAMS_PENDENT = [
-    { fins: -8, color: '#0c4a6e', etiqueta: '< −8 %' },
-    { fins: -3, color: '#0284c7', etiqueta: '−8 a −3 %' },
-    { fins: 3, color: '#9ca3af', etiqueta: '−3 a 3 %' },
-    { fins: 8, color: '#f59e0b', etiqueta: '3 a 8 %' },
-    { fins: 12, color: '#c2410c', etiqueta: '8 a 12 %' },
-    { fins: Infinity, color: '#7c2d12', etiqueta: '> 12 %' },
-];
-const colorPendent = (v: number | null) => (v === null ? TRAMS_PENDENT[2].color : TRAMS_PENDENT.find((t) => v < t.fins)!.color);
 
 /** Com es pinta el recorregut. Per pendent només quan n'hi ha (no als rodets). */
 const modeMapa = ref<'pendent' | 'simple'>('pendent');
@@ -589,7 +547,12 @@ const comparacio = computed(() => {
 
                 <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
                 <p v-else-if="!sortida.punts" class="rounded-lg bg-white p-6 text-center text-sm text-gray-500 shadow-sm dark:bg-gray-800 dark:text-gray-400">
-                    Aquesta sortida no té recorregut: Garmin no en va donar el fitxer original, només el resum.
+                    Aquesta sortida no té recorregut: l'exportació de Garmin no en va portar el fitxer original, només el resum.
+                    <span class="mt-2 block">
+                        <a v-if="sortida.origen === 'garmin' && /^\d+$/.test(sortida.id_extern)" :href="`https://connect.garmin.com/modern/activity/${sortida.id_extern}`"
+                            target="_blank" rel="noopener" class="text-sky-700 hover:underline dark:text-sky-400">Baixa'n l'original de Garmin Connect ↗</a>
+                        i <Link :href="route('bicis.importa.index')" class="text-sky-700 hover:underline dark:text-sky-400">afegeix-l'hi</Link>.
+                    </span>
                 </p>
 
                 <template v-else>

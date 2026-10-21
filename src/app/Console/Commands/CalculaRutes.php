@@ -19,6 +19,15 @@ class CalculaRutes extends Command
 
     public function handle(RutesCanoniquesService $servei): int
     {
+        // Una sola alhora: la pantalla d'importació la llança en segon pla, i dues que desessin
+        // a la vegada es trepitjarien
+        $bloqueig = fopen(storage_path('app/rutes-calcula.lock'), 'c');
+        if (! flock($bloqueig, LOCK_EX | LOCK_NB)) {
+            $this->warn('Ja s\'estan calculant les rutes.');
+
+            return self::SUCCESS;
+        }
+
         $inici = microtime(true);
         $sortides = $servei->sortides()->get(['id']);
         $this->info($sortides->count() . ' sortides amb recorregut. Calculant empremtes…');

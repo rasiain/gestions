@@ -565,6 +565,14 @@ function elimina(vehicle: Vehicle) {
                     {{ props.titol }}
                 </h2>
                 <div class="flex items-center gap-2">
+                    <Link v-if="!props.esMotor" :href="route('bicis.importa.index')"
+                        class="inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
+                        Importa
+                    </Link>
+                    <Link v-if="!props.esMotor" :href="route('bicis.rutes.index')"
+                        class="inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
+                        Rutes
+                    </Link>
                     <Link v-if="!props.esMotor" :href="route('bicis.material.index')"
                         class="inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
                         Material

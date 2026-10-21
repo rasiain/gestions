@@ -21,6 +21,8 @@ class ImportaSortides extends Command
 {
     protected $signature = 'sortides:importa
                             {fitxer : ZIP de l\'exportació de Garmin}
+                            {--assigna=* : Activitats sense bici a Garmin i la bici del catàleg amb què es van fer: «<id vehicle>:<activityId>,<activityId>…»}
+                            {--nomes-assignades : Només importa les activitats de --assigna}
                             {--prova : Només mostra què faria, no desa res}';
 
     protected $description = "Importa les sortides en bici (resum, material i recorregut) d'una exportació de Garmin";
@@ -51,7 +53,19 @@ class ImportaSortides extends Command
     {
         $this->info('Llegint l\'exportació…');
         $exportacio = $servei->llegeixExportacio($zip, "{$temporal}/fit");
-        $sortides = $servei->sortidesDeBici($exportacio['activitats'], $exportacio['gear']);
+        $assignacions = $this->assignacions();
+        if ($assignacions === null) {
+            return self::FAILURE;
+        }
+
+        $sortides = $servei->sortidesDeBici($exportacio['activitats'], $exportacio['gear'], $assignacions);
+        if ($this->option('nomes-assignades')) {
+            $sortides = array_intersect_key($sortides, $assignacions);
+        }
+        $noTrobades = array_diff(array_keys($assignacions), array_keys($sortides));
+        if ($noTrobades !== []) {
+            $this->warn('Activitats de --assigna que no són a l\'exportació o ja tenen bici a Garmin: ' . implode(', ', $noTrobades));
+        }
 
         if ($sortides === []) {
             $this->error('Cap activitat no és d\'una bici del catàleg. S\'ha importat el material (material:importa)?');
@@ -118,6 +132,34 @@ class ImportaSortides extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Les activitats de --assigna, com a activityId → id de vehicle. Null si n'hi ha cap de mal escrita
+     * o la bici no existeix.
+     *
+     * @return array<int, int>|null
+     */
+    private function assignacions(): ?array
+    {
+        $resultat = [];
+        foreach ($this->option('assigna') as $text) {
+            if (! preg_match('/^(\d+):([\d,]+)$/', $text, $m)) {
+                $this->error("--assigna «{$text}»: ha de ser «<id vehicle>:<activityId>,<activityId>…».");
+
+                return null;
+            }
+            if (! Vehicle::where('id', $m[1])->where('tipus', 'bici')->exists()) {
+                $this->error("--assigna «{$text}»: no hi ha cap bici amb id {$m[1]}.");
+
+                return null;
+            }
+            foreach (explode(',', $m[2]) as $id) {
+                $resultat[(int) $id] = (int) $m[1];
+            }
+        }
+
+        return $resultat;
     }
 
     /** Executa scripts/llegeix-fit.mjs i passa cada línia JSON a $perLinia a mesura que arriba. */

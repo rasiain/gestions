@@ -279,4 +279,38 @@ class SortidesGarminTest extends TestCase
 
         $this->assertFalse($model->fresh()->material_editat);
     }
+
+    public function test_una_activitat_sense_bici_a_garmin_entra_si_se_li_assigna_una_i_queda_corregida_a_ma(): void
+    {
+        $lloguer = Vehicle::create(['nom' => 'Bici de lloguer', 'tipus' => 'bici']);
+        $servei = app(SortidesGarminService::class);
+        $activitats = [$this->activitat(1), $this->activitat(2), $this->activitat(3)];
+
+        // L'1 té bici a Garmin; el 2 no en té i se li assigna; el 3 no en té i queda fora
+        $sortides = $servei->sortidesDeBici($activitats, $this->gear([[100, 1]]), [2 => $lloguer->id]);
+        $this->assertSame([1, 2], array_keys($sortides));
+        $this->assertSame($lloguer->id, $sortides[2]['vehicle_id']);
+
+        $model = $servei->desa($sortides[2], null);
+        $this->assertSame($lloguer->id, $model->vehicle_id);
+        $this->assertTrue($model->material_editat);
+        $this->assertFalse($servei->desa($sortides[1], null)->material_editat);
+    }
+
+    public function test_s_afegeix_el_recorregut_a_una_sortida_que_no_en_tenia_i_no_es_reescriu(): void
+    {
+        $servei = app(SortidesGarminService::class);
+        $model = $servei->desa($servei->sortidesDeBici([$this->activitat(1)], $this->gear([[100, 1]]))[1], null);
+        $this->assertSame(0, $model->punts);
+
+        $model = $servei->afegeixRecorregut($model, $this->fit(), '/no/existeix.fit');
+        $this->assertSame(3, $model->punts);
+        $this->assertSame(950, $model->resum_dispositiu['totalAscent']);
+        $this->assertEquals(41.98, $model->lat_min);
+        // El resum de les columnes continua sent el de Garmin
+        $this->assertSame(980.0, (float) $model->desnivell_pos_m);
+
+        $this->expectException(\RuntimeException::class);
+        $servei->afegeixRecorregut($model, $this->fit(), '/no/existeix.fit');
+    }
 }
