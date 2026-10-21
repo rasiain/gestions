@@ -131,6 +131,24 @@ const donatsDeBaixa = computed(() => props.vehicles.filter((v) => !v.actiu).leng
 const repostatgesOberts = ref<number | null>(null);
 /** La bici amb la fitxa oberta. */
 const fitxaOberta = ref<number | null>(null);
+
+/**
+ * En tornar d'una sortida (?fitxa=<bici>&pestanya=sortides&any=<any>) la fitxa s'obre on
+ * s'era, i la pàgina hi baixa.
+ */
+const enllac = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+const fitxaInicial = Number(enllac.get('fitxa')) || null;
+const pestanyaInicial = (enllac.get('pestanya') ?? undefined) as 'anys' | 'sortides' | 'components' | 'grafiques' | undefined;
+const anyInicial = Number(enllac.get('any')) || undefined;
+if (fitxaInicial !== null) {
+    fitxaOberta.value = fitxaInicial;
+    // Una bici de baixa és amagada a la llista: s'ha de veure si se n'obre la fitxa
+    if (props.vehicles.some((v) => v.id === fitxaInicial && !v.actiu)) mostraBaixes.value = true;
+}
+
+onMounted(() => {
+    if (fitxaInicial !== null) document.getElementById(`vehicle-${fitxaInicial}`)?.scrollIntoView({ block: 'start' });
+});
 const pestanya = ref<'anys' | 'repostatges' | 'despeses' | 'grafiques'>('anys');
 
 const despesaForm = useForm({
@@ -590,7 +608,7 @@ function elimina(vehicle: Vehicle) {
                                 </thead>
                                 <tbody class="divide-y divide-gray-100 bg-white dark:divide-gray-700 dark:bg-gray-800">
                                     <template v-for="v in visibles" :key="v.id">
-                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40" :class="{ 'opacity-60': !v.actiu }">
+                                    <tr :id="`vehicle-${v.id}`" class="scroll-mt-4 hover:bg-gray-50 dark:hover:bg-gray-700/40" :class="{ 'opacity-60': !v.actiu }">
                                         <td class="px-4 py-3">
                                             <span class="font-medium text-gray-900 dark:text-gray-100">{{ v.nom }}</span>
                                             <span v-if="v.marca || v.model" class="ml-2 text-xs text-gray-500 dark:text-gray-400">
@@ -630,7 +648,9 @@ function elimina(vehicle: Vehicle) {
                                     <!-- Fitxa de la bici: el que diuen les sortides -->
                                     <tr v-if="fitxaOberta === v.id" class="bg-gray-50 dark:bg-gray-700/30">
                                         <td :colspan="(props.tipus.length > 1 ? 1 : 0) + (props.esMotor ? 4 : 6)" class="px-4 py-3">
-                                            <FitxaBici :vehicle-id="v.id" />
+                                            <FitxaBici :vehicle-id="v.id"
+                                                :pestanya-inicial="v.id === fitxaInicial ? pestanyaInicial : undefined"
+                                                :any-inicial="v.id === fitxaInicial ? anyInicial : undefined" />
                                         </td>
                                     </tr>
 

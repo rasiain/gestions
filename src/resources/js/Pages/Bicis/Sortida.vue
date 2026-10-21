@@ -12,10 +12,11 @@ import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } fr
 import { Line } from 'vue-chartjs';
 import { Chart as ChartJS, registerables } from 'chart.js';
 import type { Chart, ChartData, ChartOptions, Plugin } from 'chart.js';
+import zoomPlugin from 'chartjs-plugin-zoom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-ChartJS.register(...registerables);
+ChartJS.register(...registerables, zoomPlugin);
 
 interface Resum {
     km: number | null; temps_s: number | null; moviment_s: number | null; total_s: number | null;
@@ -102,10 +103,71 @@ function indexDeX(x: number): number {
 /** El punt assenyalat, comú al mapa i a totes les gràfiques. */
 const actiu = ref<number | null>(null);
 
+/** Amplada del tram sobre el qual es mesura el pendent de cada punt. */
+const TRAM_PENDENT_KM = 0.1;
+
+/**
+ * El pendent (%) de cada punt: el que puja o baixa l'altitud en els 100 m centrats en ell.
+ * No el dona el dispositiu, es calcula. Punt a punt seria soroll —l'altímetre va de 0,2 m en
+ * 0,2 m i entre dos punts hi ha pocs metres—, i el tram l'esmorteeix. Amb menys de 20 m de
+ * recorregut dins del tram (aturat) no es diu res.
+ */
+const pendent = computed<(number | null)[]>(() => {
+    const p = punts.value;
+    if (!p || !perDistancia.value) return [];
+    const d = xs.value, alt = p.alt, n = d.length, mig = TRAM_PENDENT_KM / 2;
+    const sortida: (number | null)[] = new Array(n).fill(null);
+    let a = 0, b = 0;
+    for (let i = 0; i < n; i++) {
+        while (a < i && d[a] < d[i] - mig) a++;
+        if (b < i) b = i;
+        while (b < n - 1 && d[b + 1] <= d[i] + mig) b++;
+        // Els extrems del tram han de tenir altitud
+        let ia = a, ib = b;
+        while (ia < i && alt[ia] === null) ia++;
+        while (ib > i && alt[ib] === null) ib--;
+        const llarg = d[ib] - d[ia];
+        if (alt[ia] !== null && alt[ib] !== null && llarg >= 0.02) {
+            sortida[i] = Math.round(((alt[ib]! - alt[ia]!) / (llarg * 1000)) * 1000) / 10;
+        }
+    }
+    return sortida;
+});
+
+/** Quant ha de pujar l'altitud des de l'últim punt de referència perquè compti com a pujada. */
+const LLINDAR_PUJADA_M = 2.5;
+
+/**
+ * Desnivell positiu acumulat fins a cada punt. Sumar cada pujadeta del perfil donaria un 30 %
+ * més que el dispositiu (el soroll de l'altímetre també puja); amb un llindar de 2,5 m la
+ * diferència queda en pocs punts (mesurat sobre 40 sortides). La corba s'escala perquè acabi
+ * exactament en el desnivell del resum: la forma surt dels punts, i el total quadra amb el número
+ * de dalt de la pàgina.
+ */
+const acumulat = computed<(number | null)[]>(() => {
+    const p = punts.value;
+    if (!p || !perDistancia.value) return [];
+    const sortida: (number | null)[] = new Array(p.alt.length).fill(null);
+    let ref: number | null = null, total = 0;
+    p.alt.forEach((a, i) => {
+        if (a !== null) {
+            if (ref === null || a < ref) ref = ref === null || ref - a >= LLINDAR_PUJADA_M ? a : ref;
+            if (a - ref >= LLINDAR_PUJADA_M) { total += a - ref; ref = a; }
+        }
+        sortida[i] = total;
+    });
+    const resum = props.resums.garmin.pujada;
+    const factor = resum && total > 0 ? resum / total : 1;
+    return sortida.map((v) => (v === null ? null : Math.round(v * factor)));
+});
+
 const lectura = computed(() => {
     const p = punts.value, i = actiu.value;
     if (!p || i === null) return null;
-    return { t: p.t[i], km: p.km[i], alt: p.alt[i], kmh: p.kmh[i], fc: p.fc[i], cad: p.cad[i], temp: p.temp[i] };
+    return {
+        t: p.t[i], km: p.km[i], alt: p.alt[i], pendent: pendent.value[i] ?? null, acumulat: acumulat.value[i] ?? null,
+        kmh: p.kmh[i], fc: p.fc[i], cad: p.cad[i], temp: p.temp[i],
+    };
 });
 
 // ---- Mapa ----
@@ -115,6 +177,68 @@ const SERIE_AMBRE = '#d97706';
 const contenidorMapa = ref<HTMLElement | null>(null);
 let mapa: L.Map | null = null;
 let marcador: L.CircleMarker | null = null;
+let limitsTraca: L.LatLngBounds | null = null;
+/** El recorregut dibuixat (d'un color o per trams de pendent), per poder-lo redibuixar. */
+const capaTraca = L.layerGroup();
+/** Els marcadors (inici, final, punt assenyalat), que han de quedar sempre per sobre del recorregut. */
+const marcadors: L.Path[] = [];
+
+/**
+ * Trams de pendent del mapa: escala divergent, baixades en blau i pujades de l'ambre al
+ * marró, amb el pla en gris. Validada (separació amb visió normal i amb daltonisme entre
+ * trams veïns); sobre les teselles, el recorregut porta una vora blanca que li dona contrast.
+ */
+const TRAMS_PENDENT = [
+    { fins: -8, color: '#0c4a6e', etiqueta: '< −8 %' },
+    { fins: -3, color: '#0284c7', etiqueta: '−8 a −3 %' },
+    { fins: 3, color: '#9ca3af', etiqueta: '−3 a 3 %' },
+    { fins: 8, color: '#f59e0b', etiqueta: '3 a 8 %' },
+    { fins: 12, color: '#c2410c', etiqueta: '8 a 12 %' },
+    { fins: Infinity, color: '#7c2d12', etiqueta: '> 12 %' },
+];
+const colorPendent = (v: number | null) => (v === null ? TRAMS_PENDENT[2].color : TRAMS_PENDENT.find((t) => v < t.fins)!.color);
+
+/** Com es pinta el recorregut. Per pendent només quan n'hi ha (no als rodets). */
+const modeMapa = ref<'pendent' | 'simple'>('pendent');
+const potPendent = computed(() => pendent.value.some((v) => v !== null));
+
+function pintaTraca() {
+    const p = punts.value;
+    if (!p || !mapa) return;
+    capaTraca.clearLayers();
+
+    const tots: [number, number][] = [];
+    p.lat.forEach((lat, i) => { if (lat !== null && p.lon[i] !== null) tots.push([lat, p.lon[i]!]); });
+
+    // La vora blanca, sota de tot
+    L.polyline(tots, { color: '#ffffff', weight: 7, opacity: 0.9 }).addTo(capaTraca);
+
+    if (modeMapa.value === 'simple' || !potPendent.value) {
+        L.polyline(tots, { color: SERIE_BLAU, weight: 4, opacity: 0.95 }).addTo(capaTraca);
+        marcadors.forEach((m) => m.bringToFront());
+        return;
+    }
+
+    // Un tros per cada canvi de tram; cada tros comença on acaba l'anterior perquè no quedin forats
+    let tros: [number, number][] = [];
+    let color: string | null = null;
+    p.lat.forEach((lat, i) => {
+        if (lat === null || p.lon[i] === null) return;
+        const punt: [number, number] = [lat, p.lon[i]!];
+        const c = colorPendent(pendent.value[i] ?? null);
+        if (color !== null && c !== color) {
+            tros.push(punt);
+            L.polyline(tros, { color, weight: 4, opacity: 1 }).addTo(capaTraca);
+            tros = [];
+        }
+        color = c;
+        tros.push(punt);
+    });
+    if (color !== null && tros.length > 1) L.polyline(tros, { color, weight: 4, opacity: 1 }).addTo(capaTraca);
+    marcadors.forEach((m) => m.bringToFront());
+}
+/** El tram ampliat a les gràfiques, ressaltat al mapa. */
+let tramAmpliat: L.Polyline | null = null;
 const teGps = computed(() => (punts.value?.lat ?? []).some((v) => v !== null));
 
 function dibuixaMapa() {
@@ -130,16 +254,19 @@ function dibuixaMapa() {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(mapa);
 
-    const traca = L.polyline(coords, { color: SERIE_BLAU, weight: 3, opacity: 0.9 }).addTo(mapa);
-    mapa.fitBounds(traca.getBounds(), { padding: [16, 16] });
+    capaTraca.addTo(mapa);
+    pintaTraca();
+    limitsTraca = L.latLngBounds(coords);
+    mapa.fitBounds(limitsTraca, { padding: [16, 16] });
 
     const extrem = (ll: L.LatLngExpression, titol: string) =>
-        L.circleMarker(ll, { radius: 6, color: '#ffffff', weight: 2, fillColor: SERIE_BLAU, fillOpacity: 1 }).bindTooltip(titol).addTo(mapa!);
+        marcadors.push(L.circleMarker(ll, { radius: 6, color: '#ffffff', weight: 2, fillColor: '#111827', fillOpacity: 1 }).bindTooltip(titol).addTo(mapa!));
     extrem(coords[0], 'Inici');
     extrem(coords[coords.length - 1], 'Final');
 
     // Amagat fins que s'assenyali un punt
     marcador = L.circleMarker(coords[0], { radius: 7, color: '#ffffff', weight: 2, fillColor: SERIE_AMBRE, opacity: 0, fillOpacity: 0 }).addTo(mapa);
+    marcadors.push(marcador);
 
     // Passar pel mapa assenyala el punt del recorregut més proper, si és a prop del cursor
     mapa.on('mousemove', (e: L.LeafletMouseEvent) => {
@@ -169,6 +296,47 @@ watch(actiu, (i) => {
 });
 
 onUnmounted(() => mapa?.remove());
+
+// ---- Zoom ----
+/**
+ * El tram de l'eix ampliat, comú a totes les gràfiques: ampliar-ne una les amplia totes i
+ * enquadra el tram al mapa. S'amplia arrossegant sobre una gràfica, o amb la roda i Ctrl
+ * (el pessic del trackpad): la roda sola ha de continuar desplaçant la pàgina, que hi ha
+ * moltes gràfiques una sota l'altra.
+ */
+const rang = ref<{ min: number; max: number } | null>(null);
+
+function reiniciaZoom() {
+    rang.value = null;
+    for (const g of grafiques.value) (g as unknown as { chart?: Chart & { resetZoom?: () => void } })?.chart?.resetZoom?.();
+}
+
+function ressaltaTram(r: { min: number; max: number } | null, enquadra = true) {
+    const p = punts.value;
+    if (!mapa || !p) return;
+    tramAmpliat?.remove();
+    tramAmpliat = null;
+    if (r === null) {
+        if (enquadra && limitsTraca) mapa.fitBounds(limitsTraca, { padding: [16, 16] });
+        return;
+    }
+    const coords: L.LatLngExpression[] = [];
+    xs.value.forEach((x, i) => {
+        if (x >= r.min && x <= r.max && p.lat[i] !== null && p.lon[i] !== null) coords.push([p.lat[i]!, p.lon[i]!]);
+    });
+    if (coords.length < 2) return;
+    // Pintat per pendent, l'ambre ja vol dir pujada: el tram es ressalta amb una ombra fosca per sota
+    tramAmpliat = modeMapa.value === 'pendent' && potPendent.value
+        ? L.polyline(coords, { color: '#111827', weight: 12, opacity: 0.35 }).addTo(mapa).bringToBack()
+        : L.polyline(coords, { color: SERIE_AMBRE, weight: 5, opacity: 0.9 }).addTo(mapa);
+    if (enquadra) mapa.fitBounds(tramAmpliat.getBounds(), { padding: [24, 24] });
+}
+
+watch(rang, (r) => ressaltaTram(r));
+watch(modeMapa, () => {
+    pintaTraca();
+    ressaltaTram(rang.value, false);
+});
 
 // ---- Gràfiques ----
 const fosc = ref(false);
@@ -214,28 +382,39 @@ const creuer: Plugin<'line'> = {
     },
 };
 
-interface Perfil { clau: keyof Punts; titol: string; unitat: string; decimals: number; farcit?: boolean }
+interface Perfil { clau: keyof Punts | 'pendent' | 'acumulat'; titol: string; unitat: string; decimals: number; farcit?: boolean; signe?: boolean }
 
 const PERFILS: Perfil[] = [
     { clau: 'alt', titol: 'Altitud', unitat: 'm', decimals: 0, farcit: true },
+    { clau: 'pendent', titol: 'Pendent', unitat: '%, en trams de 100 m', decimals: 1, signe: true },
+    { clau: 'acumulat', titol: 'Desnivell positiu acumulat', unitat: 'm', decimals: 0, farcit: true },
     { clau: 'kmh', titol: 'Velocitat', unitat: 'km/h', decimals: 1 },
     { clau: 'fc', titol: 'Pulsacions', unitat: 'ppm', decimals: 0 },
     { clau: 'cad', titol: 'Cadència', unitat: 'rpm', decimals: 0 },
     { clau: 'temp', titol: 'Temperatura', unitat: '°C', decimals: 0 },
 ];
 
+/** Els valors d'un perfil: els del dispositiu o, el pendent, calculat. */
+const serie = (clau: Perfil['clau']): (number | null)[] =>
+    clau === 'pendent' ? pendent.value
+        : clau === 'acumulat' ? acumulat.value
+        : ((punts.value?.[clau] ?? []) as (number | null)[]);
+
 /** Només els perfils que tenen dades en aquesta sortida. */
-const perfils = computed(() => PERFILS.filter((f) => (punts.value?.[f.clau] as (number | null)[] | undefined)?.some((v) => v !== null && v !== 0)));
+const perfils = computed(() => PERFILS.filter((f) => serie(f.clau).some((v) => v !== null && v !== 0)));
 
 function dades(f: Perfil): ChartData<'line'> {
-    const y = (punts.value?.[f.clau] ?? []) as (number | null)[];
+    const y = serie(f.clau);
     return {
         datasets: [{
             label: f.titol,
             data: xs.value.map((x, i) => ({ x, y: y[i] })) as { x: number; y: number }[],
-            borderColor: SERIE_BLAU,
+            // El pendent té signe: pujada en ambre per sobre del zero, baixada en blau per sota
+            borderColor: f.signe ? tinta.value : SERIE_BLAU,
             backgroundColor: f.farcit ? 'rgba(2,132,199,0.15)' : SERIE_BLAU,
-            fill: f.farcit ? 'start' : false,
+            fill: f.signe
+                ? { target: 'origin', above: 'rgba(217,119,6,0.35)', below: 'rgba(2,132,199,0.35)' }
+                : f.farcit ? 'start' : false,
             borderWidth: 2,
             pointRadius: 0,
             spanGaps: true,
@@ -255,12 +434,23 @@ const opcions = computed<ChartOptions<'line'>>(() => ({
         tooltip: { enabled: false },
         // Milers de punts: es dibuixen els que es veuen, sense perdre els pics
         decimation: { enabled: true, algorithm: 'lttb', samples: 600 },
+        zoom: {
+            zoom: {
+                wheel: { enabled: true, modifierKey: 'ctrl' },
+                pinch: { enabled: true },
+                drag: { enabled: true, backgroundColor: 'rgba(217,119,6,0.15)', borderColor: 'rgba(217,119,6,0.6)', borderWidth: 1 },
+                mode: 'x',
+                onZoomComplete: ({ chart }) => (rang.value = { min: chart.scales.x.min, max: chart.scales.x.max }),
+            },
+            pan: { enabled: false },
+            limits: { x: { min: 'original', max: 'original' } },
+        },
     },
     scales: {
         x: {
             type: 'linear',
-            min: xs.value[0],
-            max: xs.value[xs.value.length - 1],
+            min: rang.value?.min ?? xs.value[0],
+            max: rang.value?.max ?? xs.value[xs.value.length - 1],
             grid: { color: quadricula.value },
             ticks: { color: tinta.value, callback: (v) => `${nombre(Number(v), 0)} ${perDistancia.value ? 'km' : 'min'}` },
         },
@@ -359,7 +549,11 @@ const comparacio = computed(() => {
         <template #header>
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div class="min-w-0">
-                    <Link :href="route('bicis.index')" class="text-sm text-sky-600 hover:text-sky-800 dark:text-sky-400">← Bicis</Link>
+                    <div class="flex gap-3 text-sm">
+                        <Link :href="route('bicis.index')" class="text-sky-600 hover:text-sky-800 dark:text-sky-400">← Bicis</Link>
+                        <Link :href="route('bicis.index', { fitxa: sortida.vehicle.id, pestanya: 'sortides', any: sortida.data.slice(0, 4) })"
+                            class="text-sky-600 hover:text-sky-800 dark:text-sky-400">← Sortides de la {{ sortida.vehicle.nom }} ({{ sortida.data.slice(0, 4) }})</Link>
+                    </div>
                     <h2 class="truncate text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200">
                         {{ sortida.nom ?? 'Sortida' }}
                     </h2>
@@ -401,6 +595,22 @@ const comparacio = computed(() => {
                 <template v-else>
                     <!-- Mapa -->
                     <div v-if="!punts || teGps" class="overflow-hidden rounded-lg bg-white shadow-sm dark:bg-gray-800">
+                        <div v-if="punts && potPendent" class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-2 dark:border-gray-700">
+                            <div class="inline-flex rounded-md border border-gray-300 text-xs dark:border-gray-600">
+                                <button v-for="[clau, etiqueta] in [['pendent', 'Per pendent'], ['simple', 'Un color']]" :key="clau"
+                                    @click="modeMapa = clau as any"
+                                    class="px-3 py-1 first:rounded-l-md last:rounded-r-md"
+                                    :class="modeMapa === clau ? 'bg-sky-600 text-white' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700'">
+                                    {{ etiqueta }}
+                                </button>
+                            </div>
+                            <!-- Llegenda: el color no va mai sol -->
+                            <div v-if="modeMapa === 'pendent'" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-gray-400">
+                                <span v-for="t in TRAMS_PENDENT" :key="t.etiqueta" class="inline-flex items-center gap-1">
+                                    <span class="inline-block h-2 w-4 rounded-sm" :style="{ backgroundColor: t.color }"></span>{{ t.etiqueta }}
+                                </span>
+                            </div>
+                        </div>
                         <div ref="contenidorMapa" class="h-[28rem] w-full">
                             <p v-if="!punts" class="py-6 text-center text-xs text-gray-400">Carregant el recorregut…</p>
                         </div>
@@ -414,14 +624,21 @@ const comparacio = computed(() => {
                                 <span><span class="text-gray-400">Temps</span> {{ durada(lectura.t) }}</span>
                                 <span v-if="lectura.km !== null"><span class="text-gray-400">Km</span> {{ nombre(lectura.km, 2) }}</span>
                                 <span v-if="lectura.alt !== null"><span class="text-gray-400">Altitud</span> {{ nombre(lectura.alt) }} m</span>
+                                <span v-if="lectura.pendent !== null"><span class="text-gray-400">Pendent</span> {{ nombre(lectura.pendent, 1) }} %</span>
+                                <span v-if="lectura.acumulat !== null"><span class="text-gray-400">Pujat</span> {{ nombre(lectura.acumulat) }} m</span>
                                 <span v-if="lectura.kmh !== null"><span class="text-gray-400">Velocitat</span> {{ nombre(lectura.kmh, 1) }} km/h</span>
                                 <span v-if="lectura.fc !== null"><span class="text-gray-400">FC</span> {{ lectura.fc }} ppm</span>
                                 <span v-if="lectura.cad !== null"><span class="text-gray-400">Cadència</span> {{ lectura.cad }} rpm</span>
                                 <span v-if="lectura.temp !== null"><span class="text-gray-400">Temp.</span> {{ lectura.temp }} °C</span>
                             </template>
                             <span v-else class="text-xs text-gray-400 dark:text-gray-500">
-                                Passa per sobre d'una gràfica o del recorregut per veure-hi el punt.
+                                Passa per sobre d'una gràfica o del recorregut per veure-hi el punt. Arrossega sobre una
+                                gràfica (o Ctrl + roda) per ampliar un tram; doble clic per tornar a la sortida sencera.
                             </span>
+                            <button v-if="rang" @click="reiniciaZoom"
+                                class="ml-auto rounded-md border border-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
+                                Reinicia el zoom ({{ nombre(rang.min, perDistancia ? 1 : 0) }}–{{ nombre(rang.max, perDistancia ? 1 : 0) }} {{ perDistancia ? 'km' : 'min' }})
+                            </button>
                         </div>
 
                         <div class="space-y-4">
@@ -429,7 +646,7 @@ const comparacio = computed(() => {
                                 <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
                                     {{ f.titol }} <span class="ml-1 font-normal text-gray-400 dark:text-gray-500">{{ f.unitat }}</span>
                                 </h4>
-                                <div :class="f.clau === 'alt' ? 'h-44' : 'h-32'">
+                                <div :class="f.clau === 'alt' ? 'h-44' : 'h-32'" @dblclick="reiniciaZoom">
                                     <Line ref="grafiques" :data="dades(f)" :options="opcions" :plugins="[creuer]" />
                                 </div>
                             </div>

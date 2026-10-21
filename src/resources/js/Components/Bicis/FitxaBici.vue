@@ -67,9 +67,16 @@ interface Fitxa {
     components: Component[];
 }
 
-const props = defineProps<{ vehicleId: number }>();
+type Pestanya = 'anys' | 'sortides' | 'components' | 'grafiques';
 
-const pestanya = ref<'anys' | 'sortides' | 'components' | 'grafiques'>('anys');
+const props = defineProps<{
+    vehicleId: number;
+    /** Amb què s'obre: en tornar d'una sortida, la llista de sortides del seu any. */
+    pestanyaInicial?: Pestanya;
+    anyInicial?: number;
+}>();
+
+const pestanya = ref<Pestanya>(props.pestanyaInicial ?? 'anys');
 const fitxa = ref<Fitxa | null>(null);
 const error = ref<string | null>(null);
 
@@ -95,7 +102,8 @@ async function demana<T>(url: string): Promise<T | null> {
 
 onMounted(async () => {
     fitxa.value = await demana<Fitxa>(route('bicis.fitxa', props.vehicleId));
-    anySortides.value = fitxa.value?.per_any.find((a) => a.sortides > 0)?.any ?? null;
+    const anys = fitxa.value?.per_any.filter((a) => a.sortides > 0).map((a) => a.any) ?? [];
+    anySortides.value = props.anyInicial && anys.includes(props.anyInicial) ? props.anyInicial : anys[0] ?? null;
 });
 
 // ---- Formats ----
