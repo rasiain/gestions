@@ -221,6 +221,7 @@ const PERFILS: Perfil[] = [
     { clau: 'kmh', titol: 'Velocitat', unitat: 'km/h', decimals: 1 },
     { clau: 'fc', titol: 'Pulsacions', unitat: 'ppm', decimals: 0 },
     { clau: 'cad', titol: 'Cadència', unitat: 'rpm', decimals: 0 },
+    { clau: 'temp', titol: 'Temperatura', unitat: '°C', decimals: 0 },
 ];
 
 /** Només els perfils que tenen dades en aquesta sortida. */
