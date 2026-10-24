@@ -39,6 +39,7 @@
         "chartjs-adapter-date-fns": "^3.0.0",
         "chartjs-plugin-zoom": "^2.2.0",
         "date-fns": "^4.4.0",
+        "geotiff": "^3.0.5",
         "leaflet": "^1.9.4",
         "vue-chartjs": "^5.3.3"
     }
