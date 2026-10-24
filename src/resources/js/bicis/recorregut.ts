@@ -1,7 +1,35 @@
 /**
  * Peces comunes de les pàgines que dibuixen recorreguts de bici (la sortida i les rutes):
- * llegir polilínies, el pendent de cada punt i l'escala de colors per pendent.
+ * llegir polilínies, el pendent de cada punt, l'escala de colors per pendent i la roda dels mapes.
  */
+
+import L from 'leaflet';
+
+/**
+ * La roda del ratolí fa zoom al mapa només després de clicar-lo, i deixa de fer-ne quan el ratolí en
+ * surt: els mapes ocupen mitja pantalla, i si la roda hi fes zoom d'entrada, en passar-hi per sobre la
+ * pàgina deixaria de desplaçar-se. Un rètol a la cantonada ho diu.
+ */
+export function rodaEnClicar(mapa: L.Map): void {
+    const retol = new L.Control({ position: 'bottomleft' });
+    let text: HTMLElement;
+    retol.onAdd = () => {
+        text = L.DomUtil.create('div');
+        text.style.cssText = 'background:rgba(255,255,255,.85);color:#374151;font-size:11px;padding:2px 6px;border-radius:4px;pointer-events:none';
+        text.textContent = 'Clica el mapa per ampliar amb la roda';
+        return text;
+    };
+    retol.addTo(mapa);
+
+    mapa.on('click', () => {
+        mapa.scrollWheelZoom.enable();
+        text.style.display = 'none';
+    });
+    mapa.on('mouseout', () => {
+        mapa.scrollWheelZoom.disable();
+        text.style.display = '';
+    });
+}
 
 /** Els dos colors de sèrie del projecte: validats en clar i en fosc. */
 export const SERIE_BLAU = '#0284c7';

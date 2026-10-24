@@ -17,7 +17,7 @@ import { Line } from 'vue-chartjs';
 import { Chart as ChartJS, registerables } from 'chart.js';
 import type { Chart, ChartData, ChartOptions, Plugin } from 'chart.js';
 import zoomPlugin from 'chartjs-plugin-zoom';
-import { SERIE_AMBRE, SERIE_BLAU, TRAMS_PENDENT, colorPendent, pendents } from '@/bicis/recorregut';
+import { SERIE_AMBRE, SERIE_BLAU, TRAMS_PENDENT, colorPendent, pendents, rodaEnClicar } from '@/bicis/recorregut';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -282,6 +282,7 @@ function dibuixaMapa() {
     p.lat.forEach((lat, i) => { if (lat !== null && p.lon[i] !== null) coords.push([lat, p.lon[i] as number]); });
 
     mapa = L.map(contenidorMapa.value, { scrollWheelZoom: false });
+    rodaEnClicar(mapa);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',

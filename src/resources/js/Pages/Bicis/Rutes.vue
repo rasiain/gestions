@@ -12,7 +12,7 @@ import { NIVELLS, nomNivell } from '@/bicis/nivells';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { SERIE_AMBRE, SERIE_BLAU, decodifica } from '@/bicis/recorregut';
+import { SERIE_AMBRE, SERIE_BLAU, decodifica, rodaEnClicar } from '@/bicis/recorregut';
 import { num } from '@/formularis';
 
 interface Ruta {
@@ -194,6 +194,7 @@ onMounted(async () => {
     // Centenars de línies: el llenç va més de pressa que l'SVG
     // Una tolerància de 8 px fa que les línies, primes, s'encertin amb el cursor
     mapa = L.map(contenidorMapa.value, { renderer: L.canvas({ tolerance: 8 }), scrollWheelZoom: false });
+    rodaEnClicar(mapa);
     mapa.on('click', () => (seleccionada.value = null));
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,

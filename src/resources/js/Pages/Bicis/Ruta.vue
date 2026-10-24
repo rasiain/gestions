@@ -14,7 +14,7 @@ import { Chart as ChartJS, registerables } from 'chart.js';
 import type { ChartData, ChartOptions } from 'chart.js';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { SERIE_AMBRE, SERIE_BLAU, TRAMS_PENDENT, decodifica, pendents, trossosPerPendent } from '@/bicis/recorregut';
+import { SERIE_AMBRE, SERIE_BLAU, TRAMS_PENDENT, decodifica, pendents, rodaEnClicar, trossosPerPendent } from '@/bicis/recorregut';
 
 ChartJS.register(...registerables);
 
@@ -89,6 +89,7 @@ const ESTIL_MEMBRE = { color: '#6b7280', weight: 2, opacity: 0.35 };
 function dibuixaMapa() {
     if (!contenidorMapa.value) return;
     mapa = L.map(contenidorMapa.value, { scrollWheelZoom: false });
+    rodaEnClicar(mapa);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
