@@ -34,7 +34,8 @@ use Illuminate\Support\Facades\DB;
  * 6. **Neteja**, fins que no canvia res: fora els espolons de menys de ESPOLO_M (el GPS que se separa un
  *    moment del camí; els llargs es queden, que pujar i baixar pel mateix camí és una volta), els bucles
  *    d'un sol tram de menys de BUCLE_M i els trams paral·lels entre les mateixes dues cruïlles amb
- *    llargades semblants (el mateix camí gravat dues vegades: es queda el de més passades). Després es
+ *    llargades semblants i que passen a menys de MATEIX_CAMI_M l'un de l'altre (el mateix camí gravat dues
+ *    vegades: es queda el de més passades; dos camins diferents de la mateixa llargada es queden tots dos). Després es
  *    tornen a unir les cadenes que han deixat de tenir cruïlla.
  */
 class XarxaService
@@ -46,6 +47,8 @@ class XarxaService
     private const FUSIO_M = 30.0;
 
     private const APTE_CARRETERA = 0.8;
+
+    private const MATEIX_CAMI_M = 20.0;
 
     private const ESPOLO_M = 50.0;
 
@@ -418,7 +421,7 @@ class XarxaService
                 foreach (array_slice($index, 1) as $i) {
                     $l1 = $trams[$guarda]['longitud_m'];
                     $l2 = $trams[$i]['longitud_m'];
-                    if (abs($l1 - $l2) <= 0.3 * max($l1, $l2) + 20) {
+                    if (abs($l1 - $l2) <= 0.3 * max($l1, $l2) + 20 && $this->mateixCami($trams[$guarda]['nodes'], $trams[$i]['nodes'])) {
                         $trams[$guarda]['sortides'] = array_values(array_unique([...$trams[$guarda]['sortides'], ...$trams[$i]['sortides']]));
                         $trams[$guarda]['darrera'] = max($trams[$guarda]['darrera'], $trams[$i]['darrera']);
                         $fora[$i] = true;
@@ -429,6 +432,28 @@ class XarxaService
         } while (count($trams) < $abans);
 
         return $trams;
+    }
+
+    /**
+     * Si dos trams són el mateix camí: els punts de l'un passen a menys de MATEIX_CAMI_M de l'altre. No n'hi
+     * ha prou que facin la mateixa llargada: dos camins diferents entre les mateixes cruïlles també poden.
+     */
+    private function mateixCami(array $p, array $q): bool
+    {
+        [$curt, $llarg] = count($p) <= count($q) ? [$p, $q] : [$q, $p];
+        $mostra = array_slice($curt, 1, -1);
+        $mostra = $mostra === [] ? $curt : array_values(array_filter($mostra, fn ($_, $k) => $k % max(1, intdiv(count($mostra), 20)) === 0, ARRAY_FILTER_USE_BOTH));
+        foreach ($mostra as $n) {
+            $minim = INF;
+            foreach ($llarg as $m) {
+                $minim = min($minim, hypot($this->x[$n] - $this->x[$m], $this->y[$n] - $this->y[$m]));
+            }
+            if ($minim > self::MATEIX_CAMI_M) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /** Uneix els trams que es toquen en un node que ja no és cruïlla (només en té dos). */
