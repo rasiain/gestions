@@ -7,6 +7,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import SelectorAltitud from '@/Components/Bicis/SelectorAltitud.vue';
+import { NIVELLS, nomNivell } from '@/bicis/nivells';
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 import { Line } from 'vue-chartjs';
 import { Chart as ChartJS, registerables } from 'chart.js';
@@ -39,9 +40,7 @@ const props = defineProps<{
     altitud: string | null;
 }>();
 
-const ETIQUETA_NIVELL: Record<string, string> = {
-    identiques: 'Idèntiques', mateixa: 'Mateixa ruta', variants: 'Variants', zona: 'Mateixa zona',
-};
+
 
 const nombre = (v: number | null | undefined, d = 0) =>
     v === null || v === undefined ? '—' : v.toLocaleString('ca-ES', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -201,16 +200,21 @@ const opcionsPerfil = computed<ChartOptions<'line'>>(() => ({
                     <p class="text-sm text-gray-500 dark:text-gray-400">
                         {{ ruta.sortides }} {{ ruta.sortides === 1 ? 'vegada' : 'vegades' }} · {{ periode }} · {{ bicis.join(', ') }}
                     </p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                        <span class="font-medium">{{ nomNivell(ruta.nivell) }}</span>
+                        <template v-if="ruta.llindar"> (comparteixen ≥ {{ Math.round(ruta.llindar * 100) }} %)</template>:
+                        {{ NIVELLS[ruta.nivell]?.descripcio }}
+                    </p>
                     <SelectorAltitud v-model="altitud" class="mt-2" />
                 </div>
                 <!-- La mateixa ruta a cada nivell: com creix o s'aprima el grup -->
                 <div class="flex flex-wrap gap-1">
                     <Link v-for="n in altres_nivells" :key="n.id" :href="route('bicis.rutes.show', ambAltitud({ ruta: n.id }))"
-                        class="rounded-md border px-2.5 py-1 text-xs"
+                        class="rounded-md border px-2.5 py-1 text-xs" :title="NIVELLS[n.nivell]?.descripcio"
                         :class="n.id === ruta.id
                             ? 'border-sky-600 bg-sky-600 text-white'
                             : 'border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'">
-                        {{ ETIQUETA_NIVELL[n.nivell] ?? n.nivell }} <span class="tabular-nums opacity-75">{{ n.sortides }}</span>
+                        {{ nomNivell(n.nivell) }} <span class="tabular-nums opacity-75">{{ n.sortides }}</span>
                     </Link>
                 </div>
             </div>

@@ -7,6 +7,8 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import SelectorAltitud from '@/Components/Bicis/SelectorAltitud.vue';
+import InfoTolerancia from '@/Components/Bicis/InfoTolerancia.vue';
+import { NIVELLS, nomNivell } from '@/bicis/nivells';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -41,9 +43,6 @@ watch(altitud, (a) => router.get(route('bicis.rutes.index'), { ...(a ? { altitud
     { preserveState: true, preserveScroll: true, replace: true, only: ['rutes', 'altitud'] }));
 const enllacRuta = (id: number) => route('bicis.rutes.show', altitud.value ? { ruta: id, altitud: altitud.value } : { ruta: id });
 
-const ETIQUETA_NIVELL: Record<string, string> = {
-    identiques: 'Idèntiques', mateixa: 'Mateixa ruta', variants: 'Variants', zona: 'Mateixa zona',
-};
 
 // ---- Selector i filtres (el nivell va a l'adreça, per tornar-hi des del detall) ----
 const enllac = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
@@ -224,17 +223,21 @@ onUnmounted(() => mapa?.remove());
                 <!-- Selector de tolerància: quantes rutes queden a cada nivell, amb els filtres d'ara -->
                 <div class="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800">
                     <div class="flex flex-wrap items-center gap-2">
-                        <span class="mr-1 text-sm text-gray-500 dark:text-gray-400">Tolerància</span>
+                        <span class="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+                            Tolerància <InfoTolerancia :nivells="nivells" />
+                        </span>
                         <button v-for="n in nivells" :key="n.clau" @click="nivell = n.clau"
-                            class="rounded-md border px-3 py-1.5 text-sm"
+                            class="rounded-md border px-3 py-1 text-left text-sm leading-tight"
                             :class="nivell === n.clau
                                 ? 'border-sky-600 bg-sky-600 text-white'
                                 : 'border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'"
-                            :title="`Totes les sortides d'una ruta comparteixen almenys un ${Math.round(n.llindar * 100)} % del recorregut`">
-                            {{ ETIQUETA_NIVELL[n.clau] ?? n.clau }}
+                            :title="NIVELLS[n.clau]?.descripcio">
+                            {{ nomNivell(n.clau) }}
                             <span class="ml-1 tabular-nums" :class="nivell === n.clau ? 'text-sky-100' : 'text-gray-400'">{{ comptes[n.clau] ?? 0 }}</span>
+                            <span class="block text-xs" :class="nivell === n.clau ? 'text-sky-100' : 'text-gray-400'">comparteixen ≥ {{ Math.round(n.llindar * 100) }} %</span>
                         </button>
                     </div>
+                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ NIVELLS[nivell]?.descripcio }}</p>
 
                     <div class="mt-3 flex flex-wrap items-end gap-3 text-sm">
                         <label class="text-xs text-gray-500 dark:text-gray-400">
