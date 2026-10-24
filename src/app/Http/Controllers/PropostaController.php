@@ -18,14 +18,15 @@ class PropostaController extends Controller
     public function index()
     {
         return Inertia::render('Bicis/Propostes', [
-            'casa' => ['lat' => PropostesService::CASA[0], 'lon' => PropostesService::CASA[1]],
+            'casa'    => ['lat' => PropostesService::CASA[0], 'lon' => PropostesService::CASA[1]],
+            'quantes' => ['defecte' => PropostesService::QUANTES, 'maxim' => PropostesService::QUANTES_MAXIM],
         ]);
     }
 
     public function cerca(PropostaRequest $request, PropostesService $servei): JsonResponse
     {
         $d = $request->validated();
-        $resultat = $servei->proposa((float) $d['lat'], (float) $d['lon'], (float) $d['km'], (float) $d['desnivell'], $d['tipus']);
+        $resultat = $servei->proposa((float) $d['lat'], (float) $d['lon'], (float) $d['km'], (float) $d['desnivell'], $d['tipus'], (int) ($d['quantes'] ?? PropostesService::QUANTES));
 
         // Les sortides d'on surt cada proposta, amb el que en cal per enllaçar-les
         $ids = collect($resultat['propostes'])->pluck('sortides')->flatten(1)->pluck('id')->unique();

@@ -43,6 +43,11 @@ class PropostesService
 
     private const SOLAPAMENT_MAXIM = 0.6;
 
+    /** Quantes propostes per defecte i com a molt: amb més, s'assemblarien massa o no n'hi hauria prou de diferents. */
+    public const QUANTES = 5;
+
+    public const QUANTES_MAXIM = 10;
+
     /** Casa: el punt d'inici més freqüent de les sortides, l'inici per defecte. */
     public const CASA = [41.978, 2.820];
 
@@ -69,7 +74,7 @@ class PropostesService
     /**
      * @return array{inici: array{node: int, lat: float, lon: float, distancia_m: float}, propostes: array<int, array>}
      */
-    public function proposa(float $lat, float $lon, float $km, float $desnivell, string $tipus = 'btt', int $quantes = 5): array
+    public function proposa(float $lat, float $lon, float $km, float $desnivell, string $tipus = 'btt', int $quantes = self::QUANTES): array
     {
         $this->carrega($tipus);
         $inici = $this->nodeProper($lat, $lon);

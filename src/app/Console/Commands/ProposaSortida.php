@@ -14,6 +14,7 @@ class ProposaSortida extends Command
                             {--km= : Quilòmetres}
                             {--desnivell= : Desnivell positiu, en metres}
                             {--tipus=btt : btt (tots els trams) o carretera (només els aptes)}
+                            {--quantes=5 : Quantes propostes (com a molt 10)}
                             {--lat= : Latitud de l\'inici (per defecte, casa)}
                             {--lon= : Longitud de l\'inici}
                             {--gpx= : Carpeta on desar el GPX de cada proposta}';
@@ -25,8 +26,10 @@ class ProposaSortida extends Command
         $km = (float) $this->option('km');
         $desnivell = (float) $this->option('desnivell');
         $tipus = $this->option('tipus');
-        if ($km <= 0 || $this->option('desnivell') === null || ! in_array($tipus, ['btt', 'carretera'], true)) {
-            $this->error('Cal --km, --desnivell i --tipus=btt|carretera.');
+        $quantes = (int) $this->option('quantes');
+        if ($km <= 0 || $this->option('desnivell') === null || ! in_array($tipus, ['btt', 'carretera'], true)
+            || $quantes < 1 || $quantes > PropostesService::QUANTES_MAXIM) {
+            $this->error('Cal --km, --desnivell, --tipus=btt|carretera i --quantes entre 1 i ' . PropostesService::QUANTES_MAXIM . '.');
 
             return self::FAILURE;
         }
@@ -34,7 +37,7 @@ class ProposaSortida extends Command
         $lon = $this->option('lon') !== null ? (float) $this->option('lon') : PropostesService::CASA[1];
 
         $inici = microtime(true);
-        $resultat = $servei->proposa($lat, $lon, $km, $desnivell, $tipus);
+        $resultat = $servei->proposa($lat, $lon, $km, $desnivell, $tipus, $quantes);
         $this->line(sprintf('Inici a la cruïlla %d, a %d m del punt demanat. %.1f s.', $resultat['inici']['node'], $resultat['inici']['distancia_m'], microtime(true) - $inici));
 
         $noms = SortidaBici::whereIn('id', collect($resultat['propostes'])->pluck('sortides')->flatten(1)->pluck('id'))->pluck('nom', 'id');
@@ -48,7 +51,7 @@ class ProposaSortida extends Command
             }
         }
         $this->table(['#', 'Km', 'Desnivell', 'Km repetits', 'Km antics', 'Surt sobretot de'], $files);
-        if (count($files) < 5) {
+        if (count($files) < $quantes) {
             $this->warn('Només hi ha ' . count($files) . ' voltes prou diferents entre elles: la xarxa ' . ($tipus === 'carretera' ? 'de carretera ' : '') . 'no en dona més per aquí.');
         }
 

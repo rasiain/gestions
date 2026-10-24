@@ -30,12 +30,13 @@ interface Proposta {
     sortides: { id: number; km: number; nom: string | null; data: string | null; bici: string | null }[];
 }
 
-const props = defineProps<{ casa: { lat: number; lon: number } }>();
+const props = defineProps<{ casa: { lat: number; lon: number }; quantes: { defecte: number; maxim: number } }>();
 
 // ---- Formulari ----
 const km = ref('40');
 const desnivell = ref('800');
 const tipus = ref<'btt' | 'carretera'>('btt');
+const quantes = ref(props.quantes.defecte);
 const inici = ref({ ...props.casa });
 const aCasa = computed(() => Math.abs(inici.value.lat - props.casa.lat) < 1e-6 && Math.abs(inici.value.lon - props.casa.lon) < 1e-6);
 
@@ -56,6 +57,7 @@ async function proposa() {
     cercant.value = true;
     const params = new URLSearchParams({
         km: String(k), desnivell: String(d), tipus: tipus.value, lat: String(inici.value.lat), lon: String(inici.value.lon),
+        quantes: String(quantes.value),
     });
     try {
         const res = await fetch(route('bicis.propostes.cerca') + '?' + params, { headers: { Accept: 'application/json' } });
@@ -68,6 +70,9 @@ async function proposa() {
         demanat.value = { km: k!, desnivell: d! };
         triada.value = 0;
         if (!json.propostes.length) error.value = 'No hi ha cap volta per aquí amb aquests trams.';
+        else if (json.propostes.length < quantes.value) {
+            error.value = `Només n'hi ha ${json.propostes.length} prou diferents entre elles: la xarxa no en dona més per aquí.`;
+        }
     } finally {
         cercant.value = false;
     }
@@ -150,29 +155,50 @@ function tornaACasa() {
     mapa?.setView([props.casa.lat, props.casa.lon], mapa.getZoom());
 }
 
-/** Les propostes al mapa: la triada pintada per pendent, la resta fines i grises (es poden clicar). */
+/**
+ * Com es pinta la triada. D'entrada, d'un sol color: per pendent, a ciutat i al pla quasi tot és el gris
+ * de «pla», que es confon amb les teselles.
+ */
+const modeMapa = ref<'simple' | 'pendent'>('simple');
+/** Les altres propostes comparteixen molts trams amb la triada: es poden amagar perquè no l'emboliquin. */
+const mostraAltres = ref(true);
+
+/** Les propostes al mapa: la triada gruixuda i amb vora fosca i blanca; les altres, fines i transparents. */
 function dibuixa() {
     if (!mapa) return;
     capa.clearLayers();
-    propostes.value.forEach((p, n) => {
-        if (n === triada.value) return;
-        L.polyline(p.punts.map(([la, lo]) => [la, lo] as [number, number]), { color: '#6b7280', weight: 3, opacity: 0.6, dashArray: '6 6' })
-            .bindTooltip(`Proposta ${n + 1}: ${nombre(p.km, 1)} km, ${p.desnivell} m`)
-            .on('click', () => (triada.value = n))
-            .addTo(capa);
-    });
+    if (mostraAltres.value) {
+        propostes.value.forEach((p, n) => {
+            if (n === triada.value) return;
+            L.polyline(p.punts.map(([la, lo]) => [la, lo] as [number, number]), { color: '#6b7280', weight: 2, opacity: 0.45, dashArray: '4 6' })
+                .bindTooltip(`Proposta ${n + 1}: ${nombre(p.km, 1)} km, ${p.desnivell} m`)
+                .on('click', () => (triada.value = n))
+                .addTo(capa);
+        });
+    }
     const p = propostes.value[triada.value];
     if (!p) return;
-    const lat = p.punts.map((q) => q[0]), lon = p.punts.map((q) => q[1]);
     const tot = p.punts.map(([la, lo]) => [la, lo] as [number, number]);
-    L.polyline(tot, { color: '#ffffff', weight: 7, opacity: 0.9 }).addTo(capa);
-    for (const t of trossosPerPendent(lat, lon, pendents(distancies(p.punts), p.punts.map((q) => q[2])))) {
-        L.polyline(t.punts, { color: t.color, weight: 4, opacity: 1 }).addTo(capa);
+    // Vora fosca i vora blanca: destaca sobre teselles clares i fosques
+    L.polyline(tot, { color: '#0f172a', weight: 11, opacity: 0.55 }).addTo(capa);
+    L.polyline(tot, { color: '#ffffff', weight: 8, opacity: 1 }).addTo(capa);
+    if (modeMapa.value === 'simple') {
+        L.polyline(tot, { color: SERIE_BLAU, weight: 5, opacity: 1 }).addTo(capa);
+    } else {
+        const lat = p.punts.map((q) => q[0]), lon = p.punts.map((q) => q[1]);
+        for (const t of trossosPerPendent(lat, lon, pendents(distancies(p.punts), p.punts.map((q) => q[2])))) {
+            L.polyline(t.punts, { color: t.color, weight: 5, opacity: 1 }).addTo(capa);
+        }
     }
-    mapa.fitBounds(L.latLngBounds(tot), { padding: [24, 24] });
     marcador?.setZIndexOffset(1000);
 }
-watch([propostes, triada], dibuixa);
+watch([modeMapa, mostraAltres], dibuixa);
+// En triar una altra proposta, el mapa l'enquadra
+watch([propostes, triada], () => {
+    dibuixa();
+    const p = propostes.value[triada.value];
+    if (mapa && p) mapa.fitBounds(L.latLngBounds(p.punts.map(([la, lo]) => [la, lo] as [number, number])), { padding: [24, 24] });
+});
 
 // ---- Perfil ----
 const fosc = ref(false);
@@ -251,6 +277,12 @@ const opcionsPerfil = computed<ChartOptions<'line'>>(() => {
                             </button>
                         </div>
                     </div>
+                    <label class="text-xs text-gray-500 dark:text-gray-400">
+                        Propostes
+                        <select v-model.number="quantes" class="mt-1 block rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                            <option v-for="n in props.quantes.maxim" :key="n" :value="n">{{ n }}</option>
+                        </select>
+                    </label>
                     <div class="text-xs text-gray-500 dark:text-gray-400">
                         Inici
                         <div class="mt-1 flex items-center gap-2 py-1.5 text-sm text-gray-700 dark:text-gray-300">
@@ -272,11 +304,24 @@ const opcionsPerfil = computed<ChartOptions<'line'>>(() => {
 
                 <!-- Mapa -->
                 <div class="overflow-hidden rounded-lg bg-white shadow-sm dark:bg-gray-800">
-                    <div v-if="propostes.length" class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-gray-200 px-4 py-2 text-xs text-gray-600 dark:border-gray-700 dark:text-gray-400">
-                        <span v-for="t in TRAMS_PENDENT" :key="t.etiqueta" class="inline-flex items-center gap-1">
-                            <span class="inline-block h-2 w-4 rounded-sm" :style="{ backgroundColor: t.color }"></span>{{ t.etiqueta }}
-                        </span>
-                        <span class="inline-flex items-center gap-1"><span class="inline-block h-0 w-4 border-t-2 border-dashed border-gray-500"></span>les altres propostes (clica-les)</span>
+                    <div v-if="propostes.length" class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-gray-200 px-4 py-2 text-xs text-gray-600 dark:border-gray-700 dark:text-gray-400">
+                        <div class="inline-flex rounded-md border border-gray-300 dark:border-gray-600">
+                            <button v-for="[clau, etiqueta] in [['simple', 'Un color'], ['pendent', 'Per pendent']]" :key="clau" type="button"
+                                @click="modeMapa = clau as any" class="px-3 py-1 first:rounded-l-md last:rounded-r-md"
+                                :class="modeMapa === clau ? 'bg-sky-600 text-white' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700'">
+                                {{ etiqueta }}
+                            </button>
+                        </div>
+                        <template v-if="modeMapa === 'pendent'">
+                            <span v-for="t in TRAMS_PENDENT" :key="t.etiqueta" class="inline-flex items-center gap-1">
+                                <span class="inline-block h-2 w-4 rounded-sm" :style="{ backgroundColor: t.color }"></span>{{ t.etiqueta }}
+                            </span>
+                        </template>
+                        <label v-if="propostes.length > 1" class="ml-auto inline-flex items-center gap-1.5">
+                            <input type="checkbox" v-model="mostraAltres" class="rounded border-gray-300 text-sky-600 dark:border-gray-600 dark:bg-gray-700" />
+                            <span class="inline-block h-0 w-4 border-t-2 border-dashed border-gray-500"></span>
+                            les altres propostes (clica-les per triar-les)
+                        </label>
                     </div>
                     <div ref="contenidorMapa" class="h-[28rem] w-full"></div>
                 </div>

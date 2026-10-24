@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Services\PropostesService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -21,6 +22,7 @@ class PropostaRequest extends FormRequest
             'tipus'     => ['required', Rule::in(['btt', 'carretera'])],
             'lat'       => ['required', 'numeric', 'between:-90,90'],
             'lon'       => ['required', 'numeric', 'between:-180,180'],
+            'quantes'   => ['nullable', 'integer', 'min:1', 'max:' . PropostesService::QUANTES_MAXIM],
         ];
     }
 
@@ -35,6 +37,8 @@ class PropostaRequest extends FormRequest
             'tipus.in'           => 'Ha de ser BTT o carretera.',
             'lat.required'       => "Cal triar d'on surt al mapa.",
             'lon.required'       => "Cal triar d'on surt al mapa.",
+            'quantes.min'        => 'Com a mínim una proposta.',
+            'quantes.max'        => 'Com a molt ' . PropostesService::QUANTES_MAXIM . ' propostes.',
         ];
     }
 }

@@ -91,7 +91,8 @@ class PropostesTest extends TestCase
     {
         $this->actingAs(\App\Models\User::factory()->create());
         $this->get(route('bicis.propostes.index'))->assertInertia(fn ($p) => $p->component('Bicis/Propostes')
-            ->where('casa', ['lat' => PropostesService::CASA[0], 'lon' => PropostesService::CASA[1]]));
+            ->where('casa', ['lat' => PropostesService::CASA[0], 'lon' => PropostesService::CASA[1]])
+            ->where('quantes', ['defecte' => 5, 'maxim' => 10]));
 
         [$lat, $lon] = $this->graus(0, 0);
         $r = $this->getJson(route('bicis.propostes.cerca', ['km' => 4, 'desnivell' => 0, 'tipus' => 'btt', 'lat' => $lat, 'lon' => $lon]))
@@ -107,6 +108,7 @@ class PropostesTest extends TestCase
         $this->actingAs(\App\Models\User::factory()->create());
         $this->getJson(route('bicis.propostes.cerca', ['tipus' => 'muntanya']))
             ->assertStatus(422)->assertJsonValidationErrors(['km', 'desnivell', 'tipus', 'lat', 'lon']);
+        $this->getJson(route('bicis.propostes.cerca', ['quantes' => 11]))->assertJsonValidationErrors(['quantes']);
     }
 
     public function test_el_gpx_porta_el_tracat_amb_l_altitud(): void
