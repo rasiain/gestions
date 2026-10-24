@@ -14,12 +14,28 @@ class CorregeixAltitud extends Command
     protected $signature = 'sortides:corregeix-altitud
                             {--sortida=* : Només aquestes sortides (es tornen a llegir encara que ja ho estiguin)}
                             {--totes : Torna a llegir totes les sortides, no només les pendents}
-                            {--prova : Llegeix i diu què cobreix cada font, però no desa res}';
+                            {--prova : Llegeix i diu què cobreix cada font, però no desa res}
+                            {--desnivells : No llegeix els models: només recalcula els totals de desnivell amb el que ja hi ha desat}';
 
     protected $description = "Llegeix l'altitud del terreny (ICGC, IGN) als punts de les sortides en bici";
 
     public function handle(AltitudTerrenyService $servei): int
     {
+        if ($this->option('desnivells')) {
+            // Sense --sortida, «pendents» no vol dir res aquí: es recalculen totes
+            $ids = $this->option('sortida') !== [] ? array_map('intval', $this->option('sortida')) : $servei->sortides()->pluck('id')->all();
+            $barra = $this->output->createProgressBar(count($ids));
+            foreach ($ids as $id) {
+                $servei->desaDesnivells($id);
+                $barra->advance();
+            }
+            $barra->finish();
+            $this->newLine();
+            $this->info(count($ids) . ' sortides amb els totals de desnivell recalculats.');
+
+            return self::SUCCESS;
+        }
+
         $ids = match (true) {
             $this->option('sortida') !== [] => array_map('intval', $this->option('sortida')),
             $this->option('totes')          => $servei->sortides()->pluck('id')->all(),

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\SortidaBici;
+use App\Support\Desnivell;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\Process\Process;
 
@@ -125,8 +126,45 @@ class AltitudTerrenyService
                 }
             }
         });
+        $this->desaDesnivells($id);
 
         return $ambPosicio;
+    }
+
+    /**
+     * Els totals de desnivell d'una sortida, de l'altitud del dispositiu i de cada model que la
+     * cobreix, amb el mateix llindar que la pantalla (`Desnivell`). Substitueix els que hi hagués.
+     *
+     * @return array<string, array{pujada: float, baixada: float}> per "metode/font"
+     */
+    public function desaDesnivells(int $id): array
+    {
+        $recorreguts = DB::connection('recorreguts');
+        $perfils = ['dispositiu/dispositiu' => $recorreguts->table('punts')->where('sortida_id', $id)->orderBy('t')
+            ->pluck('alt')->map(fn ($a) => $a === null ? null : $a / 100)];
+        $cobertes = $recorreguts->table('altituds_terreny_sortides')->where('sortida_id', $id)->where('sense_dades', 0)->pluck('font');
+        foreach ($cobertes as $font) {
+            $perfils["terreny/{$font}"] = $recorreguts->table('altituds_terreny')->where('sortida_id', $id)->where('font', $font)
+                ->orderBy('t')->pluck('alt')->map(fn ($a) => $a / 100);
+        }
+
+        $totals = [];
+        foreach ($perfils as $clau => $alts) {
+            if ($alts->filter(fn ($a) => $a !== null)->isNotEmpty()) {
+                $totals[$clau] = Desnivell::calcula($alts);
+            }
+        }
+
+        DB::transaction(function () use ($id, $totals) {
+            DB::table('g_sortida_desnivells')->where('sortida_id', $id)->delete();
+            foreach ($totals as $clau => $t) {
+                [$metode, $font] = explode('/', $clau);
+                DB::table('g_sortida_desnivells')->insert(['sortida_id' => $id, 'metode' => $metode, 'font' => $font,
+                    'pujada_m' => $t['pujada'], 'baixada_m' => $t['baixada']]);
+            }
+        });
+
+        return $totals;
     }
 
     private function punts(int $id)

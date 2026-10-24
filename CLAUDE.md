@@ -290,6 +290,8 @@ La pestanya **Gràfiques** dibuixa el que diuen els repostatges (chart.js + vue-
 
 `scripts/altitud-terreny.mjs` llegeix l'altitud del terreny als punts (bilineal; l'ICGC en UTM 31N amb una conversió pròpia, l'IGN amb `geotiff`) i **`sortides:corregeix-altitud [--sortida=*] [--totes] [--prova]`** (`AltitudTerrenyService`) la desa a `recorreguts.sqlite`: `altituds_terreny` (sortida, font, t, alt en cm) i `altituds_terreny_sortides`, que diu per sortida i font si s'ha llegit i quants punts han quedat sense dades. **Una font només es desa si cobreix tots els punts amb posició.** Per defecte llegeix només les pendents; les sortides es passen al lector ordenades per zona perquè cada full es llegeixi un sol cop (tot l'historial, ~2 min). Al model de l'IGN el mar i l'estranger valen 0: a la costa es fa la mitjana de les cel·les que tenen dades, i un punt amb totes quatre a 0 val 0 només si a ~45 m hi ha terra baixa (≤ 10 m) —si no, al Pirineu un punt de França sortiria a 0 m—.
 
+**`g_sortida_desnivells`** desa la pujada i la baixada de cada sortida per `metode` (`dispositiu`, `terreny`; `combinat`, pendent) i `font` (`dispositiu`, `icgc`, `ign`), per a les llistes, les rutes i la fitxa de la bici. Es recalcula sola en llegir una sortida, i `sortides:corregeix-altitud --desnivells` la refà des del que hi ha desat (~8 s per a tot). El càlcul és `App\Support\Desnivell`, **el mateix que `acumulat` de `Pages/Bicis/Sortida.vue`** (una pujada compta quan supera en 2,5 m el punt de referència): si divergissin, la sortida i les llistes donarien desnivells diferents.
+
 Els CSV del Numbers van del més recent al més antic i hi ha dies amb dos repostatges: l'ordenació desempata per `km_totals`, que només puja.
 
 ### Formularis d'Inertia: `data` és un nom prohibit
