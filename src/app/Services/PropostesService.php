@@ -43,6 +43,9 @@ class PropostesService
 
     private const SOLAPAMENT_MAXIM = 0.6;
 
+    /** Casa: el punt d'inici més freqüent de les sortides, l'inici per defecte. */
+    public const CASA = [41.978, 2.820];
+
     /** Un tram que fa més d'això que no s'ha fet, a la proposta s'avisa. */
     public const ANYS_ANTIC = 3;
 

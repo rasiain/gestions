@@ -87,6 +87,28 @@ class PropostesTest extends TestCase
         }
     }
 
+    public function test_la_pantalla_porta_casa_i_la_cerca_les_propostes(): void
+    {
+        $this->actingAs(\App\Models\User::factory()->create());
+        $this->get(route('bicis.propostes.index'))->assertInertia(fn ($p) => $p->component('Bicis/Propostes')
+            ->where('casa', ['lat' => PropostesService::CASA[0], 'lon' => PropostesService::CASA[1]]));
+
+        [$lat, $lon] = $this->graus(0, 0);
+        $r = $this->getJson(route('bicis.propostes.cerca', ['km' => 4, 'desnivell' => 0, 'tipus' => 'btt', 'lat' => $lat, 'lon' => $lon]))
+            ->assertOk()->json();
+        $this->assertNotEmpty($r['propostes']);
+        $sortides = $r['propostes'][0]['sortides'];
+        $this->assertSame(['id', 'km', 'nom', 'data', 'bici'], array_keys($sortides[0]));
+        $this->assertSame('Bici btt', collect($sortides)->firstWhere('km', '>', 1)['bici']);
+    }
+
+    public function test_la_cerca_diu_que_falta(): void
+    {
+        $this->actingAs(\App\Models\User::factory()->create());
+        $this->getJson(route('bicis.propostes.cerca', ['tipus' => 'muntanya']))
+            ->assertStatus(422)->assertJsonValidationErrors(['km', 'desnivell', 'tipus', 'lat', 'lon']);
+    }
+
     public function test_el_gpx_porta_el_tracat_amb_l_altitud(): void
     {
         [$lat, $lon] = $this->graus(0, 0);

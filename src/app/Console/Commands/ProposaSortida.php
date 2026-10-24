@@ -10,9 +10,6 @@ use Illuminate\Support\Facades\File;
 /** Proposa voltes per la xarxa de camins de les sortides que s'acostin als km i al desnivell demanats. */
 class ProposaSortida extends Command
 {
-    /** Casa: el punt d'inici més freqüent de les sortides. */
-    public const CASA = [41.978, 2.820];
-
     protected $signature = 'sortides:proposa
                             {--km= : Quilòmetres}
                             {--desnivell= : Desnivell positiu, en metres}
@@ -33,8 +30,8 @@ class ProposaSortida extends Command
 
             return self::FAILURE;
         }
-        $lat = $this->option('lat') !== null ? (float) $this->option('lat') : self::CASA[0];
-        $lon = $this->option('lon') !== null ? (float) $this->option('lon') : self::CASA[1];
+        $lat = $this->option('lat') !== null ? (float) $this->option('lat') : PropostesService::CASA[0];
+        $lon = $this->option('lon') !== null ? (float) $this->option('lon') : PropostesService::CASA[1];
 
         $inici = microtime(true);
         $resultat = $servei->proposa($lat, $lon, $km, $desnivell, $tipus);

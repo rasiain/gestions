@@ -573,6 +573,10 @@ function elimina(vehicle: Vehicle) {
                         class="inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
                         Rutes
                     </Link>
+                    <Link v-if="!props.esMotor" :href="route('bicis.propostes.index')"
+                        class="inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
+                        Proposa
+                    </Link>
                     <Link v-if="!props.esMotor" :href="route('bicis.material.index')"
                         class="inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
                         Material
