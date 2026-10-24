@@ -164,6 +164,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/bicis/sortides/{sortida}', [SortidaBiciController::class, 'show'])->name('bicis.sortida');
     Route::get('/bicis/sortides/{sortida}/punts', [SortidaBiciController::class, 'punts'])->name('bicis.sortida.punts');
     Route::put('/bicis/sortides/{sortida}/material', [SortidaBiciController::class, 'material'])->name('bicis.sortida.material');
+    Route::put('/bicis/sortides/{sortida}/altitud', [SortidaBiciController::class, 'altitud'])->name('bicis.sortida.altitud');
+    Route::put('/bicis/altitud-defecte', [SortidaBiciController::class, 'altitudDefecte'])->name('bicis.altitud-defecte');
     Route::post('/vehicles', [VehicleController::class, 'store'])->name('vehicles.store');
     Route::put('/vehicles/{vehicle}', [VehicleController::class, 'update'])->name('vehicles.update');
     Route::delete('/vehicles/{vehicle}', [VehicleController::class, 'destroy'])->name('vehicles.destroy');

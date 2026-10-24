@@ -5,9 +5,13 @@
  *
  * El mapa i els perfils van lligats per un sol índex de punt: passar per sobre de qualsevol
  * gràfica o del recorregut el marca a tot arreu. Els punts es demanen en obrir la pàgina.
+ *
+ * L'altitud pot ser la del dispositiu, la del model del terreny o la combinació de totes dues
+ * (vegeu App\Support\AltitudCombinada): el servidor envia tots els perfils amb els punts, i el
+ * mètode triat canvia el perfil d'altitud, el pendent, el desnivell acumulat i el mapa.
  */
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 import { Line } from 'vue-chartjs';
 import { Chart as ChartJS, registerables } from 'chart.js';
@@ -29,7 +33,12 @@ interface Resum {
 interface Punts {
     t: number[]; lat: (number | null)[]; lon: (number | null)[]; alt: (number | null)[];
     km: (number | null)[]; kmh: (number | null)[]; fc: (number | null)[]; cad: (number | null)[]; temp: (number | null)[];
+    /** Els perfils del terreny i combinats, per "metode/font" (p. ex. "combinat/icgc"). */
+    altituds: Record<string, (number | null)[]>;
 }
+
+type Metode = 'dispositiu' | 'terreny' | 'combinat';
+interface PreferenciaAltitud { metode: Metode; font: string }
 
 const props = defineProps<{
     sortida: {
@@ -39,11 +48,19 @@ const props = defineProps<{
         material: { id: number; nom: string; tipus: string }[];
     };
     resums: { garmin: Resum; dispositiu: Resum | null };
+    altitud: {
+        fonts: string[];
+        defecte: PreferenciaAltitud;
+        sortida: PreferenciaAltitud | null;
+        desnivells: Record<string, { pujada: number; baixada: number }>;
+    };
     anterior: number | null;
     seguent: number | null;
     bicis: { id: number; nom: string; actiu: boolean }[];
     peces: { id: number; nom: string; tipus: string; estat: string; data_inici: string | null; data_fi: string | null; muntat_a_vehicle_id: number | null }[];
 }>();
+
+const g = props.resums.garmin;
 
 const ETIQUETA_TIPUS: Record<string, string> = {
     mountain_biking: 'BTT', cycling: 'Ciclisme', road_biking: 'Carretera', gravel_cycling: 'Gravel',
@@ -77,6 +94,63 @@ onMounted(async () => {
     dibuixaMapa();
 });
 
+// ---- Altitud: dispositiu, terreny o combinada ----
+const ETIQUETA_METODE: Record<Metode, string> = { dispositiu: 'Dispositiu', terreny: 'Model del terreny', combinat: 'Combinat' };
+const AJUDA_METODE: Record<Metode, string> = {
+    dispositiu: "L'altímetre del dispositiu, tal com es va gravar.",
+    terreny: "L'altitud del terreny al punt, del model (ICGC 2 m o IGN 5 m). En un pont hi posa el fons de la vall.",
+    combinat: "El nivell del model i el detall de l'altímetre on és de fiar: corregeix el calibratge, la deriva i el soroll.",
+};
+const ETIQUETA_FONT: Record<string, string> = { icgc: 'ICGC', ign: 'IGN' };
+
+/** Una preferència portada a la sortida: la font que demana si la cobreix, si no la millor; sense cap, el dispositiu. */
+function resol(p: PreferenciaAltitud): { metode: Metode; font: string | null } {
+    const fonts = props.altitud.fonts;
+    if (p.metode === 'dispositiu' || fonts.length === 0) return { metode: 'dispositiu', font: null };
+    return { metode: p.metode, font: fonts.includes(p.font) ? p.font : fonts[0] };
+}
+const igual = (a: { metode: Metode; font: string | null }, b: { metode: Metode; font: string | null }) =>
+    a.metode === b.metode && (a.metode === 'dispositiu' || a.font === b.font);
+
+const triat = ref(resol(props.altitud.sortida ?? props.altitud.defecte));
+const clauPerfil = computed(() => (triat.value.metode === 'dispositiu' ? 'dispositiu/dispositiu' : `${triat.value.metode}/${triat.value.font}`));
+
+/** L'altitud de cada punt amb el mètode triat. */
+const alt = computed<(number | null)[]>(() => {
+    const p = punts.value;
+    if (!p) return [];
+    return triat.value.metode === 'dispositiu' ? p.alt : (p.altituds?.[clauPerfil.value] ?? p.alt);
+});
+
+const desada = computed(() => resol(props.altitud.sortida ?? props.altitud.defecte));
+const perDefecte = computed(() => resol(props.altitud.defecte));
+
+function triaMetode(metode: Metode) {
+    triat.value = resol({ metode, font: triat.value.font ?? props.altitud.fonts[0] ?? 'millor' });
+}
+const opcionsDesar = { preserveScroll: true, preserveState: true };
+const desaPerSortida = () => router.put(route('bicis.sortida.altitud', props.sortida.id), { ...triat.value }, opcionsDesar);
+const tornaAlDefecte = () => {
+    router.put(route('bicis.sortida.altitud', props.sortida.id), { metode: null }, opcionsDesar);
+    triat.value = perDefecte.value;
+};
+const desaPerDefecte = () => router.put(route('bicis.altitud-defecte'), { ...triat.value }, opcionsDesar);
+
+/** Els desnivells de cada perfil, per comparar-los: el triat, ressaltat. */
+const desnivells = computed(() => {
+    const d = props.altitud.desnivells;
+    const files: { clau: string; etiqueta: string; pujada: number | null; baixada: number | null }[] = [];
+    files.push({ clau: 'garmin', etiqueta: 'Garmin Connect', pujada: g.pujada, baixada: g.baixada });
+    if (d['dispositiu/dispositiu']) files.push({ clau: 'dispositiu/dispositiu', etiqueta: 'Dispositiu', ...d['dispositiu/dispositiu'] });
+    for (const metode of ['combinat', 'terreny'] as Metode[]) {
+        for (const font of props.altitud.fonts) {
+            const t = d[`${metode}/${font}`];
+            if (t) files.push({ clau: `${metode}/${font}`, etiqueta: `${ETIQUETA_METODE[metode]} · ${ETIQUETA_FONT[font] ?? font}`, ...t });
+        }
+    }
+    return files;
+});
+
 /** L'eix de les gràfiques: la distància si n'hi ha (a l'exterior), si no el temps (als rodets). */
 const perDistancia = computed(() => {
     const km = punts.value?.km ?? [];
@@ -106,7 +180,7 @@ const actiu = ref<number | null>(null);
 
 /** El pendent de cada punt (vegeu `pendents()`), només amb distància real. */
 const pendent = computed<(number | null)[]>(() =>
-    punts.value && perDistancia.value ? pendents(xs.value, punts.value.alt) : []);
+    punts.value && perDistancia.value ? pendents(xs.value, alt.value) : []);
 
 /** Quant ha de pujar l'altitud des de l'últim punt de referència perquè compti com a pujada. */
 const LLINDAR_PUJADA_M = 2.5;
@@ -114,23 +188,24 @@ const LLINDAR_PUJADA_M = 2.5;
 /**
  * Desnivell positiu acumulat fins a cada punt. Sumar cada pujadeta del perfil donaria un 30 %
  * més que el dispositiu (el soroll de l'altímetre també puja); amb un llindar de 2,5 m la
- * diferència queda en pocs punts (mesurat sobre 40 sortides). La corba s'escala perquè acabi
- * exactament en el desnivell del resum: la forma surt dels punts, i el total quadra amb el número
- * de dalt de la pàgina.
+ * diferència queda en pocs punts (mesurat sobre 40 sortides). Amb l'altitud del dispositiu, la
+ * corba s'escala perquè acabi exactament en el desnivell del resum de Garmin; amb el terreny o la
+ * combinada no cal, perquè el total desat surt d'aquest mateix càlcul (App\Support\Desnivell).
  */
 const acumulat = computed<(number | null)[]>(() => {
     const p = punts.value;
     if (!p || !perDistancia.value) return [];
-    const sortida: (number | null)[] = new Array(p.alt.length).fill(null);
+    const alts = alt.value;
+    const sortida: (number | null)[] = new Array(alts.length).fill(null);
     let ref: number | null = null, total = 0;
-    p.alt.forEach((a, i) => {
+    alts.forEach((a, i) => {
         if (a !== null) {
             if (ref === null || a < ref) ref = ref === null || ref - a >= LLINDAR_PUJADA_M ? a : ref;
             if (a - ref >= LLINDAR_PUJADA_M) { total += a - ref; ref = a; }
         }
         sortida[i] = total;
     });
-    const resum = props.resums.garmin.pujada;
+    const resum = triat.value.metode === 'dispositiu' ? props.resums.garmin.pujada : null;
     const factor = resum && total > 0 ? resum / total : 1;
     return sortida.map((v) => (v === null ? null : Math.round(v * factor)));
 });
@@ -139,7 +214,7 @@ const lectura = computed(() => {
     const p = punts.value, i = actiu.value;
     if (!p || i === null) return null;
     return {
-        t: p.t[i], km: p.km[i], alt: p.alt[i], pendent: pendent.value[i] ?? null, acumulat: acumulat.value[i] ?? null,
+        t: p.t[i], km: p.km[i], alt: alt.value[i] ?? null, pendent: pendent.value[i] ?? null, acumulat: acumulat.value[i] ?? null,
         kmh: p.kmh[i], fc: p.fc[i], cad: p.cad[i], temp: p.temp[i],
     };
 });
@@ -291,7 +366,7 @@ function ressaltaTram(r: { min: number; max: number } | null, enquadra = true) {
 }
 
 watch(rang, (r) => ressaltaTram(r));
-watch(modeMapa, () => {
+watch([modeMapa, pendent], () => {
     pintaTraca();
     ressaltaTram(rang.value, false);
 });
@@ -356,6 +431,7 @@ const PERFILS: Perfil[] = [
 const serie = (clau: Perfil['clau']): (number | null)[] =>
     clau === 'pendent' ? pendent.value
         : clau === 'acumulat' ? acumulat.value
+        : clau === 'alt' ? alt.value
         : ((punts.value?.[clau] ?? []) as (number | null)[]);
 
 /** Només els perfils que tenen dades en aquesta sortida. */
@@ -459,11 +535,13 @@ const pecesPerTipus = computed(() => {
 });
 
 // ---- Resum ----
-const g = props.resums.garmin;
 const xifres = computed(() => [
     { etiqueta: 'Distància', valor: `${nombre(g.km, 1)} km` },
     { etiqueta: 'En moviment', valor: durada(g.moviment_s ?? g.temps_s) },
-    { etiqueta: 'Desnivell +', valor: `${nombre(g.pujada)} m${props.sortida.desnivell_corregit ? ' *' : ''}` },
+    // Amb el dispositiu, el de Garmin Connect (el de sempre); amb un altre mètode, el seu
+    triat.value.metode === 'dispositiu'
+        ? { etiqueta: 'Desnivell +', valor: `${nombre(g.pujada)} m${props.sortida.desnivell_corregit ? ' *' : ''}` }
+        : { etiqueta: `Desnivell + (${ETIQUETA_METODE[triat.value.metode].toLowerCase()})`, valor: `${nombre(props.altitud.desnivells[clauPerfil.value]?.pujada ?? null)} m` },
     { etiqueta: 'Velocitat mitjana', valor: `${nombre(g.kmh, 1)} km/h` },
     { etiqueta: 'Pulsacions mitjanes', valor: g.fc ? `${g.fc} ppm` : '—' },
     { etiqueta: 'Calories', valor: g.calories ? `${nombre(g.calories)} kcal` : '—' },
@@ -581,6 +659,45 @@ const comparacio = computed(() => {
 
                     <!-- Perfils -->
                     <div v-if="punts" class="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800">
+                        <!-- Quina altitud: canvia el perfil, el pendent, el desnivell acumulat i el mapa -->
+                        <div v-if="altitud.fonts.length" class="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-gray-200 pb-3 dark:border-gray-700">
+                            <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Altitud</span>
+                            <div class="inline-flex rounded-md border border-gray-300 text-xs dark:border-gray-600">
+                                <button v-for="m in (['dispositiu', 'combinat', 'terreny'] as Metode[])" :key="m"
+                                    @click="triaMetode(m)" :title="AJUDA_METODE[m]"
+                                    class="px-3 py-1 first:rounded-l-md last:rounded-r-md"
+                                    :class="triat.metode === m ? 'bg-sky-600 text-white' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700'">
+                                    {{ ETIQUETA_METODE[m] }}
+                                </button>
+                            </div>
+                            <div v-if="triat.metode !== 'dispositiu' && altitud.fonts.length > 1" class="inline-flex rounded-md border border-gray-300 text-xs dark:border-gray-600">
+                                <button v-for="f in altitud.fonts" :key="f" @click="triat = { metode: triat.metode, font: f }"
+                                    class="px-3 py-1 first:rounded-l-md last:rounded-r-md"
+                                    :class="triat.font === f ? 'bg-sky-600 text-white' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700'">
+                                    {{ ETIQUETA_FONT[f] ?? f }}
+                                </button>
+                            </div>
+                            <span class="text-xs text-gray-500 dark:text-gray-400">{{ AJUDA_METODE[triat.metode] }}</span>
+                            <div class="ml-auto flex flex-wrap items-center gap-2 text-xs">
+                                <span v-if="altitud.sortida && igual(triat, desada)" class="text-gray-400 dark:text-gray-500">desada per a aquesta sortida</span>
+                                <button v-if="!igual(triat, desada) || !altitud.sortida && !igual(triat, perDefecte)" @click="desaPerSortida"
+                                    class="rounded-md border border-gray-300 px-2 py-0.5 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
+                                    Desa-la per a aquesta sortida
+                                </button>
+                                <button v-if="altitud.sortida" @click="tornaAlDefecte"
+                                    class="rounded-md border border-gray-300 px-2 py-0.5 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
+                                    Torna a la de per defecte ({{ ETIQUETA_METODE[perDefecte.metode].toLowerCase() }})
+                                </button>
+                                <button v-if="!igual(triat, perDefecte)" @click="desaPerDefecte"
+                                    class="rounded-md border border-gray-300 px-2 py-0.5 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
+                                    Fes-la la de per defecte
+                                </button>
+                            </div>
+                        </div>
+                        <p v-else-if="teGps" class="mb-3 border-b border-gray-200 pb-3 text-xs text-gray-400 dark:border-gray-700 dark:text-gray-500">
+                            L'altitud és la del dispositiu: cap model del terreny no cobreix aquesta sortida sencera.
+                        </p>
+
                         <!-- Lectura del punt assenyalat: fa de tooltip comú a totes les gràfiques -->
                         <div class="mb-3 flex min-h-[1.5rem] flex-wrap gap-x-5 gap-y-1 text-sm tabular-nums text-gray-700 dark:text-gray-300">
                             <template v-if="lectura">
@@ -644,6 +761,33 @@ const comparacio = computed(() => {
                             gravar la sortida; en ambre, on difereixen més d'un 5 %.
                             <template v-if="sortida.desnivell_corregit"> * Garmin Connect va corregir el desnivell d'aquesta sortida.</template>
                         </p>
+
+                        <template v-if="desnivells.length > 2">
+                            <h3 class="mb-2 mt-5 text-sm font-semibold text-gray-700 dark:text-gray-300">Desnivell segons l'altitud</h3>
+                            <table class="min-w-full text-sm">
+                                <thead>
+                                    <tr class="border-b border-gray-200 text-left text-xs uppercase text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                                        <th class="pb-1 pr-3 font-medium"></th>
+                                        <th class="pb-1 pr-3 text-right font-medium">Desnivell +</th>
+                                        <th class="pb-1 text-right font-medium">Desnivell −</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                    <tr v-for="f in desnivells" :key="f.clau" :class="f.clau === clauPerfil ? 'font-semibold' : ''">
+                                        <td class="py-1 pr-3 text-gray-600 dark:text-gray-400">
+                                            {{ f.etiqueta }}
+                                            <span v-if="f.clau === clauPerfil" class="ml-1 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-normal text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">el de les gràfiques</span>
+                                        </td>
+                                        <td class="py-1 pr-3 text-right tabular-nums text-gray-900 dark:text-gray-100">{{ nombre(f.pujada) }} m</td>
+                                        <td class="py-1 text-right tabular-nums text-gray-900 dark:text-gray-100">{{ nombre(f.baixada) }} m</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">
+                                Tots menys el de Garmin Connect es calculen igual: una pujada compta quan supera en 2,5 m el
+                                punt de referència. Per això el del dispositiu pot diferir una mica del que va calcular ell.
+                            </p>
+                        </template>
                     </div>
 
                     <!-- Material -->

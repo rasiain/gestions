@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\Preferencia;
 use App\Models\SortidaBici;
+use App\Support\AltitudCombinada;
 use App\Support\Desnivell;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\Process\Process;
@@ -14,7 +16,15 @@ use Symfony\Component\Process\Process;
  */
 class AltitudTerrenyService
 {
+    /** Per ordre de preferència: la primera que cobreix la sortida és «la millor disponible». */
     public const FONTS = ['icgc', 'ign'];
+
+    public const METODES = ['dispositiu', 'terreny', 'combinat'];
+
+    /** Fins que no es tria res, l'altitud és la del dispositiu, com abans de tenir els models. */
+    public const PER_DEFECTE = ['metode' => 'dispositiu', 'font' => 'millor'];
+
+    public const CLAU_PREFERENCIA = 'bicis.altitud';
 
     private const SEMICERCLE = 180 / 2 ** 31;
 
@@ -132,25 +142,17 @@ class AltitudTerrenyService
     }
 
     /**
-     * Els totals de desnivell d'una sortida, de l'altitud del dispositiu i de cada model que la
-     * cobreix, amb el mateix llindar que la pantalla (`Desnivell`). Substitueix els que hi hagués.
+     * Els totals de desnivell d'una sortida, de l'altitud del dispositiu, de cada model que la cobreix
+     * i de la combinació de tots dos (`AltitudCombinada`), amb el mateix llindar que la pantalla
+     * (`Desnivell`). Substitueix els que hi hagués.
      *
      * @return array<string, array{pujada: float, baixada: float}> per "metode/font"
      */
     public function desaDesnivells(int $id): array
     {
-        $recorreguts = DB::connection('recorreguts');
-        $perfils = ['dispositiu/dispositiu' => $recorreguts->table('punts')->where('sortida_id', $id)->orderBy('t')
-            ->pluck('alt')->map(fn ($a) => $a === null ? null : $a / 100)];
-        $cobertes = $recorreguts->table('altituds_terreny_sortides')->where('sortida_id', $id)->where('sense_dades', 0)->pluck('font');
-        foreach ($cobertes as $font) {
-            $perfils["terreny/{$font}"] = $recorreguts->table('altituds_terreny')->where('sortida_id', $id)->where('font', $font)
-                ->orderBy('t')->pluck('alt')->map(fn ($a) => $a / 100);
-        }
-
         $totals = [];
-        foreach ($perfils as $clau => $alts) {
-            if ($alts->filter(fn ($a) => $a !== null)->isNotEmpty()) {
+        foreach ($this->perfils($id) as $clau => $alts) {
+            if (array_filter($alts, fn ($a) => $a !== null) !== []) {
                 $totals[$clau] = Desnivell::calcula($alts);
             }
         }
@@ -165,6 +167,57 @@ class AltitudTerrenyService
         });
 
         return $totals;
+    }
+
+    /** El mètode i la font per defecte. */
+    public function perDefecte(): array
+    {
+        return Preferencia::valor(self::CLAU_PREFERENCIA, self::PER_DEFECTE);
+    }
+
+    /**
+     * El que la pantalla d'una sortida necessita per triar l'altitud: les fonts que la cobreixen,
+     * la preferència per defecte i la de la sortida, i els totals de desnivell de cada perfil.
+     */
+    public function opcions(SortidaBici $sortida): array
+    {
+        $cobertes = DB::connection('recorreguts')->table('altituds_terreny_sortides')
+            ->where('sortida_id', $sortida->id)->where('sense_dades', 0)->pluck('font')->all();
+
+        return [
+            'fonts'      => array_values(array_intersect(self::FONTS, $cobertes)),
+            'defecte'    => $this->perDefecte(),
+            'sortida'    => $sortida->altitud_metode === null ? null
+                : ['metode' => $sortida->altitud_metode, 'font' => $sortida->altitud_font ?? 'millor'],
+            'desnivells' => DB::table('g_sortida_desnivells')->where('sortida_id', $sortida->id)->get()
+                ->mapWithKeys(fn ($d) => ["{$d->metode}/{$d->font}" => ['pujada' => (float) $d->pujada_m, 'baixada' => (float) $d->baixada_m]]),
+        ];
+    }
+
+    /**
+     * Els perfils d'altitud d'una sortida, en m i alineats amb els seus punts: el del dispositiu i,
+     * per cada model que la cobreix, el del terreny i el combinat.
+     *
+     * @return array<string, array<int, ?float>> per "metode/font"
+     */
+    public function perfils(int $id): array
+    {
+        $recorreguts = DB::connection('recorreguts');
+        $punts = $recorreguts->table('punts')->where('sortida_id', $id)->orderBy('t')->get(['t', 'dist', 'alt']);
+        $perfils = ['dispositiu/dispositiu' => $punts->map(fn ($p) => $p->alt === null ? null : $p->alt / 100)->all()];
+
+        $cobertes = $recorreguts->table('altituds_terreny_sortides')->where('sortida_id', $id)->where('sense_dades', 0)->pluck('font');
+        foreach ($cobertes as $font) {
+            $terreny = $recorreguts->table('altituds_terreny')->where('sortida_id', $id)->where('font', $font)->pluck('alt', 't');
+            $perfils["terreny/{$font}"] = $punts->map(fn ($p) => isset($terreny[$p->t]) ? $terreny[$p->t] / 100 : null)->all();
+            $perfils["combinat/{$font}"] = AltitudCombinada::calcula($punts->map(fn ($p) => [
+                $p->dist === null ? null : $p->dist / 100,
+                $p->alt === null ? null : $p->alt / 100,
+                isset($terreny[$p->t]) ? $terreny[$p->t] / 100 : null,
+            ])->all());
+        }
+
+        return $perfils;
     }
 
     private function punts(int $id)

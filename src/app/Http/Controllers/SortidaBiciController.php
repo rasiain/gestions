@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\AltitudPreferenciaRequest;
 use App\Http\Requests\SortidaMaterialRequest;
 use App\Models\MaterialEsportiu;
+use App\Models\Preferencia;
 use App\Models\SortidaBici;
 use App\Models\Vehicle;
 use App\Models\VehicleDespesa;
+use App\Services\AltitudTerrenyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -237,6 +240,7 @@ class SortidaBiciController extends Controller
                     'temp_max'  => $d['maxTemperature'] ?? null,
                 ],
             ],
+            'altitud'  => app(AltitudTerrenyService::class)->opcions($sortida),
             'anterior' => $anterior,
             'seguent'  => $seguent,
             // Per corregir el material: les bicis i la resta de peces, amb les dates de cada una
@@ -295,6 +299,34 @@ class SortidaBiciController extends Controller
             $columnes['temp'][] = $p->temp !== null ? (int) $p->temp : null;
         }
 
+        // Els perfils del terreny i combinats de cada model que la cobreix; el del dispositiu és `alt`
+        $columnes['altituds'] = collect(app(AltitudTerrenyService::class)->perfils($sortida->id))
+            ->except('dispositiu/dispositiu')
+            ->map(fn ($alts) => array_map(fn ($a) => $a === null ? null : round($a, 1), $alts));
+
         return response()->json($columnes);
+    }
+
+    /** Com es mira l'altitud d'aquesta sortida; sense mètode, torna a la de per defecte. */
+    public function altitud(AltitudPreferenciaRequest $request, SortidaBici $sortida)
+    {
+        $metode = $request->validated('metode');
+        $sortida->update([
+            'altitud_metode' => $metode,
+            'altitud_font'   => $metode === null || $metode === 'dispositiu' ? null : $request->validated('font', 'millor'),
+        ]);
+
+        return back();
+    }
+
+    /** Com es mira l'altitud de totes les sortides que no en tenen una de pròpia. */
+    public function altitudDefecte(AltitudPreferenciaRequest $request)
+    {
+        Preferencia::desa(AltitudTerrenyService::CLAU_PREFERENCIA, [
+            'metode' => $request->validated('metode'),
+            'font'   => $request->validated('font') ?? 'millor',
+        ]);
+
+        return back();
     }
 }

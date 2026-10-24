@@ -8,6 +8,7 @@ use App\Models\Vehicle;
 use App\Services\SortidesGarminService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Tests\Concerns\BdRecorreguts;
 use Tests\TestCase;
 
 /**
@@ -17,6 +18,7 @@ use Tests\TestCase;
  */
 class SortidesGarminTest extends TestCase
 {
+    use BdRecorreguts;
     use RefreshDatabase;
 
     private Vehicle $giant;
@@ -29,12 +31,7 @@ class SortidesGarminTest extends TestCase
     {
         parent::setUp();
 
-        // RefreshDatabase només conserva la connexió principal: la BD de recorreguts (també en
-        // memòria) arriba buida, i la seva taula es crea amb la mateixa migració
-        if (! DB::connection('recorreguts')->getSchemaBuilder()->hasTable('punts')) {
-            (require database_path('migrations/2026_10_20_000004_create_punts_recorreguts.php'))->up();
-        }
-        DB::connection('recorreguts')->table('punts')->delete();
+        $this->preparaBdRecorreguts();
 
         $this->giant = Vehicle::create(['nom' => 'Giant Anthem 2', 'tipus' => 'bici']);
         $material = fn (string $id, string $tipus, ?int $vehicle) => MaterialEsportiu::create([
