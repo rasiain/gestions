@@ -176,6 +176,59 @@ class AltitudTerrenyService
     }
 
     /**
+     * El desnivell positiu de cada sortida tal com es mira, per a les llistes (fitxa de la bici,
+     * rutes). Sense `$metode`, cada sortida amb la seva preferència o, si no en té, la de per defecte;
+     * amb `$metode`, totes amb aquell mètode i la millor font que les cobreixi. Una font que no
+     * cobreix la sortida cau a la que sí, i sense cap, al dispositiu. Amb el dispositiu, el desnivell
+     * és el de Garmin Connect, com a la pàgina de la sortida.
+     *
+     * @param  iterable<SortidaBici>  $sortides  amb `id`, `desnivell_pos_m`, `altitud_metode` i `altitud_font`
+     * @return array<int, array{pujada: ?float, metode: string}> per id de sortida
+     */
+    public function desnivellsTriats(iterable $sortides, ?string $metode = null): array
+    {
+        $sortides = collect($sortides);
+        $desats = [];
+        foreach ($sortides->pluck('id')->chunk(500) as $ids) {
+            DB::table('g_sortida_desnivells')->whereIn('sortida_id', $ids->all())->where('metode', '!=', 'dispositiu')
+                ->get(['sortida_id', 'metode', 'font', 'pujada_m'])
+                ->each(function ($d) use (&$desats) {
+                    $desats[$d->sortida_id]["{$d->metode}/{$d->font}"] = (float) $d->pujada_m;
+                });
+        }
+
+        $defecte = $this->perDefecte();
+        $resultat = [];
+        foreach ($sortides as $s) {
+            $tria = match (true) {
+                $metode !== null                => ['metode' => $metode, 'font' => 'millor'],
+                $s->altitud_metode !== null     => ['metode' => $s->altitud_metode, 'font' => $s->altitud_font ?? 'millor'],
+                default                         => $defecte,
+            };
+            $pujada = null;
+            if ($tria['metode'] !== 'dispositiu') {
+                foreach (array_unique([$tria['font'], ...self::FONTS]) as $font) {
+                    if (isset($desats[$s->id]["{$tria['metode']}/{$font}"])) {
+                        $pujada = $desats[$s->id]["{$tria['metode']}/{$font}"];
+                        break;
+                    }
+                }
+            }
+            $resultat[$s->id] = $pujada !== null
+                ? ['pujada' => $pujada, 'metode' => $tria['metode']]
+                : ['pujada' => $s->desnivell_pos_m !== null ? (float) $s->desnivell_pos_m : null, 'metode' => 'dispositiu'];
+        }
+
+        return $resultat;
+    }
+
+    /** El mètode demanat a una llista (`?altitud=`): buit o desconegut, el de cada sortida. */
+    public static function metodeDemanat(?string $valor): ?string
+    {
+        return in_array($valor, self::METODES, true) ? $valor : null;
+    }
+
+    /**
      * El que la pantalla d'una sortida necessita per triar l'altitud: les fonts que la cobreixen,
      * la preferència per defecte i la de la sortida, i els totals de desnivell de cada perfil.
      */
@@ -209,12 +262,14 @@ class AltitudTerrenyService
         $cobertes = $recorreguts->table('altituds_terreny_sortides')->where('sortida_id', $id)->where('sense_dades', 0)->pluck('font');
         foreach ($cobertes as $font) {
             $terreny = $recorreguts->table('altituds_terreny')->where('sortida_id', $id)->where('font', $font)->pluck('alt', 't');
-            $perfils["terreny/{$font}"] = $punts->map(fn ($p) => isset($terreny[$p->t]) ? $terreny[$p->t] / 100 : null)->all();
-            $perfils["combinat/{$font}"] = AltitudCombinada::calcula($punts->map(fn ($p) => [
+            $entrada = $punts->map(fn ($p) => [
                 $p->dist === null ? null : $p->dist / 100,
                 $p->alt === null ? null : $p->alt / 100,
                 isset($terreny[$p->t]) ? $terreny[$p->t] / 100 : null,
-            ])->all());
+            ])->all();
+            // El terreny, també sense les punxes del model: si no, a ciutat cada sot d'un punt és una pujada
+            $perfils["terreny/{$font}"] = AltitudCombinada::terreny($entrada);
+            $perfils["combinat/{$font}"] = AltitudCombinada::calcula($entrada);
         }
 
         return $perfils;

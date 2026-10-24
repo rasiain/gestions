@@ -62,7 +62,7 @@ class ImportacioSortidesController extends Controller
 
         $canvis = (bool) array_intersect(['afegit', 'creada'], array_column($resultats, 'estat'));
         if ($canvis) {
-            $servei->recalculaRutes();
+            $servei->recalculaDerivats();
         }
 
         return response()->json(['resultats' => $resultats, 'recalculant' => $canvis]);

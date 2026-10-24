@@ -82,6 +82,25 @@ class AltitudCombinadaTest extends TestCase
         $this->assertEqualsWithDelta(Desnivell::calcula(array_column($punts, 2))['pujada'], Desnivell::calcula($c)['pujada'], 1);
     }
 
+    public function test_les_punxes_del_model_no_compten_com_a_pujades(): void
+    {
+        // Un pla a 72 m amb sots de 5 m d'un sol punt cada 100 m: el GPS que cau a la llera del riu
+        $punts = $this->punts(fn ($x) => 72.0, fn ($x, $i = 0) => fmod($x, 100) === 50.0 ? 67.0 : 72.0);
+
+        $this->assertGreaterThan(50, Desnivell::calcula(array_column($punts, 2))['pujada'], 'el model tal com és');
+        $this->assertSame(0.0, Desnivell::calcula(AltitudCombinada::terreny($punts))['pujada']);
+        $this->assertSame(0.0, Desnivell::calcula(AltitudCombinada::calcula($punts))['pujada']);
+    }
+
+    public function test_si_el_dispositiu_infla_tota_la_sortida_mana_el_model(): void
+    {
+        // Un altímetre net de punt a punt però amb salts de 10 m cada 250 m, que tornen al cap de 50 m
+        $punts = $this->punts(fn ($x) => $this->terreny($x) + (fmod($x, 250) < 50 ? 10 : 0));
+        $c = AltitudCombinada::calcula($punts);
+
+        $this->assertSame(AltitudCombinada::terreny($punts), $c);
+    }
+
     public function test_els_punts_sense_terreny_queden_sense_altitud(): void
     {
         $punts = $this->punts(fn ($x) => $this->terreny($x), null, 10);

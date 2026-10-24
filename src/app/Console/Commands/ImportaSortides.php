@@ -129,6 +129,9 @@ class ImportaSortides extends Command
 
         if ($prova) {
             $this->info('Amb --prova no s\'ha desat res.');
+        } else {
+            // L'altitud del terreny de les que encara no la tenen (les noves i les que ara tenen recorregut)
+            $this->call('sortides:corregeix-altitud');
         }
 
         return self::SUCCESS;

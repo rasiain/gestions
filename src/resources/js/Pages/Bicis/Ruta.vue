@@ -5,7 +5,8 @@
  * representant i la llista de sortides amb quant comparteixen amb ell.
  */
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
+import SelectorAltitud from '@/Components/Bicis/SelectorAltitud.vue';
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 import { Line } from 'vue-chartjs';
 import { Chart as ChartJS, registerables } from 'chart.js';
@@ -34,6 +35,8 @@ const props = defineProps<{
     canonica: { id: number; punts: number };
     membres: Membre[];
     altres_nivells: { id: number; nivell: string; sortides: number }[];
+    /** El mètode de l'altitud demanat; null = el de cada sortida. */
+    altitud: string | null;
 }>();
 
 const ETIQUETA_NIVELL: Record<string, string> = {
@@ -48,6 +51,11 @@ function durada(s: number | null): string {
 }
 
 const canonic = computed(() => props.membres.find((m) => m.canonica)!);
+
+const altitud = ref<string | null>(props.altitud);
+const ambAltitud = (params: Record<string, unknown>) => (altitud.value ? { ...params, altitud: altitud.value } : params);
+watch(altitud, () => router.get(route('bicis.rutes.show', ambAltitud({ ruta: props.ruta.id })), {},
+    { preserveState: true, preserveScroll: true, replace: true, only: ['membres', 'ruta', 'altitud'] }));
 const periode = computed(() => {
     const anys = props.membres.map((m) => m.data.slice(0, 4)).sort();
     return anys[0] === anys[anys.length - 1] ? anys[0] : `${anys[0]}–${anys[anys.length - 1]}`;
@@ -188,15 +196,16 @@ const opcionsPerfil = computed<ChartOptions<'line'>>(() => ({
         <template #header>
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div class="min-w-0">
-                    <Link :href="route('bicis.rutes.index', { nivell: ruta.nivell })" class="text-sm text-sky-600 hover:text-sky-800 dark:text-sky-400">← Rutes</Link>
+                    <Link :href="route('bicis.rutes.index', ambAltitud({ nivell: ruta.nivell }))" class="text-sm text-sky-600 hover:text-sky-800 dark:text-sky-400">← Rutes</Link>
                     <h2 class="truncate text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200">{{ ruta.nom }}</h2>
                     <p class="text-sm text-gray-500 dark:text-gray-400">
                         {{ ruta.sortides }} {{ ruta.sortides === 1 ? 'vegada' : 'vegades' }} · {{ periode }} · {{ bicis.join(', ') }}
                     </p>
+                    <SelectorAltitud v-model="altitud" class="mt-2" />
                 </div>
                 <!-- La mateixa ruta a cada nivell: com creix o s'aprima el grup -->
                 <div class="flex flex-wrap gap-1">
-                    <Link v-for="n in altres_nivells" :key="n.id" :href="route('bicis.rutes.show', n.id)"
+                    <Link v-for="n in altres_nivells" :key="n.id" :href="route('bicis.rutes.show', ambAltitud({ ruta: n.id }))"
                         class="rounded-md border px-2.5 py-1 text-xs"
                         :class="n.id === ruta.id
                             ? 'border-sky-600 bg-sky-600 text-white'

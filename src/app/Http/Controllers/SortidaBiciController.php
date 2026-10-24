@@ -24,8 +24,11 @@ class SortidaBiciController extends Controller
     /** Els rodets: la distància és virtual i es compta a part. */
     private const INDOOR = 'indoor_cycling';
 
-    /** Resum per any i per mes, i els components amb els seus quilòmetres. */
-    public function fitxa(Vehicle $vehicle): JsonResponse
+    /**
+     * Resum per any i per mes, i els components amb els seus quilòmetres. El desnivell, amb l'altitud
+     * de cada sortida o amb el mètode demanat (`?altitud=`), vegeu AltitudTerrenyService::desnivellsTriats().
+     */
+    public function fitxa(Vehicle $vehicle, Request $request): JsonResponse
     {
         abort_unless($vehicle->tipus === 'bici', 404);
 
@@ -37,7 +40,6 @@ class SortidaBiciController extends Controller
             ->selectRaw('sum(distancia_m) / 1000.0 as km')
             ->selectRaw('sum(case when tipus_activitat = ? then distancia_m else 0 end) / 1000.0 as km_indoor', [self::INDOOR])
             ->selectRaw('sum(coalesce(temps_moviment_s, temps_s)) / 3600.0 as hores')
-            ->selectRaw('sum(desnivell_pos_m) as desnivell')
             ->groupBy('any')
             ->orderByDesc('any')
             ->get()
@@ -49,8 +51,13 @@ class SortidaBiciController extends Controller
 
         $anys = $perAny->keys()->merge($despeses->keys())->unique()->sortDesc()->values();
 
+        $sortides = (clone $base)->get(['id', 'data_local', 'desnivell_pos_m', 'altitud_metode', 'altitud_font']);
+        $triats = app(AltitudTerrenyService::class)->desnivellsTriats($sortides, AltitudTerrenyService::metodeDemanat($request->query('altitud')));
+        $desnivell = $sortides->groupBy(fn (SortidaBici $s) => $s->data_local->format('Y'))
+            ->map(fn ($grup) => $grup->sum(fn (SortidaBici $s) => $triats[$s->id]['pujada'] ?? 0));
+
         return response()->json([
-            'per_any' => $anys->map(function ($any) use ($perAny, $despeses) {
+            'per_any' => $anys->map(function ($any) use ($perAny, $despeses, $desnivell) {
                 $f = $perAny[$any] ?? null;
                 $km = $f ? round((float) $f->km, 1) : 0.0;
                 $cost = $despeses[$any] ?? 0.0;
@@ -61,7 +68,7 @@ class SortidaBiciController extends Controller
                     'km'        => $km,
                     'km_indoor' => $f ? round((float) $f->km_indoor, 1) : 0.0,
                     'hores'     => $f ? round((float) $f->hores, 1) : 0.0,
-                    'desnivell' => $f ? (int) round((float) $f->desnivell) : 0,
+                    'desnivell' => (int) round($desnivell[$any] ?? 0),
                     'despeses'  => $cost,
                     'cost_km'   => $km > 0 && $cost > 0 ? round($cost / $km, 3) : null,
                 ];
@@ -150,11 +157,13 @@ class SortidaBiciController extends Controller
             // L'hora local és al registre de l'origen: no cal portar-ne el JSON sencer
             ->select([
                 'id', 'data_local', 'nom', 'tipus_activitat', 'distancia_m', 'temps_moviment_s', 'temps_s',
-                'desnivell_pos_m', 'vel_mitjana', 'fc_mitjana', 'punts', 'desnivell_corregit',
+                'desnivell_pos_m', 'vel_mitjana', 'fc_mitjana', 'punts', 'desnivell_corregit', 'altitud_metode', 'altitud_font',
             ])
             ->selectRaw("json_extract(dades_originals, '$.startTimeLocal') as inici_local_ms")
-            ->get()
-            ->map(fn (SortidaBici $s) => [
+            ->get();
+        $triats = app(AltitudTerrenyService::class)->desnivellsTriats($sortides, AltitudTerrenyService::metodeDemanat($request->query('altitud')));
+
+        $sortides = $sortides->map(fn (SortidaBici $s) => [
                 'id'                 => $s->id,
                 'data'               => $s->data_local->toDateString(),
                 'hora'               => $s->inici_local_ms ? gmdate('H:i', (int) ($s->inici_local_ms / 1000)) : null,
@@ -162,11 +171,13 @@ class SortidaBiciController extends Controller
                 'tipus'              => $s->tipus_activitat,
                 'km'                 => $s->distancia_m !== null ? round($s->distancia_m / 1000, 2) : null,
                 'temps_s'            => $s->temps_moviment_s ?? $s->temps_s,
-                'desnivell'          => $s->desnivell_pos_m !== null ? (int) round($s->desnivell_pos_m) : null,
+                'desnivell'          => $triats[$s->id]['pujada'] !== null ? (int) round($triats[$s->id]['pujada']) : null,
+                'desnivell_metode'   => $triats[$s->id]['metode'],
                 'kmh'                => $s->vel_mitjana !== null ? round($s->vel_mitjana * 3.6, 1) : null,
                 'fc'                 => $s->fc_mitjana,
                 'amb_recorregut'     => $s->punts > 0,
-                'desnivell_corregit' => $s->desnivell_corregit,
+                // L'asterisc de Garmin només té sentit amb el seu desnivell
+                'desnivell_corregit' => $s->desnivell_corregit && $triats[$s->id]['metode'] === 'dispositiu',
             ]);
 
         return response()->json($sortides);

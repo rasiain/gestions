@@ -5,7 +5,8 @@
  * miniatura del traçat) i una línia del mapa; passar per l'una ressalta l'altra.
  */
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
+import SelectorAltitud from '@/Components/Bicis/SelectorAltitud.vue';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -30,7 +31,15 @@ const props = defineProps<{
     rutes: Ruta[];
     tracats: Record<number, string | null>;
     bicis: { id: number; nom: string; modalitat: string | null }[];
+    /** El mètode de l'altitud demanat; null = el de cada sortida. */
+    altitud: string | null;
 }>();
+
+// El desnivell es torna a demanar al servidor amb el mètode triat: és qui té els totals desats
+const altitud = ref<string | null>(props.altitud);
+watch(altitud, (a) => router.get(route('bicis.rutes.index'), { ...(a ? { altitud: a } : {}), nivell: nivell.value },
+    { preserveState: true, preserveScroll: true, replace: true, only: ['rutes', 'altitud'] }));
+const enllacRuta = (id: number) => route('bicis.rutes.show', altitud.value ? { ruta: id, altitud: altitud.value } : { ruta: id });
 
 const ETIQUETA_NIVELL: Record<string, string> = {
     identiques: 'Idèntiques', mateixa: 'Mateixa ruta', variants: 'Variants', zona: 'Mateixa zona',
@@ -207,6 +216,7 @@ onUnmounted(() => mapa?.remove());
                 <Link :href="route('bicis.index')" class="text-sm text-sky-600 hover:text-sky-800 dark:text-sky-400">← Bicis</Link>
                 <h2 class="text-xl font-semibold leading-tight text-gray-800 dark:text-gray-200">Rutes</h2>
             </div>
+            <SelectorAltitud v-model="altitud" class="mt-2" />
         </template>
 
         <div class="py-6">
@@ -300,7 +310,7 @@ onUnmounted(() => mapa?.remove());
                                     <template v-else> · {{ r.bicis.length }} bicis</template>
                                 </span>
                             </span>
-                            <Link :href="route('bicis.rutes.show', r.id)" @click.stop
+                            <Link :href="enllacRuta(r.id)" @click.stop
                                 class="shrink-0 self-center rounded-md border border-gray-300 px-2 py-1 text-xs text-sky-700 hover:bg-gray-50 dark:border-gray-600 dark:text-sky-400 dark:hover:bg-gray-700">
                                 Obre →
                             </Link>

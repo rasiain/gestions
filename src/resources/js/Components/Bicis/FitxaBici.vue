@@ -5,6 +5,7 @@
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Link } from '@inertiajs/vue3';
+import SelectorAltitud from '@/Components/Bicis/SelectorAltitud.vue';
 import { Bar } from 'vue-chartjs';
 import { Chart as ChartJS, registerables } from 'chart.js';
 import type { ChartData, ChartOptions } from 'chart.js';
@@ -54,6 +55,8 @@ interface Sortida {
     km: number | null;
     temps_s: number | null;
     desnivell: number | null;
+    /** Amb quina altitud s'ha comptat: el de Garmin Connect si és `dispositiu`. */
+    desnivell_metode: string;
     kmh: number | null;
     fc: number | null;
     amb_recorregut: boolean;
@@ -100,8 +103,21 @@ async function demana<T>(url: string): Promise<T | null> {
     return res.json();
 }
 
+/** Amb quina altitud es compta el desnivell (null = la de cada sortida); el calcula el servidor. */
+const altitud = ref<string | null>(null);
+const ambAltitud = (params: URLSearchParams = new URLSearchParams()) => {
+    if (altitud.value) params.set('altitud', altitud.value);
+    const q = params.toString();
+    return q ? `?${q}` : '';
+};
+
+watch(altitud, async () => {
+    fitxa.value = await demana<Fitxa>(route('bicis.fitxa', props.vehicleId) + ambAltitud());
+    if (pestanya.value === 'sortides') carregaSortides();
+});
+
 onMounted(async () => {
-    fitxa.value = await demana<Fitxa>(route('bicis.fitxa', props.vehicleId));
+    fitxa.value = await demana<Fitxa>(route('bicis.fitxa', props.vehicleId) + ambAltitud());
     const anys = fitxa.value?.per_any.filter((a) => a.sortides > 0).map((a) => a.any) ?? [];
     anySortides.value = props.anyInicial && anys.includes(props.anyInicial) ? props.anyInicial : anys[0] ?? null;
 });
@@ -135,7 +151,7 @@ async function carregaSortides() {
     carregantSortides.value = true;
     const params = new URLSearchParams({ any: String(anySortides.value) });
     if (tipusSortides.value) params.set('tipus', tipusSortides.value);
-    sortides.value = (await demana<Sortida[]>(route('bicis.sortides', props.vehicleId) + '?' + params)) ?? [];
+    sortides.value = (await demana<Sortida[]>(route('bicis.sortides', props.vehicleId) + ambAltitud(params))) ?? [];
     carregantSortides.value = false;
 }
 
@@ -231,6 +247,7 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
 
 <template>
     <div>
+        <SelectorAltitud v-model="altitud" class="mb-2" />
         <div class="mb-3 flex gap-1 border-b border-gray-200 dark:border-gray-600">
             <button v-for="[clau, etiqueta] in [['anys', 'Per any'], ['sortides', 'Sortides'], ['components', 'Components'], ['grafiques', 'Gràfiques']]"
                 :key="clau" @click="pestanya = clau as any"
@@ -290,8 +307,9 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                     </tbody>
                 </table>
                 <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                    Els quilòmetres, les hores (en moviment) i el desnivell són els del resum de Garmin Connect. Els
-                    dels rodets són virtuals i s'hi compten, però es diuen a part.
+                    Els quilòmetres i les hores (en moviment) són els del resum de Garmin Connect; el desnivell,
+                    {{ altitud === null ? "amb l'altitud de cada sortida (la desada o la de per defecte)" : altitud === 'dispositiu' ? 'també' : `amb l'altitud ${altitud === 'combinat' ? 'combinada' : 'del terreny'} on n'hi ha (si no, la de Garmin Connect)` }}.
+                    Els dels rodets són virtuals i s'hi compten, però es diuen a part.
                 </p>
             </div>
 
@@ -346,6 +364,8 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                                 <td class="py-1 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">
                                     {{ s.desnivell !== null ? `${nombre(s.desnivell)} m` : '—' }}
                                     <span v-if="s.desnivell_corregit" class="text-xs text-gray-400" title="Corregit per Garmin Connect: el dispositiu va mesurar una altra cosa">*</span>
+                                    <span v-if="s.desnivell_metode !== 'dispositiu'" class="text-xs text-sky-600 dark:text-sky-400"
+                                        :title="s.desnivell_metode === 'combinat' ? 'Amb l\'altitud combinada' : 'Amb l\'altitud del terreny'">{{ s.desnivell_metode === 'combinat' ? 'c' : 't' }}</span>
                                 </td>
                                 <td class="py-1 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ s.kmh !== null ? nombre(s.kmh, 1) : '—' }}</td>
                                 <td class="py-1 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ s.fc ?? '—' }}</td>

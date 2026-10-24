@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Ruta;
 use App\Models\SortidaBici;
 use App\Models\Vehicle;
+use App\Services\AltitudTerrenyService;
 use App\Services\RutesCanoniquesService;
 use App\Support\Polilinia;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
@@ -19,14 +21,20 @@ class RutaController extends Controller
     /** Per a la llista i el mapa general n'hi ha prou amb ~50 m: centenars de rutes alhora. */
     private const TOLERANCIA_CATALEG = 0.0005;
 
-    public function index()
+    /** El desnivell, del representant: amb la seva altitud o amb el mètode demanat (`?altitud=`). */
+    public function index(Request $request)
     {
         $rutes = DB::table('g_rutes as r')
             ->join('g_sortides_bici as c', 'c.id', '=', 'r.canonica_id')
             ->select('r.id', 'r.nivell', 'r.sortides', 'r.nom', 'r.canonica_id', 'c.data_local', 'c.distancia_m',
-                'c.desnivell_pos_m', 'c.recorregut_simplificat')
+                'c.desnivell_pos_m', 'c.altitud_metode', 'c.altitud_font', 'c.recorregut_simplificat')
             ->selectRaw("json_extract(c.dades_originals, '$.locationName') as lloc")
             ->get();
+        $metode = AltitudTerrenyService::metodeDemanat($request->query('altitud'));
+        $triats = app(AltitudTerrenyService::class)->desnivellsTriats(
+            $rutes->unique('canonica_id')->map(fn ($r) => (object) (['id' => $r->canonica_id] + (array) $r)),
+            $metode,
+        );
 
         // De cada ruta: l'última vegada i amb quines bicis
         $grups = DB::table('g_sortida_ruta as sr')
@@ -51,25 +59,28 @@ class RutaController extends Controller
             'rutes' => $rutes->map(fn ($r) => [
                 'id'          => $r->id,
                 'nivell'      => $r->nivell,
-                'nom'         => $r->nom ?? $this->nomAutomatic($r->lloc, $r->distancia_m, $r->desnivell_pos_m),
+                'nom'         => $r->nom ?? $this->nomAutomatic($r->lloc, $r->distancia_m, $triats[$r->canonica_id]['pujada']),
                 'sortides'    => $r->sortides,
                 'canonica_id' => $r->canonica_id,
                 'km'          => round($r->distancia_m / 1000, 1),
-                'desnivell'   => (int) round($r->desnivell_pos_m),
+                'desnivell'   => (int) round($triats[$r->canonica_id]['pujada'] ?? 0),
                 'primera'     => substr($grups[$r->id]->primera, 0, 10),
                 'darrera'     => substr($grups[$r->id]->darrera, 0, 10),
                 'bicis'       => array_map('intval', explode(',', $grups[$r->id]->bicis)),
             ])->values(),
             'tracats' => $tracats,
             'bicis'   => Vehicle::where('tipus', 'bici')->orderBy('nom')->get(['id', 'nom', 'modalitat']),
+            'altitud' => $metode,
         ]);
     }
 
-    public function show(Ruta $ruta)
+    public function show(Ruta $ruta, Request $request)
     {
         $ruta->load(['canonica.vehicle:id,nom']);
         $membres = $ruta->sortidesDelGrup()->with('vehicle:id,nom')->orderByDesc('inici')->get();
         $c = $ruta->canonica;
+        $metode = AltitudTerrenyService::metodeDemanat($request->query('altitud'));
+        $triats = app(AltitudTerrenyService::class)->desnivellsTriats($membres->concat([$c])->unique('id'), $metode);
 
         // La mateixa sortida canònica, als altres nivells: per veure com creix o s'aprima el grup
         $altresNivells = DB::table('g_sortida_ruta as sr')
@@ -84,7 +95,7 @@ class RutaController extends Controller
                 'id'       => $ruta->id,
                 'nivell'   => $ruta->nivell,
                 'llindar'  => RutesCanoniquesService::NIVELLS[$ruta->nivell] ?? null,
-                'nom'      => $ruta->nom ?? $this->nomAutomatic($c->dades_originals['locationName'] ?? null, $c->distancia_m, $c->desnivell_pos_m),
+                'nom'      => $ruta->nom ?? $this->nomAutomatic($c->dades_originals['locationName'] ?? null, $c->distancia_m, $triats[$c->id]['pujada']),
                 'sortides' => $ruta->sortides,
             ],
             'canonica' => [
@@ -97,13 +108,14 @@ class RutaController extends Controller
                 'nom'       => $s->nom,
                 'bici'      => $s->vehicle?->nom,
                 'km'        => $s->distancia_m !== null ? round($s->distancia_m / 1000, 1) : null,
-                'desnivell' => $s->desnivell_pos_m !== null ? (int) round($s->desnivell_pos_m) : null,
+                'desnivell' => $triats[$s->id]['pujada'] !== null ? (int) round($triats[$s->id]['pujada']) : null,
                 'temps_s'   => $s->temps_moviment_s ?? $s->temps_s,
                 'semblanca' => (float) $s->pivot->semblanca,
                 'canonica'  => $s->id === $c->id,
                 'tracat'    => $s->recorregut_simplificat,
             ])->values(),
             'altres_nivells' => $altresNivells,
+            'altitud'        => $metode,
         ]);
     }
 
