@@ -313,11 +313,18 @@ class BaixaModelsTerreny extends Command
             if ($v <= 0) {
                 continue;
             }
-            // Fila 0 és el nord
-            $lat = $lat1 - (intdiv($i, $w) + 0.5) * $pasLat;
-            $lon = $lon0 + ($i % $w + 0.5) * $pasLon;
-            $clau = sprintf('%.1f,%.1f', floor($lat / self::IGN_TROS) * self::IGN_TROS, floor($lon / self::IGN_TROS) * self::IGN_TROS);
-            $amb[$clau] = true;
+            // Fila 0 és el nord. No n'hi ha prou amb el tros on cau el centre de la cel·la: un tros
+            // amb només una franja de costa (Sant Feliu de Guíxols) no en tindria cap, i quedava sense
+            // baixar. Per això es marquen tots els que toca la cel·la amb una cel·la de marge.
+            $nord = $lat1 - (intdiv($i, $w) - 1) * $pasLat;
+            $sud = $lat1 - (intdiv($i, $w) + 2) * $pasLat;
+            $oest = $lon0 + ($i % $w - 1) * $pasLon;
+            $est = $lon0 + ($i % $w + 2) * $pasLon;
+            for ($s = (int) floor($sud / self::IGN_TROS); $s <= (int) floor($nord / self::IGN_TROS); $s++) {
+                for ($o = (int) floor($oest / self::IGN_TROS); $o <= (int) floor($est / self::IGN_TROS); $o++) {
+                    $amb[sprintf('%.1f,%.1f', $s * self::IGN_TROS, $o * self::IGN_TROS)] = true;
+                }
+            }
         }
 
         return array_map(fn ($c) => array_map('floatval', explode(',', $c)), array_keys($amb));

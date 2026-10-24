@@ -14,8 +14,8 @@
 // si no, és null i `sense_dades` diu quants punts n'han quedat fora.
 //
 // Interpolació bilineal entre les quatre cel·les veïnes. Els fulls llegits es guarden en memòria
-// (els últims CAU de cada font): si l'entrada porta les sortides ordenades per zona, cada full es
-// llegeix un sol cop.
+// (els últims CAU_FULLS de cada font, 48 per defecte): si l'entrada porta les sortides ordenades
+// per zona, cada full es llegeix poques vegades. En acabar, diu per stderr quants n'ha llegit.
 
 import { fromFile } from 'geotiff';
 import fs from 'node:fs';
@@ -29,7 +29,9 @@ if (!carpeta) {
     process.exit(1);
 }
 
-const CAU = 32;
+// Fulls de cada font en memòria: un de l'ICGC en ocupa ~11 MB, un tros de l'IGN ~10 MB
+const CAU = Number(process.env.CAU_FULLS ?? 48);
+const llegits = { icgc: 0, ign: 0 };
 
 /** Un mapa que oblida el que fa més temps que no es fa servir. */
 function cau() {
@@ -127,6 +129,7 @@ function indexIcgc() {
 
 /** Els valors d'un full, en cm i per files de dalt a baix. */
 function llegeixFullIcgc(full) {
+    llegits.icgc++;
     const buf = fs.readFileSync(path.join(carpetaIcgc, `${full.full}.zip`));
     const { inici, comprimit } = entradaZip(buf);
     const text = zlib.inflateRawSync(buf.subarray(inici, inici + comprimit));
@@ -201,6 +204,7 @@ function nomTros(lat, lon) {
 async function llegeixTrosIgn(nom) {
     const fitxer = path.join(carpetaIgn, `${nom}.tif`);
     if (!fs.existsSync(fitxer)) return null;
+    llegits.ign++;
     const imatge = await (await fromFile(fitxer)).getImage();
     const [valors] = await imatge.readRasters();
     const [ox, oy] = imatge.getOrigin(), [rx, ry] = imatge.getResolution();
@@ -213,11 +217,33 @@ async function altitudIgn(lat, lon) {
     // L'origen és el cantó de la primera cel·la; el valor és del seu centre
     const fx = (lon - tros.ox) / tros.rx - 0.5, fy = (lat - tros.oy) / tros.ry - 0.5;
     const cx = Math.min(Math.max(fx, 0), tros.ample - 1.000001), cy = Math.min(Math.max(fy, 0), tros.alt - 1.000001);
-    const alt = bilineal(cx, cy, tros.ample, tros.alt, (i, j) => {
+    const i0 = Math.floor(cx), j0 = Math.floor(cy), dx = cx - i0, dy = cy - j0;
+    // Bilineal amb les cel·les que tenen dades: a la vora del mar n'hi ha que valen 0
+    let suma = 0, pes = 0;
+    for (const [i, j, w] of [[i0, j0, (1 - dx) * (1 - dy)], [i0 + 1, j0, dx * (1 - dy)], [i0, j0 + 1, (1 - dx) * dy], [i0 + 1, j0 + 1, dx * dy]]) {
         const v = tros.valors[j * tros.ample + i];
-        return v === 0 ? null : v * 100;
-    });
-    return alt === null ? null : Math.round(alt);
+        if (v !== 0) { suma += v * w; pes += w; }
+    }
+    if (pes > 0) return Math.round((suma / pes) * 100);
+    return arranDeMar(tros, i0, j0) ? 0 : null;
+}
+
+/**
+ * Totes quatre a 0: o és mar, o és fora d'Espanya, o és una platja a 0 m. Si a ARRAN cel·les hi ha
+ * terra **baixa**, és la costa i val 0; al Pirineu, a tocar de França, la terra de la vora és alta i
+ * el punt queda sense dades.
+ */
+const ARRAN = 10, TERRA_BAIXA_M = 10;
+function arranDeMar(tros, i0, j0) {
+    let terra = false;
+    for (let j = Math.max(0, j0 - ARRAN); j <= Math.min(tros.alt - 1, j0 + ARRAN); j++) {
+        for (let i = Math.max(0, i0 - ARRAN); i <= Math.min(tros.ample - 1, i0 + ARRAN); i++) {
+            const v = tros.valors[j * tros.ample + i];
+            if (v > TERRA_BAIXA_M) return false;
+            if (v !== 0) terra = true;
+        }
+    }
+    return terra;
 }
 
 // ── Sortides ──────────────────────────────────────────────────────────────────────────────────
@@ -245,3 +271,5 @@ for await (const linia of linies) {
     }
     process.stdout.write(JSON.stringify({ id, fonts, sense_dades: senseDades }) + '\n');
 }
+// Quants fulls s'han hagut de llegir: diu si l'ordre de les sortides aprofita la memòria
+process.stderr.write(JSON.stringify({ fulls_llegits: llegits }) + '\n');
