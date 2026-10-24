@@ -1,0 +1,29 @@
+# Revisió periòdica de les dependències. Cada mes, una PR amb les actualitzacions menors i de pedaç
+# agrupades, de PHP i de JavaScript; les de seguretat, en sortir l'avís (cal tenir activades les
+# «Dependabot alerts» i «security updates» al repositori). Els canvis de versió major no es proposen:
+# demanen revisar-los a mà (Laravel 13, Inertia 3, Tailwind 4…).
+version: 2
+updates:
+  - package-ecosystem: composer
+    directory: /src
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      php-menors:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: npm
+    directory: /src
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      js-menors:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]

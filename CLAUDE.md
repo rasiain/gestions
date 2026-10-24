@@ -35,6 +35,13 @@ docker compose exec app php artisan test
 docker compose exec app php artisan tinker
 ```
 
+## Dependències i seguretat
+
+- **Revisió periòdica**: `.github/dependabot.yml` obre cada mes una PR amb les actualitzacions menors i de pedaç (PHP i JS, agrupades) i les de seguretat en sortir l'avís. Els canvis de versió major no els proposa.
+- **A mà**: `docker compose exec app composer audit` i `docker compose exec app npm audit`. Per actualitzar sense canviar de versió major: `composer update -W` i `npm audit fix`; després, tests i `npm run build`.
+- `src/.npmrc` porta `legacy-peer-deps=true`: vite 7 i `@vitejs/plugin-vue` 5 tenen un conflicte de peer dependencies que no afecta el build, i sense això `npm install` falla amb ERESOLVE.
+- **Pendent (2026-10-24)**: 5 avisos moderats de `postcss-selector-parser` 6, que arrosseguen Tailwind 3 i els connectors d'ESLint. Són eines de compilació que només processen el codi del projecte; arreglar-ho vol Tailwind 4 i eslint-plugin-vue 10 (versions majors). També queden per fer els salts majors de Laravel 13, Inertia 3, Pest 5 i maatwebsite/excel 4.
+
 ## Estructura del projecte
 
 ```
