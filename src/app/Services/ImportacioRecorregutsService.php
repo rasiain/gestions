@@ -173,15 +173,16 @@ class ImportacioRecorregutsService
 
     /**
      * Torna a calcular en segon pla el que es deriva dels punts, que la pantalla no ha d'esperar:
-     * l'altitud del terreny de les sortides noves (i els seus totals de desnivell) i les rutes, que
-     * triguen més d'un minut. `rutes:calcula` té un bloqueig: si ja n'hi ha una en marxa, no se'n
+     * l'altitud del terreny de les sortides noves (i els seus totals de desnivell), les rutes, que
+     * triguen més d'un minut, i la xarxa de camins de les propostes. `rutes:calcula` té un bloqueig: si ja n'hi ha una en marxa, no se'n
      * posa cap altra.
      */
     public function recalculaDerivats(): void
     {
         Process::fromShellCommandline(
             "nohup sh -c 'php -d memory_limit=1G artisan sortides:corregeix-altitud > storage/logs/corregeix-altitud.log 2>&1;"
-            . " php -d memory_limit=2G artisan rutes:calcula > storage/logs/rutes-calcula.log 2>&1' > /dev/null 2>&1 &",
+            . " php -d memory_limit=2G artisan rutes:calcula > storage/logs/rutes-calcula.log 2>&1;"
+            . " php -d memory_limit=3G artisan xarxa:calcula > storage/logs/xarxa-calcula.log 2>&1' > /dev/null 2>&1 &",
             base_path(),
         )->run();
     }

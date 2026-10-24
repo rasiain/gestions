@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\SortidaBici;
 use App\Models\Vehicle;
+use App\Services\ImportacioRecorregutsService;
 use App\Services\SortidesGarminService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
@@ -130,8 +131,9 @@ class ImportaSortides extends Command
         if ($prova) {
             $this->info('Amb --prova no s\'ha desat res.');
         } else {
-            // L'altitud del terreny de les que encara no la tenen (les noves i les que ara tenen recorregut)
-            $this->call('sortides:corregeix-altitud');
+            // Com la pantalla d'importació: altitud, rutes i xarxa, en segon pla
+            app(ImportacioRecorregutsService::class)->recalculaDerivats();
+            $this->line('L\'altitud, les rutes i la xarxa es recalculen en segon pla (storage/logs/).');
         }
 
         return self::SUCCESS;

@@ -40,9 +40,9 @@ class AfegeixRecorregut extends Command
         $this->table(['Fitxer', 'Estat', ''], array_map(fn ($r) => [$r['fitxer'], $r['estat'], $r['missatge']], $resultats));
 
         if (array_intersect(['afegit', 'creada'], array_column($resultats, 'estat'))) {
-            // L'altitud del terreny és ràpida; les rutes, que triguen més d'un minut, a part
-            $this->call('sortides:corregeix-altitud');
-            $this->line('Per tenir-les a les rutes: php artisan rutes:calcula');
+            // Com la pantalla d'importació: altitud, rutes i xarxa, en segon pla
+            $servei->recalculaDerivats();
+            $this->line('L\'altitud, les rutes i la xarxa es recalculen en segon pla (storage/logs/).');
         }
 
         return self::SUCCESS;
