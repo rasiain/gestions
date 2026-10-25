@@ -239,6 +239,8 @@ class AltitudTerrenyService
 
         return [
             'fonts'      => array_values(array_intersect(self::FONTS, $cobertes)),
+            // Una sortida acabada d'importar es llegeix en segon pla: «encara no» no és «no la cobreix»
+            'llegida'    => DB::connection('recorreguts')->table('altituds_terreny_sortides')->where('sortida_id', $sortida->id)->exists(),
             'defecte'    => $this->perDefecte(),
             'sortida'    => $sortida->altitud_metode === null ? null
                 : ['metode' => $sortida->altitud_metode, 'font' => $sortida->altitud_font ?? 'millor'],

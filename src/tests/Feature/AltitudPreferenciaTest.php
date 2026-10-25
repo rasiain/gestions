@@ -54,7 +54,18 @@ class AltitudPreferenciaTest extends TestCase
             ->where('altitud.fonts', ['icgc'])
             ->where('altitud.defecte', AltitudTerrenyService::PER_DEFECTE)
             ->where('altitud.sortida', null)
+            ->where('altitud.llegida', true)
             ->has('altitud.desnivells', 3)   // dispositiu, terreny/icgc, combinat/icgc
+            ->etc());
+    }
+
+    public function test_una_sortida_encara_no_llegida_no_es_confon_amb_una_que_no_es_cobreix(): void
+    {
+        DB::connection('recorreguts')->table('altituds_terreny_sortides')->where('sortida_id', $this->sortida->id)->delete();
+
+        $this->get(route('bicis.sortida', $this->sortida))->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('altitud.fonts', [])
+            ->where('altitud.llegida', false)
             ->etc());
     }
 

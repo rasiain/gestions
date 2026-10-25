@@ -50,6 +50,8 @@ const props = defineProps<{
     resums: { garmin: Resum; dispositiu: Resum | null };
     altitud: {
         fonts: string[];
+        /** Si ja s'ha llegit l'altitud del terreny: una sortida acabada d'importar es llegeix en segon pla. */
+        llegida: boolean;
         defecte: PreferenciaAltitud;
         sortida: PreferenciaAltitud | null;
         desnivells: Record<string, { pujada: number; baixada: number }>;
@@ -82,14 +84,21 @@ function durada(s: number | null | undefined): string {
 const punts = shallowRef<Punts | null>(null);
 const error = ref<string | null>(null);
 
-onMounted(async () => {
-    if (!props.sortida.punts) return;
+async function carregaPunts(): Promise<boolean> {
     const res = await fetch(route('bicis.sortida.punts', props.sortida.id), { headers: { Accept: 'application/json' } });
     if (!res.ok) {
         error.value = `No s'han pogut carregar els punts (error ${res.status}).`;
-        return;
+        return false;
     }
     punts.value = await res.json();
+    return true;
+}
+/** Quan arriba l'altitud del terreny d'una sortida acabada d'importar: els perfils nous són als punts. */
+const recarregaPunts = () => carregaPunts();
+
+onMounted(async () => {
+    if (!props.sortida.punts) return;
+    if (!(await carregaPunts())) return;
     await nextTick();
     dibuixaMapa();
 });
@@ -113,6 +122,34 @@ const igual = (a: { metode: Metode; font: string | null }, b: { metode: Metode; 
     a.metode === b.metode && (a.metode === 'dispositiu' || a.font === b.font);
 
 const triat = ref(resol(props.altitud.sortida ?? props.altitud.defecte));
+
+// Acabada d'importar, l'altitud del terreny encara s'està llegint: es torna a demanar fins que hi és
+let esperaAltitud: ReturnType<typeof setInterval> | null = null;
+let intents = 0;
+const esperaEsgotada = ref(false);
+onMounted(() => {
+    if (props.altitud.llegida || !props.sortida.punts) return;
+    esperaAltitud = setInterval(() => {
+        // Com a molt un minut: si la lectura en segon pla ha fallat, no s'ha de preguntar per sempre
+        if (++intents > 20) {
+            clearInterval(esperaAltitud!);
+            esperaAltitud = null;
+            esperaEsgotada.value = true;
+            return;
+        }
+        router.reload({
+        only: ['altitud'],
+        onSuccess: () => {
+            if (!props.altitud.llegida) return;
+            clearInterval(esperaAltitud!);
+            esperaAltitud = null;
+            triat.value = resol(props.altitud.sortida ?? props.altitud.defecte);
+            recarregaPunts();
+        },
+        });
+    }, 3000);
+});
+onUnmounted(() => { if (esperaAltitud) clearInterval(esperaAltitud); });
 const clauPerfil = computed(() => (triat.value.metode === 'dispositiu' ? 'dispositiu/dispositiu' : `${triat.value.metode}/${triat.value.font}`));
 
 /** L'altitud de cada punt amb el mètode triat. */
@@ -695,6 +732,16 @@ const comparacio = computed(() => {
                                 </button>
                             </div>
                         </div>
+                        <p v-else-if="teGps && !altitud.llegida" class="mb-3 border-b border-gray-200 pb-3 text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                            <template v-if="!esperaEsgotada">
+                                S'està llegint l'altitud del terreny d'aquesta sortida, en segon pla. La pàgina s'actualitzarà sola
+                                d'aquí a uns segons.
+                            </template>
+                            <template v-else>
+                                L'altitud del terreny encara no ha arribat (mira <code>storage/logs/corregeix-altitud.log</code>); de
+                                moment és la del dispositiu.
+                            </template>
+                        </p>
                         <p v-else-if="teGps" class="mb-3 border-b border-gray-200 pb-3 text-xs text-gray-400 dark:border-gray-700 dark:text-gray-500">
                             L'altitud és la del dispositiu: cap model del terreny no cobreix aquesta sortida sencera.
                         </p>
