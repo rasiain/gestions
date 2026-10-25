@@ -32,7 +32,39 @@ class SortidaBiciController extends Controller
     {
         abort_unless($vehicle->tipus === 'bici', 404);
 
-        $base = SortidaBici::where('vehicle_id', $vehicle->id);
+        return response()->json($this->resum([$vehicle->id], $request) + ['components' => $this->components($vehicle)]);
+    }
+
+    /**
+     * La fitxa de totes les bicis juntes: el mateix resum que la d'una, sumat, i a més els km de cada bici
+     * per any (per a la gràfica apilada). Sense components, que són de cada bici.
+     */
+    public function fitxaTotes(Request $request): JsonResponse
+    {
+        $bicis = Vehicle::where('tipus', 'bici')->orderBy('id')->get(['id', 'nom']);
+        $perBici = SortidaBici::whereIn('vehicle_id', $bicis->pluck('id'))
+            ->selectRaw("strftime('%Y', data_local) as any, vehicle_id")
+            ->selectRaw('round(sum(distancia_m) / 1000.0, 1) as km')
+            ->selectRaw('coalesce(sum(calories), 0) as calories')
+            ->groupBy('any', 'vehicle_id')
+            ->get();
+
+        return response()->json($this->resum($bicis->pluck('id')->all(), $request) + [
+            'components' => [],
+            'bicis'      => $bicis->map(fn (Vehicle $v) => ['id' => $v->id, 'nom' => $v->nom])->values(),
+            'per_bici'   => $perBici->map(fn ($f) => ['any' => (int) $f->any, 'vehicle_id' => $f->vehicle_id, 'km' => (float) $f->km, 'calories' => (int) $f->calories])->values(),
+        ]);
+    }
+
+    /**
+     * El resum per any, per mes i per tipus d'unes quantes bicis (una sola, o totes). El desnivell, amb
+     * l'altitud de cada sortida o amb el mètode demanat (`?altitud=`).
+     *
+     * @param  array<int, int>  $vehicles
+     */
+    private function resum(array $vehicles, Request $request): array
+    {
+        $base = SortidaBici::whereIn('vehicle_id', $vehicles);
 
         $perAny = (clone $base)
             ->selectRaw("strftime('%Y', data_local) as any")
@@ -40,12 +72,14 @@ class SortidaBiciController extends Controller
             ->selectRaw('sum(distancia_m) / 1000.0 as km')
             ->selectRaw('sum(case when tipus_activitat = ? then distancia_m else 0 end) / 1000.0 as km_indoor', [self::INDOOR])
             ->selectRaw('sum(coalesce(temps_moviment_s, temps_s)) / 3600.0 as hores')
+            ->selectRaw('sum(calories) as calories')
+            ->selectRaw('sum(case when tipus_activitat = ? then calories else 0 end) as calories_indoor', [self::INDOOR])
             ->groupBy('any')
             ->orderByDesc('any')
             ->get()
             ->keyBy('any');
 
-        $despeses = VehicleDespesa::where('vehicle_id', $vehicle->id)->get()
+        $despeses = VehicleDespesa::whereIn('vehicle_id', $vehicles)->get()
             ->groupBy(fn (VehicleDespesa $d) => $d->data->format('Y'))
             ->map(fn ($grup) => round((float) $grup->sum(fn (VehicleDespesa $d) => (float) $d->import), 2));
 
@@ -56,7 +90,7 @@ class SortidaBiciController extends Controller
         $desnivell = $sortides->groupBy(fn (SortidaBici $s) => $s->data_local->format('Y'))
             ->map(fn ($grup) => $grup->sum(fn (SortidaBici $s) => $triats[$s->id]['pujada'] ?? 0));
 
-        return response()->json([
+        return [
             'per_any' => $anys->map(function ($any) use ($perAny, $despeses, $desnivell) {
                 $f = $perAny[$any] ?? null;
                 $km = $f ? round((float) $f->km, 1) : 0.0;
@@ -68,6 +102,8 @@ class SortidaBiciController extends Controller
                     'km'        => $km,
                     'km_indoor' => $f ? round((float) $f->km_indoor, 1) : 0.0,
                     'hores'     => $f ? round((float) $f->hores, 1) : 0.0,
+                    'calories'  => $f ? (int) $f->calories : 0,
+                    'calories_indoor' => $f ? (int) $f->calories_indoor : 0,
                     'desnivell' => (int) round($desnivell[$any] ?? 0),
                     'despeses'  => $cost,
                     'cost_km'   => $km > 0 && $cost > 0 ? round($cost / $km, 3) : null,
@@ -78,6 +114,8 @@ class SortidaBiciController extends Controller
                 ->selectRaw('count(*) as sortides')
                 ->selectRaw('round(sum(case when tipus_activitat = ? then 0 else distancia_m end) / 1000.0, 1) as km', [self::INDOOR])
                 ->selectRaw('round(sum(case when tipus_activitat = ? then distancia_m else 0 end) / 1000.0, 1) as km_indoor', [self::INDOOR])
+                ->selectRaw('coalesce(sum(case when tipus_activitat = ? then 0 else calories end), 0) as calories', [self::INDOOR])
+                ->selectRaw('coalesce(sum(case when tipus_activitat = ? then calories else 0 end), 0) as calories_indoor', [self::INDOOR])
                 ->groupBy('mes')
                 ->orderBy('mes')
                 ->get(),
@@ -86,8 +124,7 @@ class SortidaBiciController extends Controller
                 ->groupBy('tipus_activitat')
                 ->orderByDesc('sortides')
                 ->get(),
-            'components' => $this->components($vehicle),
-        ]);
+        ];
     }
 
     /**
@@ -147,24 +184,40 @@ class SortidaBiciController extends Controller
     {
         abort_unless($vehicle->tipus === 'bici', 404);
 
+        return response()->json($this->llistaSortides([$vehicle->id], $request));
+    }
+
+    /** Les sortides d'un any de totes les bicis, amb el nom de la bici de cadascuna. */
+    public function indexTotes(Request $request): JsonResponse
+    {
+        $bicis = Vehicle::where('tipus', 'bici')->pluck('nom', 'id');
+
+        return response()->json($this->llistaSortides($bicis->keys()->all(), $request)
+            ->map(fn ($s) => $s + ['bici' => $bicis[$s['vehicle_id']] ?? null]));
+    }
+
+    /** @param  array<int, int>  $vehicles */
+    private function llistaSortides(array $vehicles, Request $request)
+    {
         $any = $request->integer('any') ?: null;
         $tipus = $request->string('tipus')->toString() ?: null;
 
-        $sortides = SortidaBici::where('vehicle_id', $vehicle->id)
+        $sortides = SortidaBici::whereIn('vehicle_id', $vehicles)
             ->when($any, fn ($q) => $q->whereYear('data_local', $any))
             ->when($tipus, fn ($q) => $q->where('tipus_activitat', $tipus))
             ->orderByDesc('inici')
             // L'hora local és al registre de l'origen: no cal portar-ne el JSON sencer
             ->select([
-                'id', 'data_local', 'nom', 'tipus_activitat', 'distancia_m', 'temps_moviment_s', 'temps_s',
-                'desnivell_pos_m', 'vel_mitjana', 'fc_mitjana', 'punts', 'desnivell_corregit', 'altitud_metode', 'altitud_font',
+                'id', 'vehicle_id', 'data_local', 'nom', 'tipus_activitat', 'distancia_m', 'temps_moviment_s', 'temps_s',
+                'desnivell_pos_m', 'vel_mitjana', 'fc_mitjana', 'calories', 'punts', 'desnivell_corregit', 'altitud_metode', 'altitud_font',
             ])
             ->selectRaw("json_extract(dades_originals, '$.startTimeLocal') as inici_local_ms")
             ->get();
         $triats = app(AltitudTerrenyService::class)->desnivellsTriats($sortides, AltitudTerrenyService::metodeDemanat($request->query('altitud')));
 
-        $sortides = $sortides->map(fn (SortidaBici $s) => [
+        return $sortides->map(fn (SortidaBici $s) => [
                 'id'                 => $s->id,
+                'vehicle_id'         => $s->vehicle_id,
                 'data'               => $s->data_local->toDateString(),
                 'hora'               => $s->inici_local_ms ? gmdate('H:i', (int) ($s->inici_local_ms / 1000)) : null,
                 'nom'                => $s->nom,
@@ -175,12 +228,11 @@ class SortidaBiciController extends Controller
                 'desnivell_metode'   => $triats[$s->id]['metode'],
                 'kmh'                => $s->vel_mitjana !== null ? round($s->vel_mitjana * 3.6, 1) : null,
                 'fc'                 => $s->fc_mitjana,
+                'calories'           => $s->calories,
                 'amb_recorregut'     => $s->punts > 0,
                 // L'asterisc de Garmin només té sentit amb el seu desnivell
                 'desnivell_corregit' => $s->desnivell_corregit && $triats[$s->id]['metode'] === 'dispositiu',
             ]);
-
-        return response()->json($sortides);
     }
 
     /** La pàgina d'una sortida. Els punts es demanen a part (`punts`): una sortida llarga en té milers. */

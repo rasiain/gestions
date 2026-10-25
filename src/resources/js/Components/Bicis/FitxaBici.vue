@@ -2,6 +2,9 @@
 /**
  * La fitxa d'una bici: el que diuen les seves sortides. Les dades es demanen en obrir-la
  * —són milers de sortides i no viatgen amb la pàgina— i les sortides, any per any.
+ *
+ * Sense `vehicleId`, és la de **totes les bicis juntes**: el mateix resum sumat, les sortides amb el nom
+ * de la bici, i a les gràfiques els km de cada any apilats per bici. Sense components, que són de cada bici.
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Link } from '@inertiajs/vue3';
@@ -20,6 +23,10 @@ interface Any {
     km_indoor: number;
     hores: number;
     desnivell: number;
+    /** kcal, les que diu Garmin. */
+    calories: number;
+    /** Les dels rodets, incloses a `calories`: l'esforç sí que és real. */
+    calories_indoor: number;
     despeses: number;
     cost_km: number | null;
 }
@@ -29,6 +36,9 @@ interface Mes {
     sortides: number;
     km: number;
     km_indoor: number;
+    /** De l'exterior; les dels rodets, a part. */
+    calories: number;
+    calories_indoor: number;
 }
 
 interface Component {
@@ -59,8 +69,11 @@ interface Sortida {
     desnivell_metode: string;
     kmh: number | null;
     fc: number | null;
+    calories: number | null;
     amb_recorregut: boolean;
     desnivell_corregit: boolean;
+    /** Només a la fitxa de totes les bicis. */
+    bici?: string | null;
 }
 
 interface Fitxa {
@@ -68,18 +81,25 @@ interface Fitxa {
     per_mes: Mes[];
     tipus: { tipus: string; sortides: number }[];
     components: Component[];
+    /** Només a la fitxa de totes les bicis: les bicis i els km de cadascuna per any. */
+    bicis?: { id: number; nom: string }[];
+    per_bici?: { any: number; vehicle_id: number; km: number; calories: number }[];
 }
 
 type Pestanya = 'anys' | 'sortides' | 'components' | 'grafiques';
 
 const props = defineProps<{
-    vehicleId: number;
+    /** null: totes les bicis juntes. */
+    vehicleId: number | null;
     /** Amb què s'obre: en tornar d'una sortida, la llista de sortides del seu any. */
     pestanyaInicial?: Pestanya;
     anyInicial?: number;
 }>();
 
 const pestanya = ref<Pestanya>(props.pestanyaInicial ?? 'anys');
+const totes = computed(() => props.vehicleId === null);
+const urlFitxa = () => (props.vehicleId === null ? route('bicis.totes.fitxa') : route('bicis.fitxa', props.vehicleId));
+const urlSortides = () => (props.vehicleId === null ? route('bicis.totes.sortides') : route('bicis.sortides', props.vehicleId));
 const fitxa = ref<Fitxa | null>(null);
 const error = ref<string | null>(null);
 
@@ -112,12 +132,12 @@ const ambAltitud = (params: URLSearchParams = new URLSearchParams()) => {
 };
 
 watch(altitud, async () => {
-    fitxa.value = await demana<Fitxa>(route('bicis.fitxa', props.vehicleId) + ambAltitud());
+    fitxa.value = await demana<Fitxa>(urlFitxa() + ambAltitud());
     if (pestanya.value === 'sortides') carregaSortides();
 });
 
 onMounted(async () => {
-    fitxa.value = await demana<Fitxa>(route('bicis.fitxa', props.vehicleId) + ambAltitud());
+    fitxa.value = await demana<Fitxa>(urlFitxa() + ambAltitud());
     const anys = fitxa.value?.per_any.filter((a) => a.sortides > 0).map((a) => a.any) ?? [];
     anySortides.value = props.anyInicial && anys.includes(props.anyInicial) ? props.anyInicial : anys[0] ?? null;
 });
@@ -137,7 +157,7 @@ function durada(s: number | null): string {
 const total = computed(() => {
     const a = fitxa.value?.per_any ?? [];
     const suma = (k: keyof Any) => a.reduce((t, f) => t + ((f[k] as number) ?? 0), 0);
-    return { sortides: suma('sortides'), km: suma('km'), km_indoor: suma('km_indoor'), hores: suma('hores'), desnivell: suma('desnivell'), despeses: suma('despeses') };
+    return { sortides: suma('sortides'), km: suma('km'), km_indoor: suma('km_indoor'), hores: suma('hores'), desnivell: suma('desnivell'), calories: suma('calories'), despeses: suma('despeses') };
 });
 
 // ---- Sortides ----
@@ -151,7 +171,7 @@ async function carregaSortides() {
     carregantSortides.value = true;
     const params = new URLSearchParams({ any: String(anySortides.value) });
     if (tipusSortides.value) params.set('tipus', tipusSortides.value);
-    sortides.value = (await demana<Sortida[]>(route('bicis.sortides', props.vehicleId) + ambAltitud(params))) ?? [];
+    sortides.value = (await demana<Sortida[]>(urlSortides() + ambAltitud(params))) ?? [];
     carregantSortides.value = false;
 }
 
@@ -196,19 +216,56 @@ const barra = (color: string) => ({
     maxBarThickness: 36,
 });
 
+/** Què dibuixen les gràfiques: els quilòmetres o les calories (les de Garmin Connect, en kcal). */
+const mesura = ref<'km' | 'calories'>('km');
+const MESURES = { km: { titol: 'Quilòmetres', unitat: 'km' }, calories: { titol: 'Calories', unitat: 'kcal' } } as const;
+
 function series(etiquetes: string[], exterior: number[], indoor: number[]): ChartData<'bar'> {
     const sets: ChartData<'bar'>['datasets'] = [{ label: 'Exterior', data: exterior, ...barra(SERIE_BLAU) }];
-    if (teIndoor.value) sets.push({ label: 'Rodets (virtuals)', data: indoor, ...barra(SERIE_AMBRE) });
+    // Els km dels rodets són virtuals; les calories, no
+    if (teIndoor.value) sets.push({ label: mesura.value === 'km' ? 'Rodets (virtuals)' : 'Rodets', data: indoor, ...barra(SERIE_AMBRE) });
     return { labels: etiquetes, datasets: sets };
 }
+
+/**
+ * Totes les bicis: un color per bici, de la paleta categòrica validada (clar i fosc, sobre el blanc i el
+ * gris-800 del projecte), en ordre fix per id de bici: el color segueix la bici, no la seva posició.
+ * Tres colors clars no arriben a 3:1 sobre el blanc: per això la taula de sota repeteix les xifres.
+ */
+const PALETA_CLARA = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
+const PALETA_FOSCA = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
+const colorBici = (index: number) => (fosc.value ? PALETA_FOSCA : PALETA_CLARA)[index % 8];
+
+/** Km (o calories) de cada bici per any, de l'any més antic al més recent; només les bicis que en tenen. */
+const perBici = computed(() => {
+    const files = fitxa.value?.per_bici ?? [];
+    const anys = [...new Set(files.map((f) => f.any))].sort((a, b) => a - b);
+    const bicis = (fitxa.value?.bicis ?? []).map((b, i) => ({ ...b, index: i })).filter((b) => files.some((f) => f.vehicle_id === b.id && f.km > 0));
+    const valor = (any: number, bici: number) => files.find((f) => f.any === any && f.vehicle_id === bici)?.[mesura.value] ?? 0;
+    return { anys, bicis, valor };
+});
+
+const dadesPerBici = computed<ChartData<'bar'>>(() => ({
+    labels: perBici.value.anys.map(String),
+    datasets: perBici.value.bicis.map((b) => ({
+        label: b.nom,
+        data: perBici.value.anys.map((a) => Math.round(perBici.value.valor(a, b.id))),
+        ...barra(colorBici(b.index)),
+    })),
+}));
+
+const opcionsPerBici = computed<ChartOptions<'bar'>>(() => ({
+    ...opcions.value,
+    plugins: { ...opcions.value.plugins, legend: { display: true, labels: { color: tinta.value, boxWidth: 12 } } },
+}));
 
 const cronologic = computed(() => [...(fitxa.value?.per_any ?? [])].filter((a) => a.sortides > 0).reverse());
 
 const dadesPerAny = computed(() =>
     series(
         cronologic.value.map((a) => String(a.any)),
-        cronologic.value.map((a) => Math.round(a.km - a.km_indoor)),
-        cronologic.value.map((a) => Math.round(a.km_indoor)),
+        cronologic.value.map((a) => Math.round(mesura.value === 'km' ? a.km - a.km_indoor : a.calories - a.calories_indoor)),
+        cronologic.value.map((a) => Math.round(mesura.value === 'km' ? a.km_indoor : a.calories_indoor)),
     ),
 );
 
@@ -220,8 +277,8 @@ const dadesPerMes = computed(() => {
     const mesos = new Map((fitxa.value?.per_mes ?? []).filter((m) => m.mes.startsWith(String(anyGrafica.value))).map((m) => [Number(m.mes.slice(5)), m]));
     return series(
         NOMS_MES,
-        NOMS_MES.map((_, i) => mesos.get(i + 1)?.km ?? 0),
-        NOMS_MES.map((_, i) => mesos.get(i + 1)?.km_indoor ?? 0),
+        NOMS_MES.map((_, i) => (mesura.value === 'km' ? mesos.get(i + 1)?.km : mesos.get(i + 1)?.calories) ?? 0),
+        NOMS_MES.map((_, i) => (mesura.value === 'km' ? mesos.get(i + 1)?.km_indoor : mesos.get(i + 1)?.calories_indoor) ?? 0),
     );
 });
 
@@ -234,7 +291,7 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
         legend: { display: teIndoor.value, labels: { color: tinta.value, boxWidth: 12 } },
         tooltip: {
             callbacks: {
-                label: (c) => `${c.dataset.label}: ${nombre(c.parsed.y as number)} km`,
+                label: (c) => `${c.dataset.label}: ${nombre(c.parsed.y as number)} ${MESURES[mesura.value].unitat}`,
             },
         },
     },
@@ -249,7 +306,7 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
     <div>
         <SelectorAltitud v-model="altitud" class="mb-2" />
         <div class="mb-3 flex gap-1 border-b border-gray-200 dark:border-gray-600">
-            <button v-for="[clau, etiqueta] in [['anys', 'Per any'], ['sortides', 'Sortides'], ['components', 'Components'], ['grafiques', 'Gràfiques']]"
+            <button v-for="[clau, etiqueta] in [['anys', 'Per any'], ['sortides', 'Sortides'], ['components', 'Components'], ['grafiques', 'Gràfiques']].filter(([c]) => !(totes && c === 'components'))"
                 :key="clau" @click="pestanya = clau as any"
                 class="px-3 py-1.5 text-xs font-medium transition-colors"
                 :class="pestanya === clau
@@ -276,6 +333,7 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                             <th class="pb-1 pr-3 text-right font-medium">Km</th>
                             <th class="pb-1 pr-3 text-right font-medium">Hores</th>
                             <th class="pb-1 pr-3 text-right font-medium">Desnivell (m)</th>
+                            <th class="pb-1 pr-3 text-right font-medium">Calories (kcal)</th>
                             <th class="pb-1 pr-3 text-right font-medium">Despeses</th>
                             <th class="pb-1 text-right font-medium">€/km</th>
                         </tr>
@@ -287,6 +345,7 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                             <td class="py-1 pr-3 text-right tabular-nums">{{ nombre(total.km) }}</td>
                             <td class="py-1 pr-3 text-right tabular-nums">{{ nombre(total.hores) }}</td>
                             <td class="py-1 pr-3 text-right tabular-nums">{{ nombre(total.desnivell) }}</td>
+                            <td class="py-1 pr-3 text-right tabular-nums">{{ nombre(total.calories) }}</td>
                             <td class="py-1 pr-3 text-right tabular-nums">{{ total.despeses ? euros(total.despeses) : '—' }}</td>
                             <td class="py-1 text-right tabular-nums">{{ total.despeses && total.km ? (total.despeses / total.km).toFixed(3) : '—' }}</td>
                         </tr>
@@ -301,13 +360,14 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                             </td>
                             <td class="py-1 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ nombre(a.hores, 1) }}</td>
                             <td class="py-1 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ nombre(a.desnivell) }}</td>
+                            <td class="py-1 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ a.calories ? nombre(a.calories) : '—' }}</td>
                             <td class="py-1 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ a.despeses ? euros(a.despeses) : '—' }}</td>
                             <td class="py-1 text-right tabular-nums text-gray-500 dark:text-gray-400">{{ a.cost_km?.toFixed(3) ?? '—' }}</td>
                         </tr>
                     </tbody>
                 </table>
                 <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                    Els quilòmetres i les hores (en moviment) són els del resum de Garmin Connect; el desnivell,
+                    Els quilòmetres, les hores (en moviment) i les calories són els del resum de Garmin Connect; el desnivell,
                     {{ altitud === null ? "amb l'altitud de cada sortida (la desada o la de per defecte)" : altitud === 'dispositiu' ? 'també' : `amb l'altitud ${altitud === 'combinat' ? 'combinada' : 'del terreny'} on n'hi ha (si no, la de Garmin Connect)` }}.
                     Els dels rodets són virtuals i s'hi compten, però es diuen a part.
                 </p>
@@ -342,11 +402,13 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                             <tr class="border-b border-gray-200 text-left text-xs uppercase text-gray-500 dark:border-gray-600 dark:text-gray-400">
                                 <th class="pb-1 pr-3 font-medium">Data</th>
                                 <th class="pb-1 pr-3 font-medium">Sortida</th>
+                                <th v-if="totes" class="pb-1 pr-3 font-medium">Bici</th>
                                 <th class="pb-1 pr-3 text-right font-medium">Km</th>
                                 <th class="pb-1 pr-3 text-right font-medium">Temps</th>
                                 <th class="pb-1 pr-3 text-right font-medium">Desnivell</th>
                                 <th class="pb-1 pr-3 text-right font-medium">km/h</th>
-                                <th class="pb-1 text-right font-medium">FC</th>
+                                <th class="pb-1 pr-3 text-right font-medium">FC</th>
+                                <th class="pb-1 text-right font-medium">kcal</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
@@ -359,6 +421,7 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                                     <span class="ml-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-300">{{ etiquetaTipus(s.tipus) }}</span>
                                     <span v-if="!s.amb_recorregut" class="ml-1 text-xs text-gray-400 dark:text-gray-500" title="Garmin no en va donar el fitxer original: hi ha el resum però no els punts">sense recorregut</span>
                                 </td>
+                                <td v-if="totes" class="whitespace-nowrap py-1 pr-3 text-gray-600 dark:text-gray-400">{{ s.bici }}</td>
                                 <td class="py-1 pr-3 text-right tabular-nums text-gray-900 dark:text-gray-100">{{ s.km !== null ? nombre(s.km, 1) : '—' }}</td>
                                 <td class="py-1 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ durada(s.temps_s) }}</td>
                                 <td class="py-1 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">
@@ -368,7 +431,8 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                                         :title="s.desnivell_metode === 'combinat' ? 'Amb l\'altitud combinada' : 'Amb l\'altitud del terreny'">{{ s.desnivell_metode === 'combinat' ? 'c' : 't' }}</span>
                                 </td>
                                 <td class="py-1 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ s.kmh !== null ? nombre(s.kmh, 1) : '—' }}</td>
-                                <td class="py-1 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ s.fc ?? '—' }}</td>
+                                <td class="py-1 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ s.fc ?? '—' }}</td>
+                                <td class="py-1 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ s.calories ? nombre(s.calories) : '—' }}</td>
                             </tr>
                             <tr v-if="!carregantSortides && !sortides.length">
                                 <td colspan="7" class="py-4 text-center text-xs text-gray-400 dark:text-gray-500">Cap sortida.</td>
@@ -426,9 +490,44 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
 
             <!-- Gràfiques -->
             <div v-if="pestanya === 'grafiques'" class="space-y-8">
+                <div class="inline-flex rounded-md border border-gray-300 text-xs dark:border-gray-600">
+                    <button v-for="(m, clau) in MESURES" :key="clau" type="button" @click="mesura = clau"
+                        class="px-3 py-1 first:rounded-l-md last:rounded-r-md"
+                        :class="mesura === clau ? 'bg-sky-600 text-white' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700'">
+                        {{ m.titol }}
+                    </button>
+                </div>
+                <div v-if="totes">
+                    <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {{ MESURES[mesura].titol }} per any i bici
+                        <span class="ml-1 font-normal text-gray-400 dark:text-gray-500">{{ mesura === 'km' ? 'km (els dels rodets, virtuals)' : 'kcal' }}</span>
+                    </h4>
+                    <div class="h-72"><Bar :data="dadesPerBici" :options="opcionsPerBici" /></div>
+                    <div class="mt-3 overflow-x-auto">
+                        <table class="min-w-full text-xs">
+                            <thead>
+                                <tr class="border-b border-gray-200 text-left uppercase text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                                    <th class="pb-1 pr-3 font-medium">Any</th>
+                                    <th v-for="b in perBici.bicis" :key="b.id" class="pb-1 pr-3 text-right font-medium">
+                                        <span class="mr-1 inline-block h-2 w-2 rounded-sm" :style="{ backgroundColor: colorBici(b.index) }"></span>{{ b.nom }}
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 tabular-nums dark:divide-gray-700">
+                                <tr v-for="a in [...perBici.anys].reverse()" :key="a">
+                                    <td class="py-1 pr-3 font-medium text-gray-900 dark:text-gray-100">{{ a }}</td>
+                                    <td v-for="b in perBici.bicis" :key="b.id" class="py-1 pr-3 text-right text-gray-700 dark:text-gray-300">
+                                        {{ perBici.valor(a, b.id) ? nombre(perBici.valor(a, b.id)) : '—' }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <div>
                     <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        Quilòmetres per any <span class="ml-1 font-normal text-gray-400 dark:text-gray-500">km</span>
+                        {{ MESURES[mesura].titol }} per any <span class="ml-1 font-normal text-gray-400 dark:text-gray-500">{{ MESURES[mesura].unitat }}</span>
                     </h4>
                     <div class="h-64"><Bar :data="dadesPerAny" :options="opcions" /></div>
                 </div>
@@ -436,7 +535,7 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                 <div>
                     <div class="flex items-end justify-between gap-3">
                         <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Quilòmetres per mes <span class="ml-1 font-normal text-gray-400 dark:text-gray-500">km</span>
+                            {{ MESURES[mesura].titol }} per mes <span class="ml-1 font-normal text-gray-400 dark:text-gray-500">{{ MESURES[mesura].unitat }}</span>
                         </h4>
                         <select v-model="anyGrafica"
                             class="rounded-md border-gray-300 py-1 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">

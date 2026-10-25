@@ -162,6 +162,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/bicis/material', [MaterialEsportiuController::class, 'store'])->name('bicis.material.store');
     Route::put('/bicis/material/{material}', [MaterialEsportiuController::class, 'update'])->name('bicis.material.update');
     Route::delete('/bicis/material/{material}', [MaterialEsportiuController::class, 'destroy'])->name('bicis.material.destroy');
+    Route::get('/bicis/totes/fitxa', [SortidaBiciController::class, 'fitxaTotes'])->name('bicis.totes.fitxa');
+    Route::get('/bicis/totes/sortides', [SortidaBiciController::class, 'indexTotes'])->name('bicis.totes.sortides');
     Route::get('/bicis/{vehicle}/fitxa', [SortidaBiciController::class, 'fitxa'])->name('bicis.fitxa');
     Route::get('/bicis/{vehicle}/sortides', [SortidaBiciController::class, 'index'])->name('bicis.sortides');
     Route::get('/bicis/sortides/{sortida}', [SortidaBiciController::class, 'show'])->name('bicis.sortida');

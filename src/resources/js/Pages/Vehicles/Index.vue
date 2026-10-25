@@ -131,6 +131,8 @@ const donatsDeBaixa = computed(() => props.vehicles.filter((v) => !v.actiu).leng
 const repostatgesOberts = ref<number | null>(null);
 /** La bici amb la fitxa oberta. */
 const fitxaOberta = ref<number | null>(null);
+/** La fitxa de totes les bicis juntes. */
+const totesObertes = ref(false);
 
 /**
  * En tornar d'una sortida (?fitxa=<bici>&pestanya=sortides&any=<any>) la fitxa s'obre on
@@ -597,11 +599,21 @@ function elimina(vehicle: Vehicle) {
                     <div class="p-6">
                         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
                             <p class="text-sm text-gray-600 dark:text-gray-400">{{ props.descripcio }}</p>
+                            <button v-if="!props.esMotor" @click="totesObertes = !totesObertes"
+                                class="text-sm text-sky-600 hover:text-sky-800 dark:text-sky-400">
+                                {{ totesObertes ? 'Tanca el resum de totes les bicis' : 'Totes les bicis' }}
+                            </button>
                             <label v-if="donatsDeBaixa" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                                 <input v-model="mostraBaixes" type="checkbox"
                                     class="rounded border-gray-300 text-sky-600 focus:ring-sky-500 dark:border-gray-600 dark:bg-gray-700" />
                                 Mostra els {{ donatsDeBaixa }} donats de baixa
                             </label>
+                        </div>
+
+                        <!-- Totes les bicis juntes: la mateixa fitxa, sumada -->
+                        <div v-if="totesObertes && !props.esMotor" class="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-700/30">
+                            <h3 class="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Totes les bicis</h3>
+                            <FitxaBici :vehicle-id="null" />
                         </div>
 
                         <div v-if="visibles.length" class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
