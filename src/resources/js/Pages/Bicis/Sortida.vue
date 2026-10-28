@@ -18,6 +18,7 @@ import { Chart as ChartJS, registerables } from 'chart.js';
 import type { Chart, ChartData, ChartOptions, Plugin } from 'chart.js';
 import zoomPlugin from 'chartjs-plugin-zoom';
 import { SERIE_AMBRE, SERIE_BLAU, TRAMS_PENDENT, colorPendent, pendents, rodaEnClicar } from '@/bicis/recorregut';
+import { baixaGpx } from '@/bicis/gpx';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -42,7 +43,7 @@ interface PreferenciaAltitud { metode: Metode; font: string }
 
 const props = defineProps<{
     sortida: {
-        id: number; nom: string | null; tipus: string | null; data: string; hora: string | null; lloc: string | null;
+        id: number; nom: string | null; tipus: string | null; data: string; inici: string; hora: string | null; lloc: string | null;
         punts: number; desnivell_corregit: boolean; material_editat: boolean; fitxer: string | null; origen: string; id_extern: string;
         vehicle: { id: number; nom: string; modalitat: string | null };
         material: { id: number; nom: string; tipus: string }[];
@@ -572,6 +573,25 @@ const pecesPerTipus = computed(() => {
     return [...grups.entries()];
 });
 
+// ---- GPX ----
+/**
+ * El recorregut en GPX per importar-lo a Wikiloc o Garmin Connect, amb l'altitud del mètode triat a la
+ * pàgina (la corregida, si és la que es mira) i l'hora de cada punt.
+ */
+function baixaRecorregut() {
+    const p = punts.value;
+    if (!p) return;
+    const inici = Date.parse(props.sortida.inici);
+    const metode = triat.value.metode === 'dispositiu' ? '' : ` (altitud ${ETIQUETA_METODE[triat.value.metode].toLowerCase()})`;
+    const nom = `${props.sortida.nom ?? 'Sortida'} · ${props.sortida.data}`;
+    const llista = p.lat.flatMap((lat, i) => {
+        const lon = p.lon[i];
+        if (lat === null || lon === null) return [];
+        return [{ lat, lon, ele: alt.value[i] ?? null, time: new Date(inici + p.t[i] * 1000).toISOString().replace('.000Z', 'Z') }];
+    });
+    baixaGpx(nom + metode, llista, `${props.sortida.data} ${props.sortida.nom ?? 'Sortida'}.gpx`);
+}
+
 // ---- Resum ----
 const xifres = computed(() => [
     { etiqueta: 'Distància', valor: `${nombre(g.km, 1)} km` },
@@ -639,6 +659,11 @@ const comparacio = computed(() => {
                     </p>
                 </div>
                 <div class="flex gap-2">
+                    <button v-if="punts && teGps" type="button" @click="baixaRecorregut"
+                        :title="`Per importar-la a Wikiloc o Garmin Connect, amb l'altitud ${triat.metode === 'dispositiu' ? 'del dispositiu' : triat.metode === 'combinat' ? 'combinada' : 'del terreny'}`"
+                        class="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
+                        Baixa el GPX
+                    </button>
                     <Link v-if="anterior" :href="route('bicis.sortida', anterior)"
                         class="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
                         ← Anterior

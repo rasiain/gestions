@@ -15,6 +15,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { SERIE_BLAU, TRAMS_PENDENT, pendents, rodaEnClicar, trossosPerPendent } from '@/bicis/recorregut';
 import { num } from '@/formularis';
+import { baixaGpx } from '@/bicis/gpx';
 
 ChartJS.register(...registerables);
 
@@ -94,27 +95,12 @@ function distancies(punts: Proposta['punts']): number[] {
 }
 
 // ---- GPX ----
-function baixaGpx(p: Proposta, n: number) {
-    const nom = `Proposta ${nombre(p.km, 1)} km ${p.desnivell} m (${n + 1})`;
-    const punts = p.punts
-        .map(([lat, lon, alt]) => `      <trkpt lat="${lat.toFixed(6)}" lon="${lon.toFixed(6)}">${alt === null ? '' : `<ele>${alt.toFixed(1)}</ele>`}</trkpt>`)
-        .join('\n');
-    const gpx = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="gestions" xmlns="http://www.topografix.com/GPX/1/1">
-  <metadata><name>${nom}</name></metadata>
-  <trk>
-    <name>${nom}</name>
-    <trkseg>
-${punts}
-    </trkseg>
-  </trk>
-</gpx>
-`;
-    const enllac = document.createElement('a');
-    enllac.href = URL.createObjectURL(new Blob([gpx], { type: 'application/gpx+xml' }));
-    enllac.download = `proposta-${Math.round(p.km)}km-${p.desnivell}m-${n + 1}.gpx`;
-    enllac.click();
-    URL.revokeObjectURL(enllac.href);
+function baixa(p: Proposta, n: number) {
+    baixaGpx(
+        `Proposta ${nombre(p.km, 1)} km ${p.desnivell} m (${n + 1})`,
+        p.punts.map(([lat, lon, ele]) => ({ lat, lon, ele })),
+        `proposta-${Math.round(p.km)}km-${p.desnivell}m-${n + 1}.gpx`,
+    );
 }
 
 // ---- Mapa ----
@@ -333,7 +319,7 @@ const opcionsPerfil = computed<ChartOptions<'line'>>(() => {
                         :class="triada === n ? 'ring-sky-500' : 'ring-transparent hover:ring-gray-200 dark:hover:ring-gray-700'">
                         <div class="flex items-baseline justify-between gap-2">
                             <h3 class="text-sm font-semibold text-gray-800 dark:text-gray-200">Proposta {{ n + 1 }}</h3>
-                            <button type="button" @click.stop="baixaGpx(p, n)"
+                            <button type="button" @click.stop="baixa(p, n)"
                                 class="rounded-md border border-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
                                 Baixa el GPX
                             </button>

@@ -253,6 +253,8 @@ class SortidaBiciController extends Controller
                 'nom'                => $sortida->nom,
                 'tipus'              => $sortida->tipus_activitat,
                 'data'               => $sortida->data_local->toDateString(),
+                // En UTC: l'hora de cada punt (per al GPX) és aquesta més els seus segons
+                'inici'              => $sortida->inici->toIso8601ZuluString(),
                 'hora'               => isset($o['startTimeLocal']) ? gmdate('H:i', (int) ($o['startTimeLocal'] / 1000)) : null,
                 'lloc'               => $o['locationName'] ?? null,
                 'punts'              => $sortida->punts,
