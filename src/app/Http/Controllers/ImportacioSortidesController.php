@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ImportacioBaixadesRequest;
 use App\Http\Requests\ImportacioSortidesRequest;
 use App\Models\SortidaBici;
 use App\Models\Vehicle;
@@ -17,9 +18,11 @@ use Inertia\Inertia;
  */
 class ImportacioSortidesController extends Controller
 {
-    public function index()
+    public function index(ImportacioRecorregutsService $servei)
     {
         return Inertia::render('Bicis/Importa', [
+            // Les activitats de Garmin que hi ha a Baixades (null: no hi ha carpeta configurada)
+            'baixades'        => $servei->fitxersBaixades(),
             'bicis'           => Vehicle::where('tipus', 'bici')->orderBy('nom')->get()
                 ->map(fn (Vehicle $v) => ['id' => $v->id, 'nom' => $v->nom, 'actiu' => $v->esActiu()]),
             'senseRecorregut' => SortidaBici::with('vehicle:id,nom')
@@ -59,6 +62,19 @@ class ImportacioSortidesController extends Controller
         } finally {
             File::deleteDirectory($carpeta);
         }
+
+        $canvis = (bool) array_intersect(['afegit', 'creada'], array_column($resultats, 'estat'));
+        if ($canvis) {
+            $servei->recalculaDerivats();
+        }
+
+        return response()->json(['resultats' => $resultats, 'recalculant' => $canvis]);
+    }
+
+    /** Importa activitats de Baixades i esborra les que entren bé (ImportacioRecorregutsService::importaDeBaixades). */
+    public function baixades(ImportacioBaixadesRequest $request, ImportacioRecorregutsService $servei): JsonResponse
+    {
+        $resultats = $servei->importaDeBaixades($request->validated('fitxers'), $request->validated('vehicle_id'));
 
         $canvis = (bool) array_intersect(['afegit', 'creada'], array_column($resultats, 'estat'));
         if ($canvis) {

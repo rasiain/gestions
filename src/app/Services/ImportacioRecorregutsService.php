@@ -27,7 +27,82 @@ class ImportacioRecorregutsService
 
     private const MARGE_DISTANCIA = 0.02;
 
+    /**
+     * Els noms que posa Garmin Connect als fitxers que baixa: «Export Original» (12345678.zip o
+     * 12345678_ACTIVITY.fit) i «Export to GPX» (activity_12345678.gpx). De la carpeta de Baixades només
+     * es llisten —i s'esborren— aquests: mai cap altre fitxer de l'usuari.
+     */
+    public const PATRONS_GARMIN = ['/^\d+\.zip$/', '/^\d+_ACTIVITY\.fit$/i', '/^activity_\d+\.gpx$/i'];
+
+    /** Una sessió amb un d'aquests estats ha entrat bé: el fitxer es pot esborrar. */
+    private const ESTATS_BONS = ['afegit', 'creada', 'ja_hi_era'];
+
     public function __construct(private SortidesGarminService $garmin) {}
+
+    /** La carpeta de Baixades vista des del contenidor (`services.garmin.baixades`), si n'hi ha. */
+    public function carpetaBaixades(): ?string
+    {
+        $carpeta = config('services.garmin.baixades');
+
+        return $carpeta && is_dir($carpeta) ? rtrim($carpeta, '/') : null;
+    }
+
+    public static function esDeGarmin(string $nom): bool
+    {
+        return array_filter(self::PATRONS_GARMIN, fn ($p) => preg_match($p, $nom)) !== [];
+    }
+
+    /**
+     * Les activitats de Garmin que hi ha a Baixades, de la més nova a la més antiga.
+     *
+     * @return array<int, array{nom: string, mida: int, data: string}>|null null si no hi ha carpeta configurada
+     */
+    public function fitxersBaixades(): ?array
+    {
+        $carpeta = $this->carpetaBaixades();
+        if ($carpeta === null) {
+            return null;
+        }
+        $fitxers = [];
+        foreach (scandir($carpeta) ?: [] as $nom) {
+            if (self::esDeGarmin($nom) && is_file("{$carpeta}/{$nom}")) {
+                $fitxers[] = ['nom' => $nom, 'mida' => filesize("{$carpeta}/{$nom}"), 'data' => date('Y-m-d H:i', filemtime("{$carpeta}/{$nom}"))];
+            }
+        }
+        usort($fitxers, fn ($a, $b) => strcmp($b['data'], $a['data']));
+
+        return $fitxers;
+    }
+
+    /**
+     * Importa uns fitxers de Baixades, d'un en un, i esborra els que han entrat bé: tots els que en porten
+     * —un ZIP pot portar-ne més d'una— han acabat com a sortida nova, recorregut afegit o ja hi era. Els
+     * que fallen, no són de bici o necessiten la bici es queden a Baixades.
+     *
+     * @param  array<int, string>  $noms
+     * @return array<int, array{fitxer: string, estat: string, missatge: string, sortida_id: ?int, origen: string, esborrat: bool}>
+     */
+    public function importaDeBaixades(array $noms, ?int $biciPerNoves): array
+    {
+        $carpeta = $this->carpetaBaixades();
+        $resultats = [];
+        foreach ($noms as $nom) {
+            $ruta = "{$carpeta}/" . basename($nom);
+            if (! self::esDeGarmin(basename($nom)) || ! is_file($ruta)) {
+                continue;
+            }
+            $sessions = $this->importa([$ruta], $biciPerNoves);
+            $bo = $sessions !== [] && array_diff(array_column($sessions, 'estat'), self::ESTATS_BONS) === [];
+            if ($bo) {
+                @unlink($ruta);
+            }
+            foreach ($sessions ?: [['fitxer' => $nom, 'estat' => 'error', 'missatge' => 'No porta cap activitat.', 'sortida_id' => null]] as $r) {
+                $resultats[] = $r + ['origen' => basename($nom), 'esborrat' => $bo];
+            }
+        }
+
+        return $resultats;
+    }
 
     /**
      * @param  array<int, string>  $fitxers  rutes de .fit, .gpx o .zip

@@ -154,6 +154,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/bicis', [VehicleController::class, 'bicis'])->name('bicis.index');
     Route::get('/bicis/importa', [ImportacioSortidesController::class, 'index'])->name('bicis.importa.index');
     Route::post('/bicis/importa', [ImportacioSortidesController::class, 'store'])->name('bicis.importa.store');
+    Route::post('/bicis/importa/baixades', [ImportacioSortidesController::class, 'baixades'])->name('bicis.importa.baixades');
     Route::get('/bicis/propostes', [PropostaController::class, 'index'])->name('bicis.propostes.index');
     Route::get('/bicis/propostes/cerca', [PropostaController::class, 'cerca'])->name('bicis.propostes.cerca');
     Route::get('/bicis/rutes', [RutaController::class, 'index'])->name('bicis.rutes.index');

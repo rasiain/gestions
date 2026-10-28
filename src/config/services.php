@@ -46,4 +46,10 @@ return [
         'redirect'      => env('GOOGLE_REDIRECT_URI', 'http://localhost:8080/google/callback'),
     ],
 
+    // La carpeta on es baixen les activitats de Garmin Connect, vista des del contenidor (la de Baixades del
+    // Mac hi és muntada): la pantalla d'importació les hi llista i esborra les que importa bé
+    'garmin' => [
+        'baixades' => env('GARMIN_CARPETA_BAIXADES'),
+    ],
+
 ];

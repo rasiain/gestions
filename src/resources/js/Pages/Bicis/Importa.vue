@@ -3,6 +3,10 @@
  * Importa els FIT baixats de Garmin Connect («Export Original»): els ZIP o els .fit, d'un en un o
  * de cop. Completa les sortides sense recorregut i crea les que no hi són. Al costat, les sortides
  * que encara no en tenen, amb l'enllaç a Garmin Connect per baixar-ne l'original.
+ *
+ * Les activitats que hi ha a la carpeta de Baixades del Mac (muntada al contenidor) s'hi llisten i
+ * s'importen sense haver-les de pujar, i les que entren bé s'esborren de Baixades. Només hi surten els
+ * fitxers amb el nom que posa Garmin Connect: mai no es toca cap altre fitxer.
  */
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
@@ -14,12 +18,47 @@ interface Resultat {
     estat: 'afegit' | 'creada' | 'ja_hi_era' | 'cal_bici' | 'descartat' | 'error';
     missatge: string;
     sortida_id: number | null;
+    /** Només en importar de Baixades: el fitxer d'on ve i si se n'ha esborrat. */
+    origen?: string;
+    esborrat?: boolean;
 }
 
 const props = defineProps<{
     bicis: { id: number; nom: string; actiu: boolean }[];
     senseRecorregut: { id: number; data: string; nom: string | null; bici: string | null; km: number | null; garmin: string | null }[];
+    /** null: no hi ha carpeta de Baixades configurada. */
+    baixades: { nom: string; mida: number; data: string }[] | null;
 }>();
+
+// ---- De Baixades ----
+const triades = ref<string[]>((props.baixades ?? []).map((f) => f.nom));
+const importantBaixades = ref(false);
+
+async function importaBaixades() {
+    if (!triades.value.length) {
+        error.value = 'Tria alguna activitat de Baixades.';
+        return;
+    }
+    importantBaixades.value = true;
+    error.value = null;
+    const res = await fetch(route('bicis.importa.baixades'), {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
+        body: JSON.stringify({ fitxers: triades.value, vehicle_id: bici.value }),
+    });
+    const json = await res.json().catch(() => ({}));
+    importantBaixades.value = false;
+
+    if (!res.ok) {
+        error.value = res.status === 419
+            ? 'La sessió ha caducat. Recarrega la pàgina i torna-ho a provar.'
+            : (Object.values(json.errors ?? {}).flat()[0] as string | undefined) ?? json.message ?? `No s'ha pogut importar (error ${res.status}).`;
+        return;
+    }
+    resultats.value = json.resultats;
+    recalculant.value = json.recalculant;
+    router.reload({ only: ['senseRecorregut', 'baixades'], onSuccess: () => (triades.value = (props.baixades ?? []).map((f) => f.nom)) });
+}
 
 const fitxers = ref<File[]>([]);
 const bici = ref<number | null>(null);
@@ -107,6 +146,38 @@ const mida = (bytes: number) => (bytes < 1048576 ? `${Math.round(bytes / 1024)} 
             <div class="mx-auto grid max-w-7xl gap-6 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
                 <!-- Pujar fitxers -->
                 <div class="space-y-4">
+                    <!-- Les que ja són a Baixades: s'importen sense pujar-les, i les que entren bé s'esborren -->
+                    <div v-if="baixades !== null" class="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800">
+                        <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            A Baixades <span class="font-normal text-gray-400">({{ baixades.length }})</span>
+                        </h3>
+                        <p v-if="!baixades.length" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            No hi ha cap activitat de Garmin Connect a la carpeta de Baixades.
+                        </p>
+                        <template v-else>
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                Les activitats baixades de Garmin Connect. Les que entrin bé s'esborraran de Baixades; les que fallin
+                                o necessitin la bici s'hi quedaran.
+                            </p>
+                            <ul class="mt-2 max-h-48 space-y-0.5 overflow-y-auto text-sm">
+                                <li v-for="f in baixades" :key="f.nom">
+                                    <label class="flex items-center gap-2">
+                                        <input type="checkbox" :value="f.nom" v-model="triades" class="rounded border-gray-300 text-sky-600 dark:border-gray-600 dark:bg-gray-700" />
+                                        <span class="truncate text-gray-800 dark:text-gray-200">{{ f.nom }}</span>
+                                        <span class="shrink-0 text-xs text-gray-400">{{ f.data }} · {{ mida(f.mida) }}</span>
+                                    </label>
+                                </li>
+                            </ul>
+                            <div class="mt-3 flex justify-end">
+                                <button type="button" @click="importaBaixades"
+                                    class="rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-sky-700">
+                                    {{ importantBaixades ? 'Important…' : `Importa'ls i esborra els que entrin (${triades.length})` }}
+                                </button>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">Per a les sortides noves fa servir la bici triada a sota.</p>
+                        </template>
+                    </div>
+
                     <div class="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800">
                         <p class="mb-3 text-sm text-gray-600 dark:text-gray-400">
                             A Garmin Connect, obre l'activitat i tria ⚙ → <strong>Export Original</strong>. Deixa aquí el ZIP o el
@@ -159,10 +230,13 @@ const mida = (bytes: number) => (bytes < 1048576 ? `${Math.round(bytes / 1024)} 
                                 <span class="text-gray-800 dark:text-gray-200">{{ r.fitxer }}</span>
                                 <span class="text-gray-500 dark:text-gray-400">{{ r.missatge }}</span>
                                 <Link v-if="r.sortida_id" :href="route('bicis.sortida', r.sortida_id)" class="text-sky-700 hover:underline dark:text-sky-400">obre</Link>
+                                <span v-if="r.origen !== undefined" class="text-xs" :class="r.esborrat ? 'text-emerald-700 dark:text-emerald-400' : 'text-gray-400'">
+                                    {{ r.esborrat ? `${r.origen} esborrat de Baixades` : `${r.origen} es queda a Baixades` }}
+                                </span>
                             </li>
                         </ul>
                         <p v-if="calBici" class="mt-2 text-xs text-amber-700 dark:text-amber-400">
-                            Per importar les sortides noves, tria la bici i torna a pujar-ne els fitxers.
+                            Per importar les sortides noves, tria la bici i torna-les a importar.
                         </p>
                         <p v-if="recalculant" class="mt-2 text-xs text-gray-500 dark:text-gray-400">
                             Les rutes s'estan tornant a calcular en segon pla: en un parell de minuts ja hi seran.
