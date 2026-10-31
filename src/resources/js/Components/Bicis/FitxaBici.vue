@@ -273,14 +273,55 @@ const anyGrafica = ref<number | null>(null);
 watch(anysAmbSortides, (anys) => { if (anyGrafica.value === null) anyGrafica.value = anys[0] ?? null; }, { immediate: true });
 
 const NOMS_MES = ['gen', 'feb', 'març', 'abr', 'maig', 'juny', 'jul', 'ag', 'set', 'oct', 'nov', 'des'];
-const dadesPerMes = computed(() => {
-    const mesos = new Map((fitxa.value?.per_mes ?? []).filter((m) => m.mes.startsWith(String(anyGrafica.value))).map((m) => [Number(m.mes.slice(5)), m]));
-    return series(
-        NOMS_MES,
-        NOMS_MES.map((_, i) => (mesura.value === 'km' ? mesos.get(i + 1)?.km : mesos.get(i + 1)?.calories) ?? 0),
-        NOMS_MES.map((_, i) => (mesura.value === 'km' ? mesos.get(i + 1)?.km_indoor : mesos.get(i + 1)?.calories_indoor) ?? 0),
-    );
+/** Els mesos d'un any, amb la mesura triada; `null` si l'any no té cap sortida. */
+function mesosDe(any: number) {
+    const mesos = new Map((fitxa.value?.per_mes ?? []).filter((m) => m.mes.startsWith(`${any}-`)).map((m) => [Number(m.mes.slice(5)), m]));
+    if (!mesos.size) return null;
+    const valor = (i: number, indoor: boolean) => {
+        const m = mesos.get(i + 1);
+        if (!m) return 0;
+        return mesura.value === 'km' ? (indoor ? m.km_indoor : m.km) : (indoor ? m.calories_indoor : m.calories);
+    };
+    return { exterior: NOMS_MES.map((_, i) => valor(i, false)), indoor: NOMS_MES.map((_, i) => valor(i, true)) };
+}
+
+/**
+ * L'any triat i els dos anteriors, una barra de cada any per mes: del més antic al més recent, i l'any
+ * triat amb el blau de sempre. Colors de la paleta categòrica validada (els mateixos de «per bici»).
+ * Els rodets van apilats damunt de l'exterior, amb el mateix color en clar.
+ */
+const ANYS_MES = [
+    { enrere: 2, clar: '#1baf7a', fosc: '#199e70' },
+    { enrere: 1, clar: '#eb6834', fosc: '#d95926' },
+    { enrere: 0, clar: '#2a78d6', fosc: '#3987e5' },
+];
+
+const dadesPerMes = computed<ChartData<'bar'>>(() => {
+    const triat = anyGrafica.value ?? 0;
+    const datasets: ChartData<'bar'>['datasets'] = [];
+    for (const c of ANYS_MES) {
+        const any = triat - c.enrere;
+        const mesos = mesosDe(any);
+        // Un any sense cap sortida no fa barra; el triat, sí, encara que estigui buit
+        if (!mesos && c.enrere) continue;
+        const color = fosc.value ? c.fosc : c.clar;
+        const zeros = NOMS_MES.map(() => 0);
+        datasets.push({ label: String(any), data: mesos?.exterior ?? zeros, stack: String(any), ...barra(color) });
+        if (teIndoor.value) {
+            datasets.push({ label: `${any} rodets`, data: mesos?.indoor ?? zeros, stack: String(any), ...barra(`${color}80`) });
+        }
+    }
+    return { labels: NOMS_MES, datasets };
 });
+
+const opcionsPerMes = computed<ChartOptions<'bar'>>(() => ({
+    ...opcions.value,
+    plugins: {
+        ...opcions.value.plugins,
+        // La llegenda diu els anys; la part clara de cada barra (rodets) l'explica el peu
+        legend: { display: true, labels: { color: tinta.value, boxWidth: 12, filter: (l) => !l.text.endsWith('rodets') } },
+    },
+}));
 
 const opcions = computed<ChartOptions<'bar'>>(() => ({
     responsive: true,
@@ -542,7 +583,10 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                             <option v-for="a in anysAmbSortides" :key="a" :value="a">{{ a }}</option>
                         </select>
                     </div>
-                    <div class="h-64"><Bar :data="dadesPerMes" :options="opcions" /></div>
+                    <div class="h-64"><Bar :data="dadesPerMes" :options="opcionsPerMes" /></div>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Cada mes, l'any triat i els dos anteriors.<template v-if="teIndoor"> La part clara de cada barra són els rodets{{ mesura === 'km' ? ' (km virtuals)' : '' }}.</template>
+                    </p>
                 </div>
             </div>
         </template>
