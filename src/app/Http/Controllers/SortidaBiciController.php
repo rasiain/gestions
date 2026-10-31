@@ -46,13 +46,14 @@ class SortidaBiciController extends Controller
             ->selectRaw("strftime('%Y', data_local) as any, vehicle_id")
             ->selectRaw('round(sum(distancia_m) / 1000.0, 1) as km')
             ->selectRaw('coalesce(sum(calories), 0) as calories')
+            ->selectRaw('sum(coalesce(nullif(temps_moviment_s, 0), temps_s)) / 3600.0 as hores')
             ->groupBy('any', 'vehicle_id')
             ->get();
 
         return response()->json($this->resum($bicis->pluck('id')->all(), $request) + [
             'components' => [],
             'bicis'      => $bicis->map(fn (Vehicle $v) => ['id' => $v->id, 'nom' => $v->nom])->values(),
-            'per_bici'   => $perBici->map(fn ($f) => ['any' => (int) $f->any, 'vehicle_id' => $f->vehicle_id, 'km' => (float) $f->km, 'calories' => (int) $f->calories])->values(),
+            'per_bici'   => $perBici->map(fn ($f) => ['any' => (int) $f->any, 'vehicle_id' => $f->vehicle_id, 'km' => (float) $f->km, 'calories' => (int) $f->calories, 'hores' => round((float) $f->hores, 1)])->values(),
         ]);
     }
 
@@ -71,7 +72,8 @@ class SortidaBiciController extends Controller
             ->selectRaw('count(*) as sortides')
             ->selectRaw('sum(distancia_m) / 1000.0 as km')
             ->selectRaw('sum(case when tipus_activitat = ? then distancia_m else 0 end) / 1000.0 as km_indoor', [self::INDOOR])
-            ->selectRaw('sum(coalesce(temps_moviment_s, temps_s)) / 3600.0 as hores')
+            ->selectRaw('sum(coalesce(nullif(temps_moviment_s, 0), temps_s)) / 3600.0 as hores')
+            ->selectRaw('sum(case when tipus_activitat = ? then coalesce(nullif(temps_moviment_s, 0), temps_s) else 0 end) / 3600.0 as hores_indoor', [self::INDOOR])
             ->selectRaw('sum(calories) as calories')
             ->selectRaw('sum(case when tipus_activitat = ? then calories else 0 end) as calories_indoor', [self::INDOOR])
             ->groupBy('any')
@@ -102,6 +104,7 @@ class SortidaBiciController extends Controller
                     'km'        => $km,
                     'km_indoor' => $f ? round((float) $f->km_indoor, 1) : 0.0,
                     'hores'     => $f ? round((float) $f->hores, 1) : 0.0,
+                    'hores_indoor' => $f ? round((float) $f->hores_indoor, 1) : 0.0,
                     'calories'  => $f ? (int) $f->calories : 0,
                     'calories_indoor' => $f ? (int) $f->calories_indoor : 0,
                     'desnivell' => (int) round($desnivell[$any] ?? 0),
@@ -116,6 +119,8 @@ class SortidaBiciController extends Controller
                 ->selectRaw('round(sum(case when tipus_activitat = ? then distancia_m else 0 end) / 1000.0, 1) as km_indoor', [self::INDOOR])
                 ->selectRaw('coalesce(sum(case when tipus_activitat = ? then 0 else calories end), 0) as calories', [self::INDOOR])
                 ->selectRaw('coalesce(sum(case when tipus_activitat = ? then calories else 0 end), 0) as calories_indoor', [self::INDOOR])
+                ->selectRaw('round(coalesce(sum(case when tipus_activitat = ? then 0 else coalesce(nullif(temps_moviment_s, 0), temps_s) end), 0) / 3600.0, 1) as hores', [self::INDOOR])
+                ->selectRaw('round(coalesce(sum(case when tipus_activitat = ? then coalesce(nullif(temps_moviment_s, 0), temps_s) else 0 end), 0) / 3600.0, 1) as hores_indoor', [self::INDOOR])
                 ->groupBy('mes')
                 ->orderBy('mes')
                 ->get(),
@@ -223,7 +228,7 @@ class SortidaBiciController extends Controller
                 'nom'                => $s->nom,
                 'tipus'              => $s->tipus_activitat,
                 'km'                 => $s->distancia_m !== null ? round($s->distancia_m / 1000, 2) : null,
-                'temps_s'            => $s->temps_moviment_s ?? $s->temps_s,
+                'temps_s'            => $s->temps_moviment_s ?: $s->temps_s,
                 'desnivell'          => $triats[$s->id]['pujada'] !== null ? (int) round($triats[$s->id]['pujada']) : null,
                 'desnivell_metode'   => $triats[$s->id]['metode'],
                 'kmh'                => $s->vel_mitjana !== null ? round($s->vel_mitjana * 3.6, 1) : null,

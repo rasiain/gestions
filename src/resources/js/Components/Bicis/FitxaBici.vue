@@ -21,7 +21,10 @@ interface Any {
     km: number;
     /** Dels rodets: quilòmetres virtuals, inclosos a `km`. */
     km_indoor: number;
+    /** En moviment. */
     hores: number;
+    /** Dels rodets, incloses a `hores`. */
+    hores_indoor: number;
     desnivell: number;
     /** kcal, les que diu Garmin. */
     calories: number;
@@ -39,6 +42,9 @@ interface Mes {
     /** De l'exterior; les dels rodets, a part. */
     calories: number;
     calories_indoor: number;
+    /** En moviment, de l'exterior; les dels rodets, a part. */
+    hores: number;
+    hores_indoor: number;
 }
 
 interface Component {
@@ -83,7 +89,7 @@ interface Fitxa {
     components: Component[];
     /** Només a la fitxa de totes les bicis: les bicis i els km de cadascuna per any. */
     bicis?: { id: number; nom: string }[];
-    per_bici?: { any: number; vehicle_id: number; km: number; calories: number }[];
+    per_bici?: { any: number; vehicle_id: number; km: number; calories: number; hores: number }[];
 }
 
 type Pestanya = 'anys' | 'sortides' | 'components' | 'grafiques';
@@ -216,9 +222,18 @@ const barra = (color: string) => ({
     maxBarThickness: 36,
 });
 
-/** Què dibuixen les gràfiques: els quilòmetres o les calories (les de Garmin Connect, en kcal). */
-const mesura = ref<'km' | 'calories'>('km');
-const MESURES = { km: { titol: 'Quilòmetres', unitat: 'km' }, calories: { titol: 'Calories', unitat: 'kcal' } } as const;
+/** Què dibuixen les gràfiques: els quilòmetres, les calories (les de Garmin Connect, en kcal) o el temps en moviment. */
+const mesura = ref<'km' | 'calories' | 'hores'>('km');
+const MESURES = {
+    km: { titol: 'Quilòmetres', unitat: 'km' },
+    calories: { titol: 'Calories', unitat: 'kcal' },
+    hores: { titol: 'Temps', unitat: 'h' },
+} as const;
+const INDOOR = { km: 'km_indoor', calories: 'calories_indoor', hores: 'hores_indoor' } as const;
+/** Arrodonit per a la gràfica: les hores amb un decimal, que un mes en té poques. */
+const arrodoneix = (v: number) => (mesura.value === 'hores' ? Math.round(v * 10) / 10 : Math.round(v));
+/** El valor com es llegeix: les hores com a durada (12:30 h). */
+const formatMesura = (v: number) => (mesura.value === 'hores' ? `${durada(Math.round(v * 3600))} h` : `${nombre(v)} ${MESURES[mesura.value].unitat}`);
 
 function series(etiquetes: string[], exterior: number[], indoor: number[]): ChartData<'bar'> {
     const sets: ChartData<'bar'>['datasets'] = [{ label: 'Exterior', data: exterior, ...barra(SERIE_BLAU) }];
@@ -236,7 +251,7 @@ const PALETA_CLARA = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#0
 const PALETA_FOSCA = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
 const colorBici = (index: number) => (fosc.value ? PALETA_FOSCA : PALETA_CLARA)[index % 8];
 
-/** Km (o calories) de cada bici per any, de l'any més antic al més recent; només les bicis que en tenen. */
+/** Km (calories, hores) de cada bici per any, de l'any més antic al més recent; només les bicis que en tenen. */
 const perBici = computed(() => {
     const files = fitxa.value?.per_bici ?? [];
     const anys = [...new Set(files.map((f) => f.any))].sort((a, b) => a - b);
@@ -249,7 +264,7 @@ const dadesPerBici = computed<ChartData<'bar'>>(() => ({
     labels: perBici.value.anys.map(String),
     datasets: perBici.value.bicis.map((b) => ({
         label: b.nom,
-        data: perBici.value.anys.map((a) => Math.round(perBici.value.valor(a, b.id))),
+        data: perBici.value.anys.map((a) => arrodoneix(perBici.value.valor(a, b.id))),
         ...barra(colorBici(b.index)),
     })),
 }));
@@ -264,8 +279,9 @@ const cronologic = computed(() => [...(fitxa.value?.per_any ?? [])].filter((a) =
 const dadesPerAny = computed(() =>
     series(
         cronologic.value.map((a) => String(a.any)),
-        cronologic.value.map((a) => Math.round(mesura.value === 'km' ? a.km - a.km_indoor : a.calories - a.calories_indoor)),
-        cronologic.value.map((a) => Math.round(mesura.value === 'km' ? a.km_indoor : a.calories_indoor)),
+        // A l'any, el total ja porta els rodets: l'exterior és la resta
+        cronologic.value.map((a) => arrodoneix(a[mesura.value] - a[INDOOR[mesura.value]])),
+        cronologic.value.map((a) => arrodoneix(a[INDOOR[mesura.value]])),
     ),
 );
 
@@ -280,7 +296,7 @@ function mesosDe(any: number) {
     const valor = (i: number, indoor: boolean) => {
         const m = mesos.get(i + 1);
         if (!m) return 0;
-        return mesura.value === 'km' ? (indoor ? m.km_indoor : m.km) : (indoor ? m.calories_indoor : m.calories);
+        return indoor ? m[INDOOR[mesura.value]] : m[mesura.value];
     };
     return { exterior: NOMS_MES.map((_, i) => valor(i, false)), indoor: NOMS_MES.map((_, i) => valor(i, true)) };
 }
@@ -332,7 +348,7 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
         legend: { display: teIndoor.value, labels: { color: tinta.value, boxWidth: 12 } },
         tooltip: {
             callbacks: {
-                label: (c) => `${c.dataset.label}: ${nombre(c.parsed.y as number)} ${MESURES[mesura.value].unitat}`,
+                label: (c) => `${c.dataset.label}: ${formatMesura(c.parsed.y as number)}`,
             },
         },
     },
@@ -541,7 +557,7 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                 <div v-if="totes">
                     <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
                         {{ MESURES[mesura].titol }} per any i bici
-                        <span class="ml-1 font-normal text-gray-400 dark:text-gray-500">{{ mesura === 'km' ? 'km (els dels rodets, virtuals)' : 'kcal' }}</span>
+                        <span class="ml-1 font-normal text-gray-400 dark:text-gray-500">{{ mesura === 'km' ? 'km (els dels rodets, virtuals)' : MESURES[mesura].unitat }}</span>
                     </h4>
                     <div class="h-72"><Bar :data="dadesPerBici" :options="opcionsPerBici" /></div>
                     <div class="mt-3 overflow-x-auto">
@@ -558,7 +574,7 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                                 <tr v-for="a in [...perBici.anys].reverse()" :key="a">
                                     <td class="py-1 pr-3 font-medium text-gray-900 dark:text-gray-100">{{ a }}</td>
                                     <td v-for="b in perBici.bicis" :key="b.id" class="py-1 pr-3 text-right text-gray-700 dark:text-gray-300">
-                                        {{ perBici.valor(a, b.id) ? nombre(perBici.valor(a, b.id)) : '—' }}
+                                        {{ perBici.valor(a, b.id) ? (mesura === 'hores' ? durada(Math.round(perBici.valor(a, b.id) * 3600)) : nombre(perBici.valor(a, b.id))) : '—' }}
                                     </td>
                                 </tr>
                             </tbody>
