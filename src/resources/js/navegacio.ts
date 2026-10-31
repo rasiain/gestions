@@ -152,6 +152,7 @@ export const grups: Grup[] = [
         icona: icones.cor,
         color: colors.rosa,
         accions: [
+            { titol: 'Estat de forma', ruta: 'salut.estat-de-forma' },
             { titol: 'Dades físiques', ruta: 'salut.dades-fisiques' },
         ],
     },

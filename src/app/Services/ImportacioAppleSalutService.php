@@ -28,13 +28,15 @@ class ImportacioAppleSalutService
 
     private const FC_REPOS = 'HKQuantityTypeIdentifierRestingHeartRate';
 
+    private const ALCADA = 'HKQuantityTypeIdentifierHeight';
+
     /** Per ordre de preferència: la bàscula primer. */
     private const FONTS_PES = ['MyTanita', 'Connect'];
 
     /**
      * Llegeix l'XML en flux (fa més de 100 MB i creix).
      *
-     * @return array{pesades: array<string, array<int, array{0: string, 1: float}>>, fc_repos: array<int, array{0: string, 1: int}>, naixement: ?string}
+     * @return array{pesades: array<string, array<int, array{0: string, 1: float}>>, fc_repos: array<int, array{0: string, 1: int}>, naixement: ?string, alcada: ?int}
      *         pesades per font, [dia, kg]; fc en repòs, [dia, ppm]
      */
     public function llegeix(string $fitxer, string $desDe): array
@@ -47,6 +49,7 @@ class ImportacioAppleSalutService
         $pesades = [];
         $fcRepos = [];
         $naixement = null;
+        $alcada = null;
 
         while ($xml->read()) {
             if ($xml->nodeType !== XMLReader::ELEMENT) {
@@ -62,6 +65,13 @@ class ImportacioAppleSalutService
             }
 
             $tipus = $xml->getAttribute('type');
+            // L'alçada, la darrera que hi hagi, sense mirar la data: no canvia
+            if ($tipus === self::ALCADA) {
+                $valor = (float) $xml->getAttribute('value');
+                $alcada = (int) round($xml->getAttribute('unit') === 'm' ? $valor * 100 : $valor);
+
+                continue;
+            }
             if ($tipus !== self::PES && $tipus !== self::FC_REPOS) {
                 continue;
             }
@@ -87,7 +97,7 @@ class ImportacioAppleSalutService
         }
         $xml->close();
 
-        return ['pesades' => $pesades, 'fc_repos' => $fcRepos, 'naixement' => $naixement];
+        return ['pesades' => $pesades, 'fc_repos' => $fcRepos, 'naixement' => $naixement, 'alcada' => $alcada];
     }
 
     /**
@@ -150,7 +160,7 @@ class ImportacioAppleSalutService
      * @param  array<string, array{pes: ?float, fc_repos: ?int}>  $mesos
      * @return array{creats: int, actualitzats: int, saltats: int}
      */
-    public function desa(array $mesos, ?string $naixement): array
+    public function desa(array $mesos, ?string $naixement, ?int $alcada = null): array
     {
         $compte = ['creats' => 0, 'actualitzats' => 0, 'saltats' => 0];
 
@@ -173,10 +183,17 @@ class ImportacioAppleSalutService
             }
         }
 
-        // La data de naixement només si el perfil encara no en té
+        // La data de naixement i l'alçada, només si el perfil encara no en té: les del perfil manen
         $perfil = (array) Preferencia::valor(DadesFisiquesService::PREFERENCIA_PERFIL, []);
+        $nou = $perfil;
         if ($naixement && empty($perfil['data_naixement'])) {
-            Preferencia::desa(DadesFisiquesService::PREFERENCIA_PERFIL, ['data_naixement' => $naixement] + $perfil);
+            $nou['data_naixement'] = $naixement;
+        }
+        if ($alcada && empty($perfil['alcada'])) {
+            $nou['alcada'] = $alcada;
+        }
+        if ($nou !== $perfil) {
+            Preferencia::desa(DadesFisiquesService::PREFERENCIA_PERFIL, $nou);
         }
 
         return $compte;

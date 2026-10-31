@@ -36,10 +36,10 @@ class DadesFisiquesService
     /** @var array<int, array{0: string, 1: int}>|null data i fc màxima de cada sortida, per data */
     private ?array $maximes = null;
 
-    /** @return array{data_naixement: ?string, sexe: ?string} */
+    /** @return array{data_naixement: ?string, sexe: ?string, alcada: ?int} alçada en cm, per a l'IMC */
     public function perfil(): array
     {
-        return array_merge(['data_naixement' => null, 'sexe' => null], (array) Preferencia::valor(self::PREFERENCIA_PERFIL, []));
+        return array_merge(['data_naixement' => null, 'sexe' => null, 'alcada' => null], (array) Preferencia::valor(self::PREFERENCIA_PERFIL, []));
     }
 
     /**

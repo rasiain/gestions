@@ -152,6 +152,7 @@ Route::middleware('auth')->group(function () {
 
     // Salut: dades físiques de l'usuari (entrades de l'estat de forma)
     Route::get('/salut/dades-fisiques', [SalutController::class, 'dadesFisiques'])->name('salut.dades-fisiques');
+    Route::get('/salut/estat-de-forma', [SalutController::class, 'estatForma'])->name('salut.estat-de-forma');
     Route::post('/salut/registres', [SalutController::class, 'store'])->name('salut.registres.store');
     Route::put('/salut/registres/{registre}', [SalutController::class, 'update'])->name('salut.registres.update');
     Route::delete('/salut/registres/{registre}', [SalutController::class, 'destroy'])->name('salut.registres.destroy');

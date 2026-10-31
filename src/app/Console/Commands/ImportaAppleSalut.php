@@ -42,6 +42,9 @@ class ImportaAppleSalut extends Command
         if ($llegit['naixement']) {
             $this->line("Data de naixement: {$llegit['naixement']}");
         }
+        if ($llegit['alcada']) {
+            $this->line("Alçada: {$llegit['alcada']} cm");
+        }
 
         if ($this->option('prova')) {
             $this->info('Prova: no s\'ha desat res.');
@@ -49,7 +52,7 @@ class ImportaAppleSalut extends Command
             return self::SUCCESS;
         }
 
-        $compte = $servei->desa($mesos, $llegit['naixement']);
+        $compte = $servei->desa($mesos, $llegit['naixement'], $llegit['alcada']);
         $this->info("Creats: {$compte['creats']} · actualitzats: {$compte['actualitzats']} · saltats (n'hi havia un de manual): {$compte['saltats']}");
 
         return self::SUCCESS;

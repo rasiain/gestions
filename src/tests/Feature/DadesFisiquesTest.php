@@ -107,6 +107,7 @@ class DadesFisiquesTest extends TestCase
             $pes('2025-02-03', 85, 'Connect'),     // el mes no té cap pesada de la Tanita
             '<Record type="HKQuantityTypeIdentifierLeanBodyMass" sourceName="MyTanita" unit="kg" startDate="2025-01-05 07:00:00 +0100" value="53.2"/>',
             $fc('2025-01-01', 57), $fc('2025-01-02', 59), $fc('2025-01-03', 64),
+            '<Record type="HKQuantityTypeIdentifierHeight" sourceName="iPhone" unit="cm" startDate="2025-01-21 10:00:00 +0100" value="181"/>',
             '</HealthData>',
         ]));
 
@@ -126,6 +127,7 @@ class DadesFisiquesTest extends TestCase
         $this->assertNull($mesos['2025-02']['fc_repos']);
         $this->assertSame([['2025-01-21', 57.9, 'MyTanita']], $descartades);
         $this->assertSame('1968-02-28', $llegit['naixement']);
+        $this->assertSame(181, $llegit['alcada']);
     }
 
     public function test_la_carrega_no_toca_els_manuals_i_es_pot_repetir(): void
@@ -158,5 +160,10 @@ class DadesFisiquesTest extends TestCase
         $this->assertSame('manual', $importat->fresh()->origen);
 
         $this->get(route('salut.dades-fisiques'))->assertOk();
+
+        // L'alçada del perfil, en cm
+        $this->put(route('salut.perfil'), ['sexe' => 'home', 'alcada' => 1.81])->assertSessionHasErrors('alcada');
+        $this->put(route('salut.perfil'), ['sexe' => 'home', 'alcada' => 181])->assertSessionHasNoErrors();
+        $this->assertSame(181, (new DadesFisiquesService)->perfil()['alcada']);
     }
 }

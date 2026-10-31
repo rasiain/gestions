@@ -6,6 +6,8 @@ use App\Http\Requests\SalutRegistreRequest;
 use App\Models\Preferencia;
 use App\Models\SalutRegistre;
 use App\Services\DadesFisiquesService;
+use App\Services\EstatFormaService;
+use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -40,6 +42,23 @@ class SalutController extends Controller
         ]);
     }
 
+    /**
+     * La càrrega de cada sortida i les corbes de fons, fatiga i frescor, des de 2024. Es calcula des de
+     * tres mesos abans perquè el fons hi arribi escalfat; la tria del rang es fa a la pantalla.
+     */
+    public function estatForma(EstatFormaService $forma)
+    {
+        $escalfament = Carbon::parse(EstatFormaService::ESCALFAMENT);
+        $desDe = Carbon::parse(EstatFormaService::DES_DE);
+        $carregues = $forma->carregues($escalfament);
+
+        return Inertia::render('Salut/EstatForma', [
+            'corbes'    => $forma->corbes($carregues, $escalfament, $desDe, today()),
+            'sortides'  => array_values(array_filter($carregues, fn ($c) => $c['data'] >= EstatFormaService::DES_DE)),
+            'constants' => ['fons' => EstatFormaService::DIES_FONS, 'fatiga' => EstatFormaService::DIES_FATIGA],
+        ]);
+    }
+
     public function store(SalutRegistreRequest $request)
     {
         SalutRegistre::create($request->validated() + ['origen' => 'manual']);
@@ -67,6 +86,9 @@ class SalutController extends Controller
         $perfil = $request->validate([
             'data_naixement' => ['nullable', 'date', 'before:today'],
             'sexe'           => ['nullable', 'in:home,dona'],
+            'alcada'         => ['nullable', 'integer', 'between:100,230'],
+        ], [
+            'alcada.between' => "L'alçada va en centímetres, entre 100 i 230.",
         ]);
         Preferencia::desa(DadesFisiquesService::PREFERENCIA_PERFIL, $perfil);
 
