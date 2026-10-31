@@ -25,7 +25,10 @@ interface Any {
     hores: number;
     /** Dels rodets, incloses a `hores`. */
     hores_indoor: number;
+    /** Amb l'altitud triada (el selector de dalt). */
     desnivell: number;
+    /** Dels rodets, inclòs a `desnivell`. */
+    desnivell_indoor: number;
     /** kcal, les que diu Garmin. */
     calories: number;
     /** Les dels rodets, incloses a `calories`: l'esforç sí que és real. */
@@ -45,6 +48,9 @@ interface Mes {
     /** En moviment, de l'exterior; les dels rodets, a part. */
     hores: number;
     hores_indoor: number;
+    /** De l'exterior, amb l'altitud triada; el dels rodets, a part. */
+    desnivell: number;
+    desnivell_indoor: number;
 }
 
 interface Component {
@@ -89,7 +95,7 @@ interface Fitxa {
     components: Component[];
     /** Només a la fitxa de totes les bicis: les bicis i els km de cadascuna per any. */
     bicis?: { id: number; nom: string }[];
-    per_bici?: { any: number; vehicle_id: number; km: number; calories: number; hores: number }[];
+    per_bici?: { any: number; vehicle_id: number; km: number; calories: number; hores: number; desnivell: number }[];
 }
 
 type Pestanya = 'anys' | 'sortides' | 'components' | 'grafiques';
@@ -222,14 +228,18 @@ const barra = (color: string) => ({
     maxBarThickness: 36,
 });
 
-/** Què dibuixen les gràfiques: els quilòmetres, les calories (les de Garmin Connect, en kcal) o el temps en moviment. */
-const mesura = ref<'km' | 'calories' | 'hores'>('km');
+/**
+ * Què dibuixen les gràfiques: els quilòmetres, les calories (les de Garmin Connect, en kcal), el temps en moviment
+ * o el desnivell positiu, amb l'altitud del selector de dalt.
+ */
+const mesura = ref<'km' | 'calories' | 'hores' | 'desnivell'>('km');
 const MESURES = {
     km: { titol: 'Quilòmetres', unitat: 'km' },
     calories: { titol: 'Calories', unitat: 'kcal' },
     hores: { titol: 'Temps', unitat: 'h' },
+    desnivell: { titol: 'Desnivell', unitat: 'm' },
 } as const;
-const INDOOR = { km: 'km_indoor', calories: 'calories_indoor', hores: 'hores_indoor' } as const;
+const INDOOR = { km: 'km_indoor', calories: 'calories_indoor', hores: 'hores_indoor', desnivell: 'desnivell_indoor' } as const;
 /** Arrodonit per a la gràfica: les hores amb un decimal, que un mes en té poques. */
 const arrodoneix = (v: number) => (mesura.value === 'hores' ? Math.round(v * 10) / 10 : Math.round(v));
 /** El valor com es llegeix: les hores com a durada (12:30 h). */
@@ -251,7 +261,7 @@ const PALETA_CLARA = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#0
 const PALETA_FOSCA = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
 const colorBici = (index: number) => (fosc.value ? PALETA_FOSCA : PALETA_CLARA)[index % 8];
 
-/** Km (calories, hores) de cada bici per any, de l'any més antic al més recent; només les bicis que en tenen. */
+/** Km (calories, hores, desnivell) de cada bici per any, de l'any més antic al més recent; només les bicis que en tenen. */
 const perBici = computed(() => {
     const files = fitxa.value?.per_bici ?? [];
     const anys = [...new Set(files.map((f) => f.any))].sort((a, b) => a - b);
@@ -554,6 +564,9 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                         {{ m.titol }}
                     </button>
                 </div>
+                <p v-if="mesura === 'desnivell'" class="-mt-6 text-xs text-gray-500 dark:text-gray-400">
+                    El desnivell positiu, amb l'altitud triada al selector de dalt.
+                </p>
                 <div v-if="totes">
                     <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
                         {{ MESURES[mesura].titol }} per any i bici

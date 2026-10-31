@@ -32,7 +32,10 @@ class SortidaBiciController extends Controller
     {
         abort_unless($vehicle->tipus === 'bici', 404);
 
-        return response()->json($this->resum([$vehicle->id], $request) + ['components' => $this->components($vehicle)]);
+        $resum = $this->resum([$vehicle->id], $request);
+        unset($resum['desnivell_per_bici']);
+
+        return response()->json($resum + ['components' => $this->components($vehicle)]);
     }
 
     /**
@@ -50,10 +53,21 @@ class SortidaBiciController extends Controller
             ->groupBy('any', 'vehicle_id')
             ->get();
 
-        return response()->json($this->resum($bicis->pluck('id')->all(), $request) + [
+        $resum = $this->resum($bicis->pluck('id')->all(), $request);
+        $desnivell = $resum['desnivell_per_bici'];
+        unset($resum['desnivell_per_bici']);
+
+        return response()->json($resum + [
             'components' => [],
             'bicis'      => $bicis->map(fn (Vehicle $v) => ['id' => $v->id, 'nom' => $v->nom])->values(),
-            'per_bici'   => $perBici->map(fn ($f) => ['any' => (int) $f->any, 'vehicle_id' => $f->vehicle_id, 'km' => (float) $f->km, 'calories' => (int) $f->calories, 'hores' => round((float) $f->hores, 1)])->values(),
+            'per_bici'   => $perBici->map(fn ($f) => [
+                'any'        => (int) $f->any,
+                'vehicle_id' => $f->vehicle_id,
+                'km'         => (float) $f->km,
+                'calories'   => (int) $f->calories,
+                'hores'      => round((float) $f->hores, 1),
+                'desnivell'  => (int) round($desnivell["{$f->any}|{$f->vehicle_id}"] ?? 0),
+            ])->values(),
         ]);
     }
 
@@ -87,13 +101,18 @@ class SortidaBiciController extends Controller
 
         $anys = $perAny->keys()->merge($despeses->keys())->unique()->sortDesc()->values();
 
-        $sortides = (clone $base)->get(['id', 'data_local', 'desnivell_pos_m', 'altitud_metode', 'altitud_font']);
+        // El desnivell no és cap columna: el de cada sortida surt de l'altitud triada, i se suma aquí
+        $sortides = (clone $base)->get(['id', 'vehicle_id', 'data_local', 'tipus_activitat', 'desnivell_pos_m', 'altitud_metode', 'altitud_font']);
         $triats = app(AltitudTerrenyService::class)->desnivellsTriats($sortides, AltitudTerrenyService::metodeDemanat($request->query('altitud')));
-        $desnivell = $sortides->groupBy(fn (SortidaBici $s) => $s->data_local->format('Y'))
-            ->map(fn ($grup) => $grup->sum(fn (SortidaBici $s) => $triats[$s->id]['pujada'] ?? 0));
+        $pujada = fn (SortidaBici $s) => $triats[$s->id]['pujada'] ?? 0;
+        $indoor = fn (SortidaBici $s) => $s->tipus_activitat === self::INDOOR ? $pujada($s) : 0;
+        $perAnyS = $sortides->groupBy(fn (SortidaBici $s) => $s->data_local->format('Y'));
+        $desnivell = $perAnyS->map(fn ($grup) => $grup->sum($pujada));
+        $desnivellIndoor = $perAnyS->map(fn ($grup) => $grup->sum($indoor));
+        $perMesS = $sortides->groupBy(fn (SortidaBici $s) => $s->data_local->format('Y-m'));
 
         return [
-            'per_any' => $anys->map(function ($any) use ($perAny, $despeses, $desnivell) {
+            'per_any' => $anys->map(function ($any) use ($perAny, $despeses, $desnivell, $desnivellIndoor) {
                 $f = $perAny[$any] ?? null;
                 $km = $f ? round((float) $f->km, 1) : 0.0;
                 $cost = $despeses[$any] ?? 0.0;
@@ -108,6 +127,7 @@ class SortidaBiciController extends Controller
                     'calories'  => $f ? (int) $f->calories : 0,
                     'calories_indoor' => $f ? (int) $f->calories_indoor : 0,
                     'desnivell' => (int) round($desnivell[$any] ?? 0),
+                    'desnivell_indoor' => (int) round($desnivellIndoor[$any] ?? 0),
                     'despeses'  => $cost,
                     'cost_km'   => $km > 0 && $cost > 0 ? round($cost / $km, 3) : null,
                 ];
@@ -123,7 +143,14 @@ class SortidaBiciController extends Controller
                 ->selectRaw('round(coalesce(sum(case when tipus_activitat = ? then coalesce(nullif(temps_moviment_s, 0), temps_s) else 0 end), 0) / 3600.0, 1) as hores_indoor', [self::INDOOR])
                 ->groupBy('mes')
                 ->orderBy('mes')
-                ->get(),
+                ->get()
+                // Com els km: el de l'exterior i, a part, el dels rodets
+                ->map(fn ($m) => $m->toArray() + [
+                    'desnivell'        => (int) round(($perMesS[$m->mes] ?? collect())->sum(fn (SortidaBici $s) => $pujada($s) - $indoor($s))),
+                    'desnivell_indoor' => (int) round(($perMesS[$m->mes] ?? collect())->sum($indoor)),
+                ]),
+            'desnivell_per_bici' => $sortides->groupBy(fn (SortidaBici $s) => $s->data_local->format('Y').'|'.$s->vehicle_id)
+                ->map(fn ($grup) => $grup->sum($pujada)),
             'tipus'      => (clone $base)
                 ->selectRaw('tipus_activitat as tipus, count(*) as sortides')
                 ->groupBy('tipus_activitat')
