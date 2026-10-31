@@ -309,6 +309,16 @@ La pestanya **Gràfiques** dibuixa el que diuen els repostatges (chart.js + vue-
 
 Els CSV del Numbers van del més recent al més antic i hi ha dies amb dos repostatges: l'ordenació desempata per `km_totals`, que només puja.
 
+### Salut (dades físiques i estat de forma)
+
+Grup propi a la navegació, **Salut**, i no a dins de Bicis: són dades de la persona, i les sortides en són una font. Especificació a `.claude/specs/salut-estat-de-forma.md` (no versionat): fase 1 feta (dades físiques); pendents la càrrega per sortida (TRIMP d'Edwards) amb les corbes de fons, fatiga i frescor, i l'índex d'eficiència. Totes les sortides són de l'usuari, i per això res no porta persona.
+
+**`g_salut_registres`** (`/salut/dades-fisiques`): un registre per data amb `pes`, `fc_repos` i `fc_maxima`, totes opcionals. **Cada dada val des de la seva data fins al registre següent que la porti, camp a camp** (`DadesFisiquesService::valorA()`): un registre amb només el pes no anul·la la pulsació en repòs de l'anterior. Abans del primer registre s'hi val el primer valor conegut, marcat com a `anterior`. El perfil (data de naixement, sexe) és a `g_preferencies`, clau `salut.perfil`.
+
+**La pulsació màxima, si no s'apunta, es dedueix** (`fcMaxima()`): la 5a més alta de `fc_max` de les sortides dels 365 dies anteriors (el màxim absolut té punxes: 188 el 2022), amb un mínim de 20 sortides; si no n'hi ha prou, la de l'any d'abans, i com a últim recurs Tanaka (208 − 0,7 × edat), que queda curta (167 als 58 anys, contra els ~170 reals). Una apuntada no es projecta enrere.
+
+La càrrega inicial és **`salut:importa-apple-salut <exportació.xml> [--des-de=2024-01-01] [--prova]`** (`ImportacioAppleSalutService`, `XMLReader` en flux: l'XML fa més de 100 MB): un registre per mes, datat el 15, amb la mediana del pes (MyTanita i, si el mes no en té, Garmin Connect) i de la pulsació en repòs. Les pesades a més d'un 10 % de la mediana dels 60 dies del voltant es descarten: a la Tanita s'hi pesa algú altre. Atenció amb `LeanBodyMass`, que també conté «BodyMass». No toca mai un registre `manual`, i editar-ne un d'`apple_salut` el fa manual. **No és cap integració**: l'usuari va decidir mantenir les dades a mà, i Salut no té res abans del 2025-01-06.
+
 ### Formularis d'Inertia: `data` és un nom prohibit
 
 **Cap camp d'`useForm` no es pot dir `data`.** `form.data()` és un mètode del formulari —retorna els camps— i un camp amb aquest nom el trepitja: el `v-model` posa la funció dins de l'`<input>` (`The specified value "data(){...}" does not conform to "yyyy-MM-dd"`) i l'enviament peta amb `data is not a function` **abans de sortir del navegador**, de manera que al servidor no hi arriba res: ni petició als logs, ni error, ni fila a la base de dades. El botó sembla mort i no hi ha cap pista de per què.

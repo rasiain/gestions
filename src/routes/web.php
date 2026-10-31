@@ -36,6 +36,7 @@ use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\SortidaBiciController;
 use App\Http\Controllers\PropostaController;
 use App\Http\Controllers\RutaController;
+use App\Http\Controllers\SalutController;
 use App\Http\Controllers\ImportacioSortidesController;
 use App\Http\Controllers\MaterialEsportiuController;
 use App\Http\Controllers\GoogleController;
@@ -148,6 +149,13 @@ Route::middleware('auth')->group(function () {
     Route::post('/inversions/notes', [TotalsMobiliarisController::class, 'storeNota'])->name('inversions.notes.store');
     Route::put('/inversions/notes/{nota}', [TotalsMobiliarisController::class, 'updateNota'])->name('inversions.notes.update');
     Route::delete('/inversions/notes/{nota}', [TotalsMobiliarisController::class, 'destroyNota'])->name('inversions.notes.destroy');
+
+    // Salut: dades físiques de l'usuari (entrades de l'estat de forma)
+    Route::get('/salut/dades-fisiques', [SalutController::class, 'dadesFisiques'])->name('salut.dades-fisiques');
+    Route::post('/salut/registres', [SalutController::class, 'store'])->name('salut.registres.store');
+    Route::put('/salut/registres/{registre}', [SalutController::class, 'update'])->name('salut.registres.update');
+    Route::delete('/salut/registres/{registre}', [SalutController::class, 'destroy'])->name('salut.registres.destroy');
+    Route::put('/salut/perfil', [SalutController::class, 'perfil'])->name('salut.perfil');
 
     // Vehicles: dues llistes (els de motor, les bicis) sobre el mateix catàleg
     Route::get('/vehicles-motor', [VehicleController::class, 'vehiclesMotor'])->name('vehicles-motor.index');

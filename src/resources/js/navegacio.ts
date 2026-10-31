@@ -65,6 +65,13 @@ const colors = {
         enllac: 'hover:text-sky-600 dark:hover:text-sky-400',
         actiu: 'bg-sky-50 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
     },
+    rosa: {
+        fons: 'bg-rose-100 dark:bg-rose-900',
+        icona: 'text-rose-600 dark:text-rose-400',
+        vora: 'border-rose-200 dark:border-rose-800',
+        enllac: 'hover:text-rose-600 dark:hover:text-rose-400',
+        actiu: 'bg-rose-50 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
+    },
     lila: {
         fons: 'bg-purple-100 dark:bg-purple-900',
         icona: 'text-purple-600 dark:text-purple-400',
@@ -81,6 +88,7 @@ const icones = {
     rebut: 'M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z',
     // Caixa de cartró: el calaix del que encara no té grup propi
     caixa: 'M20 7l-8-4-8 4m16 0v10l-8 4m8-14l-8 4m0 10L4 17V7m8 10V11M4 7l8 4',
+    cor: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z',
     engranatge: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z',
 };
 
@@ -135,6 +143,16 @@ export const grups: Grup[] = [
             { titol: 'Patrimoni', ruta: 'impostos.patrimoni' },
             { titol: 'Taxes', ruta: 'impostos.taxes' },
             { titol: 'Assegurances', ruta: 'impostos.assegurances' },
+        ],
+    },
+    {
+        clau: 'salut',
+        titol: 'Salut',
+        descripcio: "Dades físiques i estat de forma",
+        icona: icones.cor,
+        color: colors.rosa,
+        accions: [
+            { titol: 'Dades físiques', ruta: 'salut.dades-fisiques' },
         ],
     },
     {
