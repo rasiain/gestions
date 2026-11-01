@@ -27,7 +27,8 @@ class SalutRegistreRequest extends FormRequest
                     $falla('Ja hi ha un registre en aquesta data: edita aquell.');
                 }
             }],
-            'pes'       => ['nullable', 'numeric', 'between:30,250', 'required_without_all:fc_repos,fc_maxima'],
+            'pes'       => ['nullable', 'numeric', 'between:30,250', 'required_without_all:greix,fc_repos,fc_maxima'],
+            'greix'     => ['nullable', 'numeric', 'between:3,60'],
             'fc_repos'  => ['nullable', 'integer', 'between:25,120'],
             'fc_maxima' => ['nullable', 'integer', 'between:100,230'],
             'notes'     => ['nullable', 'string', 'max:2000'],
@@ -37,7 +38,8 @@ class SalutRegistreRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'pes.required_without_all'  => 'Escriu com a mínim una dada: el pes o alguna de les pulsacions.',
+            'pes.required_without_all'  => 'Escriu com a mínim una dada: el pes, el greix o alguna de les pulsacions.',
+            'greix.between'             => 'El greix és un percentatge: entre 3 i 60.',
             'pes.between'               => 'El pes ha de ser entre 30 i 250 kg.',
             'fc_repos.between'          => 'La pulsació en repòs ha de ser entre 25 i 120.',
             'fc_maxima.between'         => 'La pulsació màxima ha de ser entre 100 i 230.',

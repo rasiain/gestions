@@ -13,7 +13,7 @@ use Inertia\Inertia;
 
 /**
  * Les dades físiques de l'usuari: el perfil (data de naixement i sexe, un sol cop) i els registres per
- * dates (pes, pulsació en repòs i màxima), que són el que necessita el càlcul de l'estat de forma.
+ * dates (pes, greix, pulsació en repòs i màxima), que són el que necessita el càlcul de l'estat de forma.
  */
 class SalutController extends Controller
 {
@@ -23,6 +23,7 @@ class SalutController extends Controller
             'id'        => $r->id,
             'data'      => $r->data->toDateString(),
             'pes'       => $r->pes,
+            'greix'     => $r->greix,
             'fc_repos'  => $r->fc_repos,
             'fc_maxima' => $r->fc_maxima,
             // La que s'aplicaria si no se n'apuntés cap: perquè es vegi al costat de la buida
@@ -36,6 +37,7 @@ class SalutController extends Controller
             'perfil'    => $dades->perfil(),
             'avui'      => [
                 'pes'       => $dades->valorA('pes', now()),
+                'greix'     => $dades->valorA('greix', now()),
                 'fc_repos'  => $dades->valorA('fc_repos', now()),
                 'fc_maxima' => $dades->fcMaxima(now()),
             ],

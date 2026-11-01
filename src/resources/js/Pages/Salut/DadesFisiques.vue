@@ -30,6 +30,8 @@ interface Registre {
     id: number;
     data: string;
     pes: number | null;
+    /** % de greix corporal (bioimpedància). */
+    greix: number | null;
     fc_repos: number | null;
     fc_maxima: number | null;
     fc_maxima_deduida: FcDeduida | null;
@@ -48,7 +50,7 @@ const props = defineProps<{
     registres: Registre[];
     /** L'alçada en cm, per a l'IMC. */
     perfil: { data_naixement: string | null; sexe: 'home' | 'dona' | null; alcada: number | null };
-    avui: { pes: Vigent | null; fc_repos: Vigent | null; fc_maxima: FcDeduida | null };
+    avui: { pes: Vigent | null; greix: Vigent | null; fc_repos: Vigent | null; fc_maxima: FcDeduida | null };
 }>();
 
 const nombre = (v: number, decimals = 0) =>
@@ -82,7 +84,7 @@ const desaPerfil = () =>
 const mostraModal = ref(false);
 const editat = ref<Registre | null>(null);
 const diaAvui = () => new Date().toISOString().slice(0, 10);
-const form = useForm({ dia: '', pes: '', fc_repos: '', fc_maxima: '', notes: '' });
+const form = useForm({ dia: '', pes: '', greix: '', fc_repos: '', fc_maxima: '', notes: '' });
 const errorLocal = ref<string | null>(null);
 
 function obre(r: Registre | null) {
@@ -91,6 +93,7 @@ function obre(r: Registre | null) {
     errorLocal.value = null;
     form.dia = r?.data ?? diaAvui();
     form.pes = r?.pes != null ? nombre(r.pes, 1) : '';
+    form.greix = r?.greix != null ? nombre(r.greix, 1) : '';
     form.fc_repos = r?.fc_repos != null ? String(r.fc_repos) : '';
     form.fc_maxima = r?.fc_maxima != null ? String(r.fc_maxima) : '';
     form.notes = r?.notes ?? '';
@@ -100,16 +103,18 @@ function obre(r: Registre | null) {
 function desa() {
     // El botó no es deshabilita: si falta alguna cosa, es diu què
     const pes = num(form.pes);
+    const greix = num(form.greix);
     const fcRepos = num(form.fc_repos);
     const fcMaxima = num(form.fc_maxima);
     if (!form.dia) return (errorLocal.value = 'Falta la data.');
     if (form.pes.trim() && pes === null) return (errorLocal.value = 'El pes no és cap número.');
-    if (pes === null && fcRepos === null && fcMaxima === null) {
-        return (errorLocal.value = 'Escriu com a mínim una dada: el pes o alguna de les pulsacions.');
+    if (form.greix.trim() && greix === null) return (errorLocal.value = 'El greix no és cap número.');
+    if (pes === null && greix === null && fcRepos === null && fcMaxima === null) {
+        return (errorLocal.value = 'Escriu com a mínim una dada: el pes, el greix o alguna de les pulsacions.');
     }
     errorLocal.value = null;
 
-    const enviament = form.transform((d) => perAlServidor({ ...d, pes, fc_repos: fcRepos, fc_maxima: fcMaxima, notes: d.notes || null }));
+    const enviament = form.transform((d) => perAlServidor({ ...d, pes, greix, fc_repos: fcRepos, fc_maxima: fcMaxima, notes: d.notes || null }));
     const opcions = { preserveScroll: true, onSuccess: () => (mostraModal.value = false) };
     if (editat.value) enviament.put(route('salut.registres.update', editat.value.id), opcions);
     else enviament.post(route('salut.registres.store'), opcions);
@@ -137,7 +142,7 @@ const SERIE = '#0284c7';
 const cronologics = computed(() => [...props.registres].reverse());
 
 /** Esglaonada: cada valor val fins al registre següent que el porta. */
-const serie = (camp: 'pes' | 'fc_repos', etiqueta: string): ChartData<'line'> => ({
+const serie = (camp: 'pes' | 'greix' | 'fc_repos', etiqueta: string): ChartData<'line'> => ({
     datasets: [{
         label: etiqueta,
         data: cronologics.value.filter((r) => r[camp] !== null).map((r) => ({ x: new Date(r.data).getTime(), y: r[camp] as number })),
@@ -178,13 +183,14 @@ const dadesImc = computed<ChartData<'line'>>(() => {
 });
 const tintaLinia = computed(() => (fosc.value ? '#e5e7eb' : '#374151'));
 
-/** Pinta els trams de l'IMC darrere la línia. */
-const tramsDeFons: Plugin<'line'> = {
-    id: 'tramsImc',
+type Tram = { des: number; fins: number; nom: string; color: string };
+/** Pinta uns trams de referència darrere la línia (els de l'IMC o els del greix). */
+const tramsDeFons = (id: string, trams: () => Tram[] | null): Plugin<'line'> => ({
+    id,
     beforeDatasetsDraw(chart: Chart) {
         const { ctx, chartArea: a, scales: { y } } = chart;
         ctx.save();
-        for (const t of TRAMS_IMC) {
+        for (const t of trams() ?? []) {
             const dalt = Math.max(a.top, y.getPixelForValue(Math.min(t.fins, y.max)));
             const baix = Math.min(a.bottom, y.getPixelForValue(Math.max(t.des, y.min)));
             if (baix <= dalt) continue;
@@ -193,8 +199,37 @@ const tramsDeFons: Plugin<'line'> = {
         }
         ctx.restore();
     },
-};
+});
+const tramsImcDeFons = tramsDeFons('tramsImc', () => TRAMS_IMC);
+const tramsGreixDeFons = tramsDeFons('tramsGreix', () => tramsGreix.value);
 const dadesFc = computed(() => serie('fc_repos', 'Pulsació en repòs'));
+
+// ---- Greix ----
+/**
+ * Trams de referència del % de greix per sexe i edat (Gallagher et al., 2000: els que fa servir la
+ * Tanita). Van per l'edat d'avui, no la de cada registre: en dos anys el tram no es mou gaire.
+ */
+const LIMITS_GREIX: Record<'home' | 'dona', Array<{ fins: number; limits: [number, number, number] }>> = {
+    home: [{ fins: 40, limits: [8, 20, 25] }, { fins: 60, limits: [11, 22, 28] }, { fins: Infinity, limits: [13, 25, 30] }],
+    dona: [{ fins: 40, limits: [21, 33, 39] }, { fins: 60, limits: [23, 34, 40] }, { fins: Infinity, limits: [24, 36, 42] }],
+};
+const tramsGreix = computed(() => {
+    if (!props.perfil.sexe || edat.value === null) return null;
+    const [baix, alt, obes] = LIMITS_GREIX[props.perfil.sexe].find((t) => edat.value! < t.fins)!.limits;
+    return [
+        { des: obes, fins: Infinity, nom: 'Obesitat', color: 'rgba(220,38,38,0.13)' },
+        { des: alt, fins: obes, nom: 'Alt', color: 'rgba(217,119,6,0.14)' },
+        { des: baix, fins: alt, nom: 'Saludable', color: 'rgba(22,163,74,0.13)' },
+        { des: -Infinity, fins: baix, nom: 'Baix', color: 'rgba(2,132,199,0.13)' },
+    ];
+});
+const tramGreix = (v: number | null) => (v === null || !tramsGreix.value ? null : tramsGreix.value.find((t) => v >= t.des && v < t.fins) ?? null);
+const saludable = computed(() => tramsGreix.value?.find((t) => t.nom === 'Saludable') ?? null);
+const dadesGreix = computed(() => {
+    const d = serie('greix', 'Greix');
+    Object.assign(d.datasets[0], { borderColor: tintaLinia.value, backgroundColor: tintaLinia.value });
+    return d;
+});
 
 const opcions = (unitat: string, decimals: number) => computed<ChartOptions<'line'>>(() => ({
     responsive: true,
@@ -230,6 +265,15 @@ const opcionsImc = computed<ChartOptions<'line'>>(() => {
     };
 });
 const opcionsFc = opcions('ppm', 0);
+const opcionsGreixBase = opcions('%', 1);
+const opcionsGreix = computed<ChartOptions<'line'>>(() => {
+    const o = opcionsGreixBase.value;
+    return {
+        ...o,
+        plugins: { ...o.plugins, tooltip: { callbacks: { ...o.plugins!.tooltip!.callbacks, label: (c: any) => `${nombre(Number(c.parsed.y), 1)} % · ${tramGreix(Number(c.parsed.y))?.nom ?? ''}` } } },
+        scales: { ...o.scales, y: { ...o.scales!.y, suggestedMin: saludable.value ? saludable.value.des - 2 : undefined, suggestedMax: saludable.value ? saludable.value.fins + 8 : undefined } },
+    };
+});
 </script>
 
 <template>
@@ -254,7 +298,7 @@ const opcionsFc = opcions('ppm', 0);
                 </p>
 
                 <!-- Vigents avui -->
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
                     <div class="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800">
                         <div class="flex items-center gap-1.5 text-xs uppercase text-gray-500 dark:text-gray-400">
                             Pes
@@ -279,7 +323,7 @@ const opcionsFc = opcions('ppm', 0);
                                 <ul class="list-disc space-y-1 pl-4">
                                     <li>No distingeix el múscul del greix: algú amb molta musculatura (cames de ciclista) pot sortir amb sobrepès sense tenir-ne.</li>
                                     <li>Amb l'edat, diversos estudis troben el risc més baix una mica més amunt: en majors de 65 anys, cap a 23–28.</li>
-                                    <li>Diu més el perímetre de la cintura o el percentatge de greix (la Tanita el mesura) que l'IMC sol.</li>
+                                    <li>Diu més el perímetre de la cintura o el percentatge de greix, que és al costat, que l'IMC sol.</li>
                                 </ul>
                             </Info>
                         </div>
@@ -289,6 +333,24 @@ const opcionsFc = opcions('ppm', 0);
                         <div class="text-xs text-gray-400 dark:text-gray-500">
                             <template v-if="imcAvui !== null">{{ tramImc(imcAvui)?.nom }}<template v-if="pesNormal"> · normal: {{ nombre(pesNormal[0], 0) }}–{{ nombre(pesNormal[1], 0) }} kg</template></template>
                             <template v-else-if="!perfil.alcada">cal l'alçada al perfil</template>
+                        </div>
+                    </div>
+                    <div class="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800">
+                        <div class="flex items-center gap-1.5 text-xs uppercase text-gray-500 dark:text-gray-400">
+                            Greix
+                            <Info titol="Percentatge de greix">
+                                <p>La part del pes que és greix, mesurada per bioimpedància (la bàscula fa passar un corrent feble pels peus). A diferència de l'IMC, separa el greix del múscul.</p>
+                                <p v-if="saludable">Per a {{ perfil.sexe === 'dona' ? 'una dona' : 'un home' }} de {{ edat }} anys, el tram <strong>saludable és {{ saludable.des }}–{{ saludable.fins }} %</strong>; per sobre és alt, i a partir del {{ tramsGreix![0].des }} %, obesitat (Gallagher et al., 2000, els trams que fa servir la Tanita). Els trams pugen amb l'edat{{ edat !== null && edat < 60 ? ': als 60 anys passa a 13–25 %' : '' }}.</p>
+                                <p v-else>Per veure'n el tram de referència, cal el sexe i la data de naixement al perfil.</p>
+                                <p>És una estimació: la bioimpedància varia amb l'aigua del cos, i una mateixa persona pot donar 2–3 punts de diferència d'un dia a l'altre. Compta la tendència, i val més pesar-se sempre en les mateixes condicions (al matí, en dejú).</p>
+                            </Info>
+                        </div>
+                        <div class="mt-1 text-2xl font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                            {{ avui.greix ? nombre(avui.greix.valor, 1) + ' %' : '—' }}
+                        </div>
+                        <div class="text-xs text-gray-400 dark:text-gray-500">
+                            <template v-if="avui.greix && tramGreix(avui.greix.valor)">{{ tramGreix(avui.greix.valor)!.nom }}<template v-if="saludable"> · saludable: {{ saludable.des }}–{{ saludable.fins }} %</template></template>
+                            <template v-else-if="avui.greix">des del {{ formatData(avui.greix.data) }}</template>
                         </div>
                     </div>
                     <div class="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800">
@@ -373,9 +435,24 @@ const opcionsFc = opcions('ppm', 0);
                                 <p>Les limitacions són les de la xifra d'avui: no separa múscul de greix, i amb l'edat el risc més baix se situa una mica més amunt.</p>
                             </Info>
                         </h3>
-                        <div class="mt-2 h-48"><Line :data="dadesImc" :options="opcionsImc" :plugins="[tramsDeFons]" /></div>
+                        <div class="mt-2 h-48"><Line :data="dadesImc" :options="opcionsImc" :plugins="[tramsImcDeFons]" /></div>
                         <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
                             <span v-for="t in [...TRAMS_IMC].reverse()" :key="t.nom" class="inline-flex items-center gap-1.5">
+                                <span class="inline-block h-3 w-3 rounded-sm border border-gray-300 dark:border-gray-600" :style="{ backgroundColor: t.color }"></span>{{ t.nom }}
+                            </span>
+                        </div>
+                    </div>
+                    <div v-if="registres.some((r) => r.greix !== null)" class="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800">
+                        <h3 class="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Greix <span class="font-normal text-gray-400">%</span>
+                            <Info titol="Evolució del greix">
+                                <p>El percentatge de greix de cada registre, amb els trams de referència per al teu sexe i la teva edat de fons<template v-if="saludable"> (saludable: {{ saludable.des }}–{{ saludable.fins }} %)</template>.</p>
+                                <p>Si el pes puja i el greix no, el que es guanya és múscul; si pugen tots dos, és greix.</p>
+                            </Info>
+                        </h3>
+                        <div class="mt-2 h-48"><Line :data="dadesGreix" :options="opcionsGreix" :plugins="[tramsGreixDeFons]" /></div>
+                        <div v-if="tramsGreix" class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                            <span v-for="t in [...tramsGreix].reverse()" :key="t.nom" class="inline-flex items-center gap-1.5">
                                 <span class="inline-block h-3 w-3 rounded-sm border border-gray-300 dark:border-gray-600" :style="{ backgroundColor: t.color }"></span>{{ t.nom }}
                             </span>
                         </div>
@@ -393,6 +470,7 @@ const opcionsFc = opcions('ppm', 0);
                             <tr class="border-b border-gray-200 text-left text-xs uppercase text-gray-500 dark:border-gray-700 dark:text-gray-400">
                                 <th class="px-4 py-2 font-medium">Data</th>
                                 <th class="px-4 py-2 text-right font-medium">Pes (kg)</th>
+                                <th class="px-4 py-2 text-right font-medium">Greix (%)</th>
                                 <th class="px-4 py-2 text-right font-medium">FC repòs</th>
                                 <th class="px-4 py-2 text-right font-medium">FC màxima</th>
                                 <th class="px-4 py-2 font-medium">Notes</th>
@@ -401,7 +479,7 @@ const opcionsFc = opcions('ppm', 0);
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                             <tr v-if="!registres.length">
-                                <td colspan="6" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400">Encara no hi ha cap registre.</td>
+                                <td colspan="7" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400">Encara no hi ha cap registre.</td>
                             </tr>
                             <tr v-for="r in registres" :key="r.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/40">
                                 <td class="whitespace-nowrap px-4 py-2 text-gray-900 dark:text-gray-100">
@@ -410,6 +488,7 @@ const opcionsFc = opcions('ppm', 0);
                                         title="Mediana del mes, de la càrrega inicial des d'Apple Salut">Apple Salut</span>
                                 </td>
                                 <td class="px-4 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ r.pes !== null ? nombre(r.pes, 1) : '—' }}</td>
+                                <td class="px-4 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ r.greix !== null ? nombre(r.greix, 1) : '—' }}</td>
                                 <td class="px-4 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ r.fc_repos ?? '—' }}</td>
                                 <td class="px-4 py-2 text-right tabular-nums">
                                     <span v-if="r.fc_maxima !== null" class="text-gray-700 dark:text-gray-300">{{ r.fc_maxima }}</span>
@@ -436,7 +515,7 @@ const opcionsFc = opcions('ppm', 0);
             </div>
         </div>
 
-        <Modal :show="mostraModal" max-width="md" @close="mostraModal = false">
+        <Modal :show="mostraModal" max-width="lg" @close="mostraModal = false">
             <div class="p-6">
                 <h3 class="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
                     {{ editat ? 'Edita el registre' : 'Nou registre' }}
@@ -447,10 +526,15 @@ const opcionsFc = opcions('ppm', 0);
                         <input v-model="form.dia" type="date"
                             class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
                     </label>
-                    <div class="grid grid-cols-3 gap-3">
+                    <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
                             Pes (kg)
                             <input v-model="form.pes" type="text" inputmode="decimal" placeholder="84,5"
+                                class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                        </label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Greix (%)
+                            <input v-model="form.greix" type="text" inputmode="decimal" placeholder="22,5"
                                 class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
                         </label>
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">

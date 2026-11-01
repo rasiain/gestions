@@ -107,6 +107,11 @@ class DadesFisiquesTest extends TestCase
             $pes('2025-02-03', 85, 'Connect'),     // el mes no té cap pesada de la Tanita
             '<Record type="HKQuantityTypeIdentifierLeanBodyMass" sourceName="MyTanita" unit="kg" startDate="2025-01-05 07:00:00 +0100" value="53.2"/>',
             $fc('2025-01-01', 57), $fc('2025-01-02', 59), $fc('2025-01-03', 64),
+            // El greix, en fracció; la de 0,358 és de l'altra persona
+            '<Record type="HKQuantityTypeIdentifierBodyFatPercentage" sourceName="MyTanita" unit="%" startDate="2025-01-05 07:00:00 +0100" value="0.21"/>',
+            '<Record type="HKQuantityTypeIdentifierBodyFatPercentage" sourceName="MyTanita" unit="%" startDate="2025-01-10 07:00:00 +0100" value="0.22"/>',
+            '<Record type="HKQuantityTypeIdentifierBodyFatPercentage" sourceName="MyTanita" unit="%" startDate="2025-01-20 07:00:00 +0100" value="0.23"/>',
+            '<Record type="HKQuantityTypeIdentifierBodyFatPercentage" sourceName="MyTanita" unit="%" startDate="2025-01-21 07:00:00 +0100" value="0.358"/>',
             '<Record type="HKQuantityTypeIdentifierHeight" sourceName="iPhone" unit="cm" startDate="2025-01-21 10:00:00 +0100" value="181"/>',
             '</HealthData>',
         ]));
@@ -125,7 +130,9 @@ class DadesFisiquesTest extends TestCase
         $this->assertSame(59, $mesos['2025-01']['fc_repos']);
         $this->assertEquals(85, $mesos['2025-02']['pes']);
         $this->assertNull($mesos['2025-02']['fc_repos']);
-        $this->assertSame([['2025-01-21', 57.9, 'MyTanita']], $descartades);
+        $this->assertEquals(22, $mesos['2025-01']['greix']);
+        $this->assertNull($mesos['2025-02']['greix']);   // Garmin Connect no el mesura
+        $this->assertEquals([['2025-01-21', 57.9, 'MyTanita'], ['2025-01-21', 35.8, 'greix']], $descartades);
         $this->assertSame('1968-02-28', $llegit['naixement']);
         $this->assertSame(181, $llegit['alcada']);
     }
@@ -153,6 +160,8 @@ class DadesFisiquesTest extends TestCase
         $this->post(route('salut.registres.store'), ['data' => '2026-10-01'])->assertSessionHasErrors('pes');
         $this->post(route('salut.registres.store'), ['data' => '2026-10-01', 'fc_repos' => 58])->assertSessionHasNoErrors();
         $this->post(route('salut.registres.store'), ['data' => '2026-10-01', 'pes' => 84])->assertSessionHasErrors('data');
+        $this->post(route('salut.registres.store'), ['data' => '2026-10-02', 'greix' => 22.5])->assertSessionHasNoErrors();
+        $this->post(route('salut.registres.store'), ['data' => '2026-10-03', 'greix' => 0.225])->assertSessionHasErrors('greix');
 
         // Corregir-ne un d'Apple Salut el fa manual: la càrrega ja no el tocarà
         $importat = SalutRegistre::create(['data' => '2025-01-15', 'pes' => 82, 'origen' => 'apple_salut']);

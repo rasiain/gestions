@@ -33,11 +33,12 @@ class ImportaAppleSalut extends Command
         ['mesos' => $mesos, 'descartades' => $descartades] = $servei->perMes($llegit);
 
         $this->table(
-            ['Mes', 'Pes (kg)', 'Pesades', 'FC repòs'],
-            collect($mesos)->map(fn ($m, $mes) => [$mes, $m['pes'] ?? '—', $m['pesades'], $m['fc_repos'] ?? '—'])->values()->all(),
+            ['Mes', 'Pes (kg)', 'Pesades', 'Greix (%)', 'FC repòs'],
+            collect($mesos)->map(fn ($m, $mes) => [$mes, $m['pes'] ?? '—', $m['pesades'], $m['greix'] ?? '—', $m['fc_repos'] ?? '—'])->values()->all(),
         );
         foreach ($descartades as [$dia, $kg, $font]) {
-            $this->line("Descartada: {$dia} {$kg} kg ({$font}), massa lluny de les del voltant");
+            $unitat = $font === 'greix' ? '% de greix' : "kg ({$font})";
+            $this->line("Descartada: {$dia} ".round($kg, 2)." {$unitat}, massa lluny de les del voltant");
         }
         if ($llegit['naixement']) {
             $this->line("Data de naixement: {$llegit['naixement']}");
