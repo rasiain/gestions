@@ -10,8 +10,11 @@ use App\Models\SortidaBici;
 use App\Models\Vehicle;
 use App\Models\VehicleDespesa;
 use App\Services\AltitudTerrenyService;
+use Carbon\CarbonInterface;
+use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
@@ -102,14 +105,13 @@ class SortidaBiciController extends Controller
         $anys = $perAny->keys()->merge($despeses->keys())->unique()->sortDesc()->values();
 
         // El desnivell no és cap columna: el de cada sortida surt de l'altitud triada, i se suma aquí
-        $sortides = (clone $base)->get(['id', 'vehicle_id', 'data_local', 'tipus_activitat', 'desnivell_pos_m', 'altitud_metode', 'altitud_font']);
+        $sortides = (clone $base)->get(['id', 'vehicle_id', 'data_local', 'tipus_activitat', 'distancia_m', 'calories', 'temps_moviment_s', 'temps_s', 'desnivell_pos_m', 'altitud_metode', 'altitud_font']);
         $triats = app(AltitudTerrenyService::class)->desnivellsTriats($sortides, AltitudTerrenyService::metodeDemanat($request->query('altitud')));
         $pujada = fn (SortidaBici $s) => $triats[$s->id]['pujada'] ?? 0;
         $indoor = fn (SortidaBici $s) => $s->tipus_activitat === self::INDOOR ? $pujada($s) : 0;
         $perAnyS = $sortides->groupBy(fn (SortidaBici $s) => $s->data_local->format('Y'));
         $desnivell = $perAnyS->map(fn ($grup) => $grup->sum($pujada));
         $desnivellIndoor = $perAnyS->map(fn ($grup) => $grup->sum($indoor));
-        $perMesS = $sortides->groupBy(fn (SortidaBici $s) => $s->data_local->format('Y-m'));
 
         return [
             'per_any' => $anys->map(function ($any) use ($perAny, $despeses, $desnivell, $desnivellIndoor) {
@@ -132,23 +134,9 @@ class SortidaBiciController extends Controller
                     'cost_km'   => $km > 0 && $cost > 0 ? round($cost / $km, 3) : null,
                 ];
             })->values(),
-            'per_mes'    => (clone $base)
-                ->selectRaw("strftime('%Y-%m', data_local) as mes")
-                ->selectRaw('count(*) as sortides')
-                ->selectRaw('round(sum(case when tipus_activitat = ? then 0 else distancia_m end) / 1000.0, 1) as km', [self::INDOOR])
-                ->selectRaw('round(sum(case when tipus_activitat = ? then distancia_m else 0 end) / 1000.0, 1) as km_indoor', [self::INDOOR])
-                ->selectRaw('coalesce(sum(case when tipus_activitat = ? then 0 else calories end), 0) as calories', [self::INDOOR])
-                ->selectRaw('coalesce(sum(case when tipus_activitat = ? then calories else 0 end), 0) as calories_indoor', [self::INDOOR])
-                ->selectRaw('round(coalesce(sum(case when tipus_activitat = ? then 0 else coalesce(nullif(temps_moviment_s, 0), temps_s) end), 0) / 3600.0, 1) as hores', [self::INDOOR])
-                ->selectRaw('round(coalesce(sum(case when tipus_activitat = ? then coalesce(nullif(temps_moviment_s, 0), temps_s) else 0 end), 0) / 3600.0, 1) as hores_indoor', [self::INDOOR])
-                ->groupBy('mes')
-                ->orderBy('mes')
-                ->get()
-                // Com els km: el de l'exterior i, a part, el dels rodets
-                ->map(fn ($m) => $m->toArray() + [
-                    'desnivell'        => (int) round(($perMesS[$m->mes] ?? collect())->sum(fn (SortidaBici $s) => $pujada($s) - $indoor($s))),
-                    'desnivell_indoor' => (int) round(($perMesS[$m->mes] ?? collect())->sum($indoor)),
-                ]),
+            'per_mes'     => $this->perPeriode($sortides, 'mes', fn (SortidaBici $s) => $s->data_local->format('Y-m'), $pujada),
+            // La setmana, pel dilluns que la comença
+            'per_setmana' => $this->perPeriode($sortides, 'setmana', fn (SortidaBici $s) => $s->data_local->copy()->startOfWeek(CarbonInterface::MONDAY)->toDateString(), $pujada),
             'desnivell_per_bici' => $sortides->groupBy(fn (SortidaBici $s) => $s->data_local->format('Y').'|'.$s->vehicle_id)
                 ->map(fn ($grup) => $grup->sum($pujada)),
             'tipus'      => (clone $base)
@@ -157,6 +145,39 @@ class SortidaBiciController extends Controller
                 ->orderByDesc('sortides')
                 ->get(),
         ];
+    }
+
+    /**
+     * Les sortides agrupades per període (mes, setmana), en ordre: cada mesura de l'exterior i, a part,
+     * la dels rodets. Una sola funció perquè el mes i la setmana no puguin comptar diferent.
+     *
+     * @param  Collection<int, SortidaBici>  $sortides
+     * @param  Closure(SortidaBici): string  $clau
+     * @param  Closure(SortidaBici): float  $pujada
+     */
+    private function perPeriode(Collection $sortides, string $nom, Closure $clau, Closure $pujada): array
+    {
+        $temps = fn (SortidaBici $s) => (float) ($s->temps_moviment_s ?: $s->temps_s);
+
+        return $sortides->groupBy($clau)->sortKeys()->map(function (Collection $grup, string $periode) use ($nom, $temps, $pujada) {
+            [$rodets, $exterior] = $grup->partition(fn (SortidaBici $s) => $s->tipus_activitat === self::INDOOR);
+            $suma = fn (Collection $c, Closure $f) => $c->sum($f);
+            $km = fn (SortidaBici $s) => (float) $s->distancia_m / 1000;
+            $kcal = fn (SortidaBici $s) => (int) $s->calories;
+
+            return [
+                $nom               => $periode,
+                'sortides'         => $grup->count(),
+                'km'               => round($suma($exterior, $km), 1),
+                'km_indoor'        => round($suma($rodets, $km), 1),
+                'calories'         => $suma($exterior, $kcal),
+                'calories_indoor'  => $suma($rodets, $kcal),
+                'hores'            => round($suma($exterior, $temps) / 3600, 1),
+                'hores_indoor'     => round($suma($rodets, $temps) / 3600, 1),
+                'desnivell'        => (int) round($suma($exterior, $pujada)),
+                'desnivell_indoor' => (int) round($suma($rodets, $pujada)),
+            ];
+        })->values()->all();
     }
 
     /**

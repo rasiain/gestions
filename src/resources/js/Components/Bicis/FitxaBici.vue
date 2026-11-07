@@ -9,7 +9,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import SelectorAltitud from '@/Components/Bicis/SelectorAltitud.vue';
-import { Bar } from 'vue-chartjs';
+import GraficaBarres from '@/Components/Bicis/GraficaBarres.vue';
 import { Chart as ChartJS, registerables } from 'chart.js';
 import type { ChartData, ChartOptions } from 'chart.js';
 
@@ -37,20 +37,28 @@ interface Any {
     cost_km: number | null;
 }
 
-interface Mes {
-    mes: string;
+/** El resum d'un període (mes, setmana): cada mesura de l'exterior i, a part, la dels rodets. */
+interface Periode {
     sortides: number;
     km: number;
     km_indoor: number;
-    /** De l'exterior; les dels rodets, a part. */
     calories: number;
     calories_indoor: number;
-    /** En moviment, de l'exterior; les dels rodets, a part. */
+    /** En moviment. */
     hores: number;
     hores_indoor: number;
-    /** De l'exterior, amb l'altitud triada; el dels rodets, a part. */
+    /** Amb l'altitud triada. */
     desnivell: number;
     desnivell_indoor: number;
+}
+
+interface Mes extends Periode {
+    mes: string;
+}
+
+interface Setmana extends Periode {
+    /** El dilluns que la comença. */
+    setmana: string;
 }
 
 interface Component {
@@ -91,6 +99,7 @@ interface Sortida {
 interface Fitxa {
     per_any: Any[];
     per_mes: Mes[];
+    per_setmana: Setmana[];
     tipus: { tipus: string; sortides: number }[];
     components: Component[];
     /** Només a la fitxa de totes les bicis: les bicis i els km de cadascuna per any. */
@@ -259,6 +268,7 @@ function series(etiquetes: string[], exterior: number[], indoor: number[]): Char
  */
 const PALETA_CLARA = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
 const PALETA_FOSCA = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
+/** També dona el color de cada any a la gràfica per mes. */
 const colorBici = (index: number) => (fosc.value ? PALETA_FOSCA : PALETA_CLARA)[index % 8];
 
 /** Km (calories, hores, desnivell) de cada bici per any, de l'any més antic al més recent; només les bicis que en tenen. */
@@ -295,42 +305,80 @@ const dadesPerAny = computed(() =>
     ),
 );
 
-const anyGrafica = ref<number | null>(null);
-watch(anysAmbSortides, (anys) => { if (anyGrafica.value === null) anyGrafica.value = anys[0] ?? null; }, { immediate: true });
+/** La mesura triada d'un període que porta els rodets a part (mes, setmana); zero si no hi ha cap sortida. */
+const parts = (p: Periode | undefined) => ({ exterior: p?.[mesura.value] ?? 0, indoor: p?.[INDOOR[mesura.value]] ?? 0 });
+const separa = (periodes: (Periode | undefined)[]) => {
+    const p = periodes.map(parts);
+    return { exterior: p.map((x) => arrodoneix(x.exterior)), indoor: p.map((x) => arrodoneix(x.indoor)) };
+};
 
 const NOMS_MES = ['gen', 'feb', 'març', 'abr', 'maig', 'juny', 'jul', 'ag', 'set', 'oct', 'nov', 'des'];
+
+// ---- Per setmana: de cinc en cinc, la darrera la d'avui ----
+const SETMANES = 5;
+/** Quants blocs de cinc setmanes enrere: 0, les cinc darreres. */
+const blocSetmanes = ref(0);
+/** La data local com la diu el servidor (sense passar per UTC, que la canviaria de dia). */
+const isoDia = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const diaMes = (d: Date) => `${d.getDate()} ${NOMS_MES[d.getMonth()]}`;
+const mesDies = (d: Date, dies: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + dies);
+
+/** Els dilluns de les setmanes que es veuen, de la més antiga a la més recent. */
+const setmanes = computed(() => {
+    const avui = new Date();
+    const dilluns = mesDies(avui, -((avui.getDay() + 6) % 7));
+    return Array.from({ length: SETMANES }, (_, i) => mesDies(dilluns, -7 * (blocSetmanes.value * SETMANES + SETMANES - 1 - i)));
+});
+const perSetmana = computed(() => new Map((fitxa.value?.per_setmana ?? []).map((s) => [s.setmana, s])));
+const hiHaSetmanesAbans = computed(() => {
+    const primera = fitxa.value?.per_setmana[0]?.setmana;
+    return !!primera && primera < isoDia(setmanes.value[0]);
+});
+const rangSetmanes = computed(() => {
+    const fi = mesDies(setmanes.value[SETMANES - 1], 6);
+    return `${diaMes(setmanes.value[0])} – ${diaMes(fi)} ${fi.getFullYear()}`;
+});
+
+const dadesPerSetmana = computed(() => {
+    const { exterior, indoor } = separa(setmanes.value.map((d) => perSetmana.value.get(isoDia(d))));
+    return series(setmanes.value.map(diaMes), exterior, indoor);
+});
+
+const opcionsPerSetmana = computed<ChartOptions<'bar'>>(() => ({
+    ...opcions.value,
+    plugins: {
+        ...opcions.value.plugins,
+        tooltip: { callbacks: { ...opcions.value.plugins?.tooltip?.callbacks, title: (items) => `Setmana del ${items[0]?.label ?? ''}` } },
+    },
+}));
+
+// ---- Per mes: l'any triat i uns quants d'anteriors ----
+const anyGrafica = ref<number | null>(null);
+watch(anysAmbSortides, (anys) => { if (anyGrafica.value === null) anyGrafica.value = anys[0] ?? null; }, { immediate: true });
+const anysAnteriors = ref(5);
+/** Com a molt set d'anteriors: la paleta categòrica té vuit colors. */
+const OPCIONS_ANTERIORS = [0, 1, 2, 3, 4, 5, 6, 7];
+
 /** Els mesos d'un any, amb la mesura triada; `null` si l'any no té cap sortida. */
 function mesosDe(any: number) {
     const mesos = new Map((fitxa.value?.per_mes ?? []).filter((m) => m.mes.startsWith(`${any}-`)).map((m) => [Number(m.mes.slice(5)), m]));
-    if (!mesos.size) return null;
-    const valor = (i: number, indoor: boolean) => {
-        const m = mesos.get(i + 1);
-        if (!m) return 0;
-        return indoor ? m[INDOOR[mesura.value]] : m[mesura.value];
-    };
-    return { exterior: NOMS_MES.map((_, i) => valor(i, false)), indoor: NOMS_MES.map((_, i) => valor(i, true)) };
+    return mesos.size ? separa(NOMS_MES.map((_, i) => mesos.get(i + 1))) : null;
 }
 
 /**
- * L'any triat i els dos anteriors, una barra de cada any per mes: del més antic al més recent, i l'any
- * triat amb el blau de sempre. Colors de la paleta categòrica validada (els mateixos de «per bici»).
- * Els rodets van apilats damunt de l'exterior, amb el mateix color en clar.
+ * Una barra de cada any per mes, del més antic al més recent: l'any triat amb el blau de sempre i els
+ * anteriors amb els colors següents de la paleta categòrica validada (la de «per bici»). Els rodets van
+ * apilats damunt de l'exterior, amb el mateix color en clar.
  */
-const ANYS_MES = [
-    { enrere: 2, clar: '#1baf7a', fosc: '#199e70' },
-    { enrere: 1, clar: '#eb6834', fosc: '#d95926' },
-    { enrere: 0, clar: '#2a78d6', fosc: '#3987e5' },
-];
-
 const dadesPerMes = computed<ChartData<'bar'>>(() => {
     const triat = anyGrafica.value ?? 0;
     const datasets: ChartData<'bar'>['datasets'] = [];
-    for (const c of ANYS_MES) {
-        const any = triat - c.enrere;
+    for (let enrere = anysAnteriors.value; enrere >= 0; enrere--) {
+        const any = triat - enrere;
         const mesos = mesosDe(any);
         // Un any sense cap sortida no fa barra; el triat, sí, encara que estigui buit
-        if (!mesos && c.enrere) continue;
-        const color = fosc.value ? c.fosc : c.clar;
+        if (!mesos && enrere) continue;
+        const color = colorBici(enrere);
         const zeros = NOMS_MES.map(() => 0);
         datasets.push({ label: String(any), data: mesos?.exterior ?? zeros, stack: String(any), ...barra(color) });
         if (teIndoor.value) {
@@ -567,56 +615,67 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                 <p v-if="mesura === 'desnivell'" class="-mt-6 text-xs text-gray-500 dark:text-gray-400">
                     El desnivell positiu, amb l'altitud triada al selector de dalt.
                 </p>
-                <div v-if="totes">
-                    <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        {{ MESURES[mesura].titol }} per any i bici
-                        <span class="ml-1 font-normal text-gray-400 dark:text-gray-500">{{ mesura === 'km' ? 'km (els dels rodets, virtuals)' : MESURES[mesura].unitat }}</span>
-                    </h4>
-                    <div class="h-72"><Bar :data="dadesPerBici" :options="opcionsPerBici" /></div>
-                    <div class="mt-3 overflow-x-auto">
-                        <table class="min-w-full text-xs">
-                            <thead>
-                                <tr class="border-b border-gray-200 text-left uppercase text-gray-500 dark:border-gray-600 dark:text-gray-400">
-                                    <th class="pb-1 pr-3 font-medium">Any</th>
-                                    <th v-for="b in perBici.bicis" :key="b.id" class="pb-1 pr-3 text-right font-medium">
-                                        <span class="mr-1 inline-block h-2 w-2 rounded-sm" :style="{ backgroundColor: colorBici(b.index) }"></span>{{ b.nom }}
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-100 tabular-nums dark:divide-gray-700">
-                                <tr v-for="a in [...perBici.anys].reverse()" :key="a">
-                                    <td class="py-1 pr-3 font-medium text-gray-900 dark:text-gray-100">{{ a }}</td>
-                                    <td v-for="b in perBici.bicis" :key="b.id" class="py-1 pr-3 text-right text-gray-700 dark:text-gray-300">
-                                        {{ perBici.valor(a, b.id) ? (mesura === 'hores' ? durada(Math.round(perBici.valor(a, b.id) * 3600)) : nombre(perBici.valor(a, b.id))) : '—' }}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                <GraficaBarres v-if="totes" :titol="`${MESURES[mesura].titol} per any i bici`"
+                    :unitat="mesura === 'km' ? 'km (els dels rodets, virtuals)' : MESURES[mesura].unitat"
+                    :data="dadesPerBici" :options="opcionsPerBici" alcada="h-72">
+                    <template #peu>
+                        <div class="mt-2 overflow-x-auto">
+                            <table class="min-w-full text-xs">
+                                <thead>
+                                    <tr class="border-b border-gray-200 text-left uppercase text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                                        <th class="pb-1 pr-3 font-medium">Any</th>
+                                        <th v-for="b in perBici.bicis" :key="b.id" class="pb-1 pr-3 text-right font-medium">
+                                            <span class="mr-1 inline-block h-2 w-2 rounded-sm" :style="{ backgroundColor: colorBici(b.index) }"></span>{{ b.nom }}
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100 tabular-nums dark:divide-gray-700">
+                                    <tr v-for="a in [...perBici.anys].reverse()" :key="a">
+                                        <td class="py-1 pr-3 font-medium text-gray-900 dark:text-gray-100">{{ a }}</td>
+                                        <td v-for="b in perBici.bicis" :key="b.id" class="py-1 pr-3 text-right text-gray-700 dark:text-gray-300">
+                                            {{ perBici.valor(a, b.id) ? (mesura === 'hores' ? durada(Math.round(perBici.valor(a, b.id) * 3600)) : nombre(perBici.valor(a, b.id))) : '—' }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </template>
+                </GraficaBarres>
+
+                <div class="grid gap-8 lg:grid-cols-2">
+                    <GraficaBarres :titol="`${MESURES[mesura].titol} per any`" :unitat="MESURES[mesura].unitat" :data="dadesPerAny" :options="opcions" />
+
+                    <GraficaBarres :titol="`${MESURES[mesura].titol} per setmana`" :unitat="MESURES[mesura].unitat" :data="dadesPerSetmana" :options="opcionsPerSetmana">
+                        <template #controls>
+                            <button type="button" class="rounded border border-gray-300 px-2 py-0.5 text-sm hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent dark:border-gray-600 dark:hover:bg-gray-700" :disabled="!hiHaSetmanesAbans"
+                                title="Les cinc setmanes anteriors" @click="blocSetmanes++">‹</button>
+                            <span class="tabular-nums">{{ rangSetmanes }}</span>
+                            <button type="button" class="rounded border border-gray-300 px-2 py-0.5 text-sm hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent dark:border-gray-600 dark:hover:bg-gray-700" :disabled="blocSetmanes === 0"
+                                title="Les cinc setmanes següents" @click="blocSetmanes--">›</button>
+                        </template>
+                        <template #peu>
+                            De dilluns a diumenge; l'última és la setmana d'avui.<template v-if="teIndoor && mesura === 'km'"> Els km dels rodets són virtuals.</template>
+                        </template>
+                    </GraficaBarres>
                 </div>
 
-                <div>
-                    <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        {{ MESURES[mesura].titol }} per any <span class="ml-1 font-normal text-gray-400 dark:text-gray-500">{{ MESURES[mesura].unitat }}</span>
-                    </h4>
-                    <div class="h-64"><Bar :data="dadesPerAny" :options="opcions" /></div>
-                </div>
-
-                <div>
-                    <div class="flex items-end justify-between gap-3">
-                        <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                            {{ MESURES[mesura].titol }} per mes <span class="ml-1 font-normal text-gray-400 dark:text-gray-500">{{ MESURES[mesura].unitat }}</span>
-                        </h4>
-                        <select v-model="anyGrafica"
-                            class="rounded-md border-gray-300 py-1 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                <GraficaBarres :titol="`${MESURES[mesura].titol} per mes`" :unitat="MESURES[mesura].unitat" :data="dadesPerMes" :options="opcionsPerMes">
+                    <template #controls>
+                        <select v-model="anyGrafica" class="rounded-md border-gray-300 py-1 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
                             <option v-for="a in anysAmbSortides" :key="a" :value="a">{{ a }}</option>
                         </select>
-                    </div>
-                    <div class="h-64"><Bar :data="dadesPerMes" :options="opcionsPerMes" /></div>
-                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        Cada mes, l'any triat i els dos anteriors.<template v-if="teIndoor"> La part clara de cada barra són els rodets{{ mesura === 'km' ? ' (km virtuals)' : '' }}.</template>
-                    </p>
-                </div>
+                        <label class="flex items-center gap-1">
+                            i
+                            <select v-model="anysAnteriors" class="rounded-md border-gray-300 py-1 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                                <option v-for="n in OPCIONS_ANTERIORS" :key="n" :value="n">{{ n }}</option>
+                            </select>
+                            anys anteriors
+                        </label>
+                    </template>
+                    <template #peu>
+                        Cada mes, l'any triat<template v-if="anysAnteriors"> i {{ anysAnteriors === 1 ? "l'anterior" : `els ${anysAnteriors} anteriors` }} que tinguin sortides</template>.<template v-if="teIndoor"> La part clara de cada barra són els rodets{{ mesura === 'km' ? ' (km virtuals)' : '' }}.</template>
+                    </template>
+                </GraficaBarres>
             </div>
         </template>
     </div>

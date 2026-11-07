@@ -45,6 +45,12 @@ class FitxaTotesTest extends TestCase
         $this->assertSame(150, collect($fitxa['per_bici'])->where('any', 2026)->firstWhere('vehicle_id', $albert->id)['calories']);
         $this->assertEquals(150, collect($fitxa['per_mes'])->firstWhere('mes', '2026-06')['calories']);
         $this->assertSame(0, $any2026['calories_indoor']);
+        // Per setmana, pel dilluns: l'1 de maig de 2026 és divendres
+        $setmanes = collect($fitxa['per_setmana'])->keyBy('setmana');
+        $this->assertEquals(40, $setmanes['2026-04-27']['km']);
+        $this->assertEquals(5, $setmanes['2026-06-01']['km']);
+        $this->assertSame(1, $setmanes['2026-06-01']['sortides']);
+        $this->assertSame(['2025-04-28', '2026-04-27', '2026-06-01'], $setmanes->keys()->all());
 
         $sortides = $this->getJson(route('bicis.totes.sortides', ['any' => 2026]))->assertOk()->json();
         $this->assertCount(2, $sortides);
