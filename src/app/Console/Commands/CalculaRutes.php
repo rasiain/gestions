@@ -20,14 +20,33 @@ class CalculaRutes extends Command
     public function handle(RutesCanoniquesService $servei): int
     {
         // Una sola alhora: la pantalla d'importació la llança en segon pla, i dues que desessin
-        // a la vegada es trepitjarien
+        // a la vegada es trepitjarien. La que troba el bloqueig, però, no es pot perdre: la que
+        // està en marxa ja ha llegit la llista de sortides i en deixaria fora les acabades
+        // d'importar. Deixa una marca i la que està en marxa torna a començar quan acaba.
         $bloqueig = fopen(storage_path('app/rutes-calcula.lock'), 'c');
         if (! flock($bloqueig, LOCK_EX | LOCK_NB)) {
-            $this->warn('Ja s\'estan calculant les rutes.');
+            touch(self::pendent());
+            $this->warn('Ja s\'estan calculant les rutes: es tornaran a calcular quan acabin.');
 
             return self::SUCCESS;
         }
 
+        do {
+            @unlink(self::pendent());
+            $this->calcula($servei);
+        } while (! $this->option('prova') && file_exists(self::pendent()));
+
+        return self::SUCCESS;
+    }
+
+    /** La marca d'un càlcul demanat mentre n'hi havia un en marxa. */
+    public static function pendent(): string
+    {
+        return storage_path('app/rutes-calcula.pendent');
+    }
+
+    private function calcula(RutesCanoniquesService $servei): void
+    {
         $inici = microtime(true);
         $sortides = $servei->sortides()->get(['id']);
         $this->info($sortides->count() . ' sortides amb recorregut. Calculant empremtes…');
@@ -75,14 +94,12 @@ class CalculaRutes extends Command
         if ($this->option('prova')) {
             $this->info('Amb --prova no s\'ha desat res.');
 
-            return self::SUCCESS;
+            return;
         }
 
         $resultat = $servei->desa($ids, $parelles, $fusions, $qualitat);
-        $this->mostraPrincipals($resultat['mateixa']);
+        $this->mostraPrincipals($resultat['mateixa'] ?? []);
         $this->info(sprintf('Desat en %.0f s.', microtime(true) - $inici));
-
-        return self::SUCCESS;
     }
 
     /** Les rutes més repetides al nivell «mateixa ruta», per fer-se'n una idea. */
