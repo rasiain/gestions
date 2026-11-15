@@ -188,6 +188,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/vehicles/repostatges', [VehicleController::class, 'storeRepostatge'])->name('vehicles.repostatges.store');
     Route::put('/vehicles/repostatges/{repostatge}', [VehicleController::class, 'updateRepostatge'])->name('vehicles.repostatges.update');
     Route::delete('/vehicles/repostatges/{repostatge}', [VehicleController::class, 'destroyRepostatge'])->name('vehicles.repostatges.destroy');
+    Route::get('/vehicles/moviments-despesa', [VehicleController::class, 'movimentsDespesa'])->name('vehicles.moviments-despesa');
     Route::post('/vehicles/despeses', [VehicleController::class, 'storeDespesa'])->name('vehicles.despeses.store');
     Route::put('/vehicles/despeses/{despesa}', [VehicleController::class, 'updateDespesa'])->name('vehicles.despeses.update');
     Route::delete('/vehicles/despeses/{despesa}', [VehicleController::class, 'destroyDespesa'])->name('vehicles.despeses.destroy');

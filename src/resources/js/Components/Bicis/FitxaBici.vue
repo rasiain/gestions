@@ -10,6 +10,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import SelectorAltitud from '@/Components/Bicis/SelectorAltitud.vue';
 import GraficaBarres from '@/Components/Bicis/GraficaBarres.vue';
+import DespesesVehicle from '@/Components/Vehicles/DespesesVehicle.vue';
+import type { Despesa, Peca } from '@/Components/Vehicles/DespesesVehicle.vue';
 import { Chart as ChartJS, registerables } from 'chart.js';
 import type { ChartData, ChartOptions } from 'chart.js';
 
@@ -107,7 +109,7 @@ interface Fitxa {
     per_bici?: { any: number; vehicle_id: number; km: number; calories: number; hores: number; desnivell: number }[];
 }
 
-type Pestanya = 'anys' | 'sortides' | 'components' | 'grafiques';
+type Pestanya = 'anys' | 'sortides' | 'components' | 'despeses' | 'grafiques';
 
 const props = defineProps<{
     /** null: totes les bicis juntes. */
@@ -115,6 +117,10 @@ const props = defineProps<{
     /** Amb què s'obre: en tornar d'una sortida, la llista de sortides del seu any. */
     pestanyaInicial?: Pestanya;
     anyInicial?: number;
+    /** Les despeses de la bici, amb la pàgina (no a la de totes): es creen i s'editen aquí. */
+    despeses?: Despesa[];
+    tipusDespesa?: Record<string, string>;
+    peces?: Peca[];
 }>();
 
 const pestanya = ref<Pestanya>(props.pestanyaInicial ?? 'anys');
@@ -155,6 +161,11 @@ const ambAltitud = (params: URLSearchParams = new URLSearchParams()) => {
 watch(altitud, async () => {
     fitxa.value = await demana<Fitxa>(urlFitxa() + ambAltitud());
     if (pestanya.value === 'sortides') carregaSortides();
+});
+
+// Una despesa desada torna la pàgina amb les despeses noves: el cost per any de la fitxa també canvia
+watch(() => props.despeses, async () => {
+    fitxa.value = await demana<Fitxa>(urlFitxa() + ambAltitud());
 });
 
 onMounted(async () => {
@@ -421,7 +432,7 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
     <div>
         <SelectorAltitud v-model="altitud" class="mb-2" />
         <div class="mb-3 flex gap-1 border-b border-gray-200 dark:border-gray-600">
-            <button v-for="[clau, etiqueta] in [['anys', 'Per any'], ['sortides', 'Sortides'], ['components', 'Components'], ['grafiques', 'Gràfiques']].filter(([c]) => !(totes && c === 'components'))"
+            <button v-for="[clau, etiqueta] in [['anys', 'Per any'], ['sortides', 'Sortides'], ['components', 'Components'], ['despeses', 'Despeses'], ['grafiques', 'Gràfiques']].filter(([c]) => !(totes && (c === 'components' || c === 'despeses')))"
                 :key="clau" @click="pestanya = clau as any"
                 class="px-3 py-1.5 text-xs font-medium transition-colors"
                 :class="pestanya === clau
@@ -431,7 +442,11 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
             </button>
         </div>
 
-        <p v-if="error" class="py-4 text-sm text-red-600 dark:text-red-400">{{ error }}</p>
+        <!-- Les despeses no depenen de la fitxa: una bici nova pot tenir-ne abans de cap sortida -->
+        <DespesesVehicle v-if="pestanya === 'despeses' && vehicleId !== null" :vehicle-id="vehicleId"
+            :despeses="despeses ?? []" :tipus-despesa="tipusDespesa ?? {}" :es-motor="false" :peces="peces" />
+
+        <p v-else-if="error" class="py-4 text-sm text-red-600 dark:text-red-400">{{ error }}</p>
         <p v-else-if="!fitxa" class="py-6 text-center text-xs text-gray-400 dark:text-gray-500">Carregant…</p>
         <p v-else-if="!fitxa.per_any.length" class="py-6 text-center text-xs text-gray-400 dark:text-gray-500">
             Aquesta bici encara no té sortides ni despeses.

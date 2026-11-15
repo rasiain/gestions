@@ -4,11 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\VehicleRepostatgeRequest;
 use App\Http\Requests\VehicleRequest;
+use App\Models\MaterialEsportiu;
 use App\Models\MovimentCompteCorrent;
 use App\Models\Vehicle;
 use App\Models\VehicleDespesa;
 use App\Models\VehicleRepostatge;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class VehicleController extends Controller
@@ -49,7 +52,8 @@ class VehicleController extends Controller
         $vehicles = Vehicle::whereIn('tipus', $tipus)
             ->with([
                 'repostatges' => fn ($q) => $q->orderBy('data')->orderBy('id'),
-                'despeses'    => fn ($q) => $q->orderByDesc('data')->orderByDesc('id'),
+                'despeses'    => fn ($q) => $q->orderByDesc('data')->orderByDesc('id')
+                    ->with(['moviment.compteCorrent:id,nom', 'moviment.concepte', 'material:id,nom']),
             ])
             ->orderBy('ordre')
             ->orderBy('nom')
@@ -75,12 +79,15 @@ class VehicleController extends Controller
                     'id'          => $d->id,
                     'data'        => $d->data->toDateString(),
                     'tipus'       => $d->tipus,
-                    'tipus_nom'   => VehicleDespesa::TIPUS[$d->tipus] ?? $d->tipus,
+                    'tipus_nom'   => VehicleDespesa::tipusDe($vehicle->tipus)[$d->tipus] ?? VehicleDespesa::TIPUS[$d->tipus] ?? $d->tipus,
                     'import'      => (float) $d->import,
                     'km_totals'   => $d->km_totals,
                     'taller'      => $d->taller,
                     'motiu'       => $d->motiu,
                     'moviment_id' => $d->moviment_id,
+                    'moviment'    => $d->moviment ? $this->movimentPerDespesa($d->moviment, $d->id) : null,
+                    'material_id' => $d->material_id,
+                    'material'    => $d->material?->nom,
                 ])->values(),
                 'resum'          => $this->resum($vehicle),
                 'sortides'       => isset($sortides[$vehicle->id]) ? [
@@ -97,7 +104,12 @@ class VehicleController extends Controller
             'combustibles' => Vehicle::COMBUSTIBLES,
             'modalitats'   => Vehicle::MODALITATS,
             'motiusBaixa'  => Vehicle::MOTIUS_BAIXA,
-            'tipusDespesa' => VehicleDespesa::TIPUS,
+            'tipusDespesa' => $tipus === ['bici'] ? VehicleDespesa::TIPUS_BICI : VehicleDespesa::TIPUS,
+            // Les peces a què pot anar una despesa de bici: la muntada a cada bici, la primera
+            'peces'        => $tipus === ['bici']
+                ? MaterialEsportiu::where('tipus', '!=', 'bici')->orderByRaw("estat = 'retirat'")->orderBy('nom')
+                    ->get(['id', 'nom', 'tipus', 'estat', 'muntat_a_vehicle_id'])
+                : [],
             'titol'      => $titol,
             'descripcio' => $descripcio,
             // La matrícula i el combustible no pinten res en una bici
@@ -215,7 +227,9 @@ class VehicleController extends Controller
             ->filter(fn (VehicleDespesa $d) => $d->km_totals !== null)
             ->map(fn (VehicleDespesa $d) => ['data' => $d->data, 'km' => $d->km_totals])));
 
-        $anys = $vehicle->repostatges->map(fn ($r) => (int) $r->data->format('Y'))
+        // `toBase()`: són anys, no models; sense repostatges (una bici), una col·lecció Eloquent buida
+        // els concatenaria i `unique()` els tractaria com a models
+        $anys = $vehicle->repostatges->toBase()->map(fn ($r) => (int) $r->data->format('Y'))
             ->concat($vehicle->despeses->map(fn ($d) => (int) $d->data->format('Y')))
             ->unique()
             ->sortDesc()
@@ -376,6 +390,71 @@ class VehicleController extends Controller
                     'compte' => $m->compteCorrent?->nom,
                 ])
         );
+    }
+
+    /**
+     * Els moviments del banc d'on pot venir una despesa: sortides de diners de qualsevol compte, dels
+     * dies del voltant (o, amb `q`, que diguin aquest text, de tot un any enrere), amb el que encara
+     * en queda per assignar. Un moviment es pot repartir entre diverses despeses i desapareix quan
+     * ja està tot assignat. Amb `import`, primer els que s'hi acosten.
+     */
+    public function movimentsDespesa(Request $request): JsonResponse
+    {
+        $data = $request->input('data');
+        if (! is_string($data) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $data)) {
+            return response()->json([]);
+        }
+
+        $q = trim((string) $request->input('q'));
+        $marge = $q === '' ? 10 : 365;
+        $despesa = $request->integer('despesa') ?: null;
+        $import = $request->filled('import') ? abs((float) $request->input('import')) : null;
+
+        $moviments = MovimentCompteCorrent::where('import', '<', 0)
+            ->whereDate('data_moviment', '>=', date('Y-m-d', strtotime("{$data} -{$marge} days")))
+            ->whereDate('data_moviment', '<=', date('Y-m-d', strtotime("{$data} +{$marge} days")))
+            ->when($q !== '', fn ($c) => $c->where(fn ($w) => $w
+                ->where('concepte_original', 'like', "%{$q}%")
+                ->orWhere('notes', 'like', "%{$q}%")
+                ->orWhereHas('concepte', fn ($cc) => $cc->where('concepte', 'like', "%{$q}%"))))
+            ->with(['compteCorrent:id,nom', 'concepte'])
+            ->orderBy('data_moviment')
+            ->limit(500)
+            ->get();
+
+        // El que ja n'han pres les despeses, d'una consulta
+        $assignat = VehicleDespesa::whereIn('moviment_id', $moviments->pluck('id'))
+            ->when($despesa, fn ($c) => $c->whereKeyNot($despesa))
+            ->groupBy('moviment_id')
+            ->selectRaw('moviment_id, sum(import) as total')
+            ->pluck('total', 'moviment_id');
+
+        $moviments = $moviments
+            ->map(fn (MovimentCompteCorrent $m) => $this->movimentPerDespesa($m, $despesa, (float) ($assignat[$m->id] ?? 0)))
+            ->filter(fn ($m) => $m['pendent'] > 0.005)
+            ->sortBy(fn ($m) => $import !== null
+                ? [abs($m['pendent'] - $import), abs(strtotime($m['data']) - strtotime($data))]
+                : [abs(strtotime($m['data']) - strtotime($data))])
+            ->take(15)
+            ->values();
+
+        return response()->json($moviments);
+    }
+
+    /** Un moviment com el veuen les despeses: l'import en positiu i el que en queda per assignar. */
+    private function movimentPerDespesa(MovimentCompteCorrent $m, ?int $despesa, ?float $assignat = null): array
+    {
+        $import = abs((float) $m->import);
+        $assignat ??= VehicleDespesa::assignatDe($m->id, $despesa);
+
+        return [
+            'id'       => $m->id,
+            'data'     => $m->data_moviment->toDateString(),
+            'import'   => $import,
+            'pendent'  => round($import - $assignat, 2),
+            'compte'   => $m->compteCorrent?->nom,
+            'concepte' => $m->concepte?->concepte ?? $m->concepte_original,
+        ];
     }
 
     public function store(VehicleRequest $request)

@@ -9,6 +9,8 @@ import { Chart as ChartJS, registerables } from 'chart.js';
 import type { ChartData, ChartOptions } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 import FitxaBici from '@/Components/Bicis/FitxaBici.vue';
+import DespesesVehicle from '@/Components/Vehicles/DespesesVehicle.vue';
+import type { Despesa, Peca } from '@/Components/Vehicles/DespesesVehicle.vue';
 
 ChartJS.register(...registerables);
 
@@ -30,17 +32,6 @@ interface Repostatge {
     notes: string | null;
 }
 
-interface Despesa {
-    id: number;
-    data: string;
-    tipus: string;
-    tipus_nom: string;
-    import: number;
-    km_totals: number | null;
-    taller: string | null;
-    motiu: string | null;
-    moviment_id: number | null;
-}
 
 /** El que ha donat un any: quilòmetres, combustible i despeses. */
 interface Any {
@@ -96,6 +87,8 @@ interface Props {
     modalitats: Record<string, string>;
     motiusBaixa: Record<string, string>;
     tipusDespesa: Record<string, string>;
+    /** Les peces de material a què pot anar una despesa de bici (buit als vehicles a motor). */
+    peces: Peca[];
     /** Tipus que admet aquesta llista: cotxe i moto, o bici. */
     tipus: string[];
     titol: string;
@@ -153,68 +146,10 @@ onMounted(() => {
 });
 const pestanya = ref<'anys' | 'repostatges' | 'despeses' | 'grafiques'>('anys');
 
-const despesaForm = useForm({
-    vehicle_id: 0,
-    dia: '',
-    tipus: 'reparacio',
-    import: null as number | null,
-    km_totals: null as number | null,
-    taller: '',
-    motiu: '',
-});
-
-/** Id de la despesa que s'està editant. Null mentre el formulari és d'alta. */
-const despesaEditant = ref<number | null>(null);
-
-function editaDespesa(d: Despesa) {
-    despesaEditant.value = d.id;
-    despesaForm.clearErrors();
-    // De cop: `form.data` és alhora el camp i el mètode data() d'Inertia, i assignar-l'hi de una en una no tipa
-    Object.assign(despesaForm, {
-        dia: d.data,
-        tipus: d.tipus,
-        import: d.import,
-        km_totals: d.km_totals,
-        taller: d.taller ?? '',
-        motiu: d.motiu ?? '',
-    });
-}
-
-function cancelaEdicioDespesa() {
-    despesaEditant.value = null;
-    despesaForm.clearErrors();
-    despesaForm.reset('dia', 'import', 'km_totals', 'taller', 'motiu');
-}
-
-function desaDespesa(vehicle: Vehicle) {
-    despesaForm.vehicle_id = vehicle.id;
-
-    const opcions = {
-        preserveScroll: true,
-        onSuccess: () => {
-            despesaEditant.value = null;
-            despesaForm.reset('dia', 'import', 'km_totals', 'taller', 'motiu');
-        },
-    };
-
-    if (despesaEditant.value !== null) {
-        despesaForm.transform(perAlServidor).put(route('vehicles.despeses.update', despesaEditant.value), opcions);
-        return;
-    }
-
-    despesaForm.transform(perAlServidor).post(route('vehicles.despeses.store'), opcions);
-}
-
-function eliminaDespesa(d: Despesa) {
-    if (!confirm(`Vols eliminar la despesa del ${d.data}?`)) return;
-    if (despesaEditant.value === d.id) cancelaEdicioDespesa();
-    router.delete(route('vehicles.despeses.destroy', d.id), { preserveScroll: true });
-}
 
 
 function obreRepostatges(vehicle: Vehicle) {
     repostatgesOberts.value = repostatgesOberts.value === vehicle.id ? null : vehicle.id;
-    cancelaEdicioDespesa();
     cancelaEdicioRepostatge();
 }
 
@@ -672,7 +607,7 @@ function elimina(vehicle: Vehicle) {
                                     <!-- Fitxa de la bici: el que diuen les sortides -->
                                     <tr v-if="fitxaOberta === v.id" class="bg-gray-50 dark:bg-gray-700/30">
                                         <td :colspan="(props.tipus.length > 1 ? 1 : 0) + (props.esMotor ? 4 : 6)" class="px-4 py-3">
-                                            <FitxaBici :vehicle-id="v.id"
+                                            <FitxaBici :vehicle-id="v.id" :despeses="v.despeses" :tipus-despesa="props.tipusDespesa" :peces="props.peces"
                                                 :pestanya-inicial="v.id === fitxaInicial ? pestanyaInicial : undefined"
                                                 :any-inicial="v.id === fitxaInicial ? anyInicial : undefined" />
                                         </td>
@@ -875,94 +810,8 @@ function elimina(vehicle: Vehicle) {
                                             </p>
 
                                             <!-- Despeses: reparacions, ITV, assegurança i impost -->
-                                            <div v-if="pestanya === 'despeses'">
-                                                <div class="mb-3 flex flex-wrap items-end gap-2 border-b border-gray-200 pb-3 dark:border-gray-600">
-                                                    <label class="text-xs text-gray-500 dark:text-gray-400">
-                                                        Data
-                                                        <input v-model="despesaForm.dia" type="date"
-                                                            class="mt-0.5 block w-36 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
-                                                    </label>
-                                                    <label class="text-xs text-gray-500 dark:text-gray-400">
-                                                        Tipus
-                                                        <select v-model="despesaForm.tipus"
-                                                            class="mt-0.5 block w-44 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
-                                                            <option v-for="(nom, clau) in props.tipusDespesa" :key="clau" :value="clau">{{ nom }}</option>
-                                                        </select>
-                                                    </label>
-                                                    <label class="text-xs text-gray-500 dark:text-gray-400">
-                                                        Import
-                                                        <input v-model.number="despesaForm.import" type="number" step="0.01"
-                                                            class="mt-0.5 block w-24 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
-                                                    </label>
-                                                    <label class="text-xs text-gray-500 dark:text-gray-400">
-                                                        Km totals
-                                                        <input v-model.number="despesaForm.km_totals" type="number" placeholder="opcional"
-                                                            class="mt-0.5 block w-28 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
-                                                    </label>
-                                                    <label class="text-xs text-gray-500 dark:text-gray-400">
-                                                        Taller
-                                                        <input v-model="despesaForm.taller" type="text" list="tallers"
-                                                            class="mt-0.5 block w-40 rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
-                                                    </label>
-                                                    <label class="min-w-[10rem] flex-1 text-xs text-gray-500 dark:text-gray-400">
-                                                        Motiu
-                                                        <input v-model="despesaForm.motiu" type="text"
-                                                            class="mt-0.5 block w-full rounded-md border-gray-300 text-sm shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
-                                                    </label>
-                                                    <button @click="desaDespesa(v)" :disabled="despesaForm.processing || !despesaForm.dia || despesaForm.import === null"
-                                                        class="mb-1 rounded-md bg-sky-600 px-3 py-1 text-sm text-white hover:bg-sky-700 disabled:opacity-40">
-                                                        {{ despesaEditant === null ? 'Afegeix' : 'Desa' }}
-                                                    </button>
-                                                    <button v-if="despesaEditant !== null" @click="cancelaEdicioDespesa"
-                                                        class="mb-1 px-2 py-1 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
-                                                        Cancel·la
-                                                    </button>
-                                                </div>
-
-                                                <datalist id="tallers">
-                                                    <option v-for="t in [...new Set(v.despeses.map(d => d.taller).filter(Boolean))]" :key="t as string" :value="t" />
-                                                </datalist>
-
-                                                <div class="overflow-x-auto">
-                                                    <table class="min-w-full text-sm">
-                                                        <thead>
-                                                            <tr class="border-b border-gray-200 text-left text-xs uppercase text-gray-500 dark:border-gray-600 dark:text-gray-400">
-                                                                <th class="whitespace-nowrap pb-1 pr-3 font-medium">Data</th>
-                                                                <th class="whitespace-nowrap pb-1 pr-3 font-medium">Tipus</th>
-                                                                <th class="whitespace-nowrap pb-1 pr-3 text-right font-medium">Import</th>
-                                                                <th class="whitespace-nowrap pb-1 pr-3 text-right font-medium">Km totals</th>
-                                                                <th class="whitespace-nowrap pb-1 pr-3 font-medium">Taller</th>
-                                                                <th class="w-full pb-1 pr-3 font-medium">Motiu</th>
-                                                                <th class="w-16"></th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-                                                            <tr v-for="d in v.despeses" :key="d.id"
-                                                                :class="despesaEditant === d.id ? 'bg-sky-50 dark:bg-sky-900/20' : ''">
-                                                                <td class="whitespace-nowrap py-1 pr-3 text-gray-600 dark:text-gray-400">{{ d.data }}</td>
-                                                                <td class="whitespace-nowrap py-1 pr-3">
-                                                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-300">{{ d.tipus_nom }}</span>
-                                                                </td>
-                                                                <td class="whitespace-nowrap py-1 pr-3 text-right font-medium tabular-nums text-gray-900 dark:text-gray-100">{{ formatEur(d.import) }}</td>
-                                                                <td class="whitespace-nowrap py-1 pr-3 text-right tabular-nums text-gray-500 dark:text-gray-400">
-                                                                    {{ d.km_totals !== null ? d.km_totals.toLocaleString('ca-ES') : '—' }}
-                                                                </td>
-                                                                <td class="whitespace-nowrap py-1 pr-3 text-xs text-gray-500 dark:text-gray-400">{{ d.taller }}</td>
-                                                                <td class="w-full max-w-0 truncate py-1 pr-3 text-xs text-gray-500 dark:text-gray-400" :title="d.motiu ?? ''">{{ d.motiu }}</td>
-                                                                <td class="whitespace-nowrap py-1 text-right">
-                                                                    <button @click="editaDespesa(d)" title="Edita"
-                                                                        class="text-xs text-sky-600 hover:text-sky-800 dark:text-sky-400">✎</button>
-                                                                    <button @click="eliminaDespesa(d)" title="Elimina"
-                                                                        class="ml-2 text-xs text-red-500 hover:text-red-700">×</button>
-                                                                </td>
-                                                            </tr>
-                                                            <tr v-if="!v.despeses.length">
-                                                                <td colspan="7" class="py-2 text-xs text-gray-400 dark:text-gray-500">Encara no hi ha cap despesa.</td>
-                                                            </tr>
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </div>
+                                            <DespesesVehicle v-if="pestanya === 'despeses'" :vehicle-id="v.id" :despeses="v.despeses"
+                                                :tipus-despesa="props.tipusDespesa" :es-motor="true" />
                                             <div v-if="pestanya === 'repostatges'" class="overflow-x-auto">
                                                 <table class="min-w-full text-sm">
                                                     <thead>
