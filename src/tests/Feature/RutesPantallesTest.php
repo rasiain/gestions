@@ -9,12 +9,20 @@ use App\Models\Vehicle;
 use App\Support\Polilinia;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Tests\Concerns\BdRecorreguts;
 use Tests\TestCase;
 
 /** El catàleg de rutes i el detall d'una ruta, amb dades fetes a mà (sense `rutes:calcula`). */
 class RutesPantallesTest extends TestCase
 {
+    use BdRecorreguts;
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->preparaBdRecorreguts();
+    }
 
     private function sortida(Vehicle $bici, string $data, float $km): SortidaBici
     {
@@ -62,5 +70,43 @@ class RutesPantallesTest extends TestCase
                 ->where('membres.0.semblanca', 0.86)
                 ->where('membres.1.canonica', true)
                 ->has('altres_nivells', 2));
+    }
+
+    public function test_la_pagina_de_la_sortida_diu_a_quina_ruta_pertany_a_cada_nivell(): void
+    {
+        $giant = Vehicle::create(['nom' => 'Giant', 'tipus' => 'bici']);
+        $a = $this->sortida($giant, '2025-03-01', 40);
+        $b = $this->sortida($giant, '2026-05-01', 41);
+        SortidaBici::whereIn('id', [$a->id, $b->id])->update(['punts' => 100]);
+
+        $zona = Ruta::create(['nivell' => 'zona', 'canonica_id' => $a->id, 'sortides' => 2]);
+        $mateixa = Ruta::create(['nivell' => 'mateixa', 'canonica_id' => $b->id, 'sortides' => 1]);
+        DB::table('g_sortida_ruta')->insert([
+            ['sortida_id' => $b->id, 'nivell' => 'zona', 'ruta_id' => $zona->id, 'semblanca' => 0.72],
+            ['sortida_id' => $b->id, 'nivell' => 'mateixa', 'ruta_id' => $mateixa->id, 'semblanca' => 1],
+        ]);
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('bicis.sortida', $b))
+            ->assertOk()
+            ->assertInertia(fn ($p) => $p->component('Bicis/Sortida')
+                ->has('rutes.nivells', 2)
+                ->where('rutes.nivells.0.nivell', 'mateixa')       // de més estricte a menys
+                ->where('rutes.nivells.0.representant', true)
+                ->where('rutes.nivells.1.id', $zona->id)
+                ->where('rutes.nivells.1.semblanca', 0.72)
+                ->where('rutes.nivells.1.representant', false)
+                ->where('rutes.pendent', false));
+
+        // Una d'importada després del darrer càlcul: pendent
+        $nova = $this->sortida($giant, '2026-11-15', 30);
+        $nova->forceFill(['punts' => 100, 'updated_at' => now()->addMinute()])->save();
+        $this->get(route('bicis.sortida', $nova))
+            ->assertInertia(fn ($p) => $p->has('rutes.nivells', 0)->where('rutes.pendent', true));
+
+        // Els rodets no en tenen
+        $rodets = $this->sortida($giant, '2026-11-14', 20);
+        $rodets->forceFill(['tipus_activitat' => 'indoor_cycling'])->save();
+        $this->get(route('bicis.sortida', $rodets))->assertInertia(fn ($p) => $p->where('rutes', null));
     }
 }

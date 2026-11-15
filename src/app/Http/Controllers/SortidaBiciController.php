@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Console\Commands\CalculaRutes;
 use App\Http\Requests\AltitudPreferenciaRequest;
 use App\Http\Requests\SortidaMaterialRequest;
 use App\Models\MaterialEsportiu;
@@ -10,6 +11,7 @@ use App\Models\SortidaBici;
 use App\Models\Vehicle;
 use App\Models\VehicleDespesa;
 use App\Services\AltitudTerrenyService;
+use App\Services\RutesCanoniquesService;
 use Carbon\CarbonInterface;
 use Closure;
 use Illuminate\Http\JsonResponse;
@@ -359,6 +361,7 @@ class SortidaBiciController extends Controller
                 ],
             ],
             'altitud'  => app(AltitudTerrenyService::class)->opcions($sortida),
+            'rutes'    => $this->rutes($sortida),
             'anterior' => $anterior,
             'seguent'  => $seguent,
             // Per corregir el material: les bicis i la resta de peces, amb les dates de cada una
@@ -423,6 +426,43 @@ class SortidaBiciController extends Controller
             ->map(fn ($alts) => array_map(fn ($a) => $a === null ? null : round($a, 1), $alts));
 
         return response()->json($columnes);
+    }
+
+    /**
+     * A quina ruta canònica pertany la sortida a cada nivell de tolerància: ja ho ha desat
+     * `rutes:calcula`, no es calcula res. Una sortida amb recorregut i sense cap ruta és que
+     * s'ha importat després del darrer càlcul (`pendent`) o que és massa curta per tenir-ne.
+     *
+     * @return array{nivells: list<array>, pendent: bool}|null  null si la sortida no en pot tenir
+     */
+    private function rutes(SortidaBici $sortida): ?array
+    {
+        if (! $sortida->punts || $sortida->tipus_activitat === 'indoor_cycling') {
+            return null;
+        }
+
+        $ordre = array_keys(RutesCanoniquesService::NIVELLS);
+        $nivells = DB::table('g_sortida_ruta as sr')
+            ->join('g_rutes as r', 'r.id', '=', 'sr.ruta_id')
+            ->where('sr.sortida_id', $sortida->id)
+            ->get(['r.id', 'r.nivell', 'r.sortides', 'r.canonica_id', 'sr.semblanca'])
+            ->sortBy(fn ($r) => array_search($r->nivell, $ordre))
+            ->map(fn ($r) => [
+                'id'             => $r->id,
+                'nivell'         => $r->nivell,
+                'llindar'        => RutesCanoniquesService::NIVELLS[$r->nivell] ?? null,
+                'sortides'       => (int) $r->sortides,
+                'semblanca'      => (float) $r->semblanca,
+                'representant'   => (int) $r->canonica_id === $sortida->id,
+            ])->values();
+
+        // Amb `updated_at` i no `created_at`: afegir el recorregut a una sortida que ja hi era també la deixa pendent
+        $calcul = DB::table('g_rutes')->max('created_at');
+
+        return [
+            'nivells' => $nivells,
+            'pendent' => $nivells->isEmpty() && ($calcul === null || $sortida->updated_at?->toDateTimeString() >= $calcul || file_exists(CalculaRutes::pendent())),
+        ];
     }
 
     /** Com es mira l'altitud d'aquesta sortida; sense mètode, torna a la de per defecte. */

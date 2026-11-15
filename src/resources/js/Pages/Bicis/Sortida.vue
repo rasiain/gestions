@@ -19,6 +19,8 @@ import type { Chart, ChartData, ChartOptions, Plugin } from 'chart.js';
 import zoomPlugin from 'chartjs-plugin-zoom';
 import { SERIE_AMBRE, SERIE_BLAU, TRAMS_PENDENT, colorPendent, pendents, rodaEnClicar } from '@/bicis/recorregut';
 import { baixaGpx } from '@/bicis/gpx';
+import { nomNivell } from '@/bicis/nivells';
+import InfoTolerancia from '@/Components/Bicis/InfoTolerancia.vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -57,6 +59,11 @@ const props = defineProps<{
         sortida: PreferenciaAltitud | null;
         desnivells: Record<string, { pujada: number; baixada: number }>;
     };
+    rutes: {
+        nivells: { id: number; nivell: string; llindar: number | null; sortides: number; semblanca: number; representant: boolean }[];
+        /** Importada després del darrer `rutes:calcula`: les rutes es calculen en segon pla. */
+        pendent: boolean;
+    } | null;
     anterior: number | null;
     seguent: number | null;
     bicis: { id: number; nom: string; actiu: boolean }[];
@@ -929,6 +936,48 @@ const comparacio = computed(() => {
                             {{ nombre(sortida.punts) }} punts<template v-if="sortida.fitxer"> · original a <code>storage/app/sortides/{{ sortida.fitxer }}</code></template>
                         </p>
                     </div>
+                </div>
+                <!-- Rutes canòniques: ja les ha desat `rutes:calcula`, aquí només es llegeixen -->
+                <div v-if="rutes" class="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800">
+                    <h3 class="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                        Rutes
+                        <InfoTolerancia v-if="rutes.nivells.length" :nivells="rutes.nivells.map(n => ({ clau: n.nivell, llindar: n.llindar ?? 0 }))" />
+                    </h3>
+                    <table v-if="rutes.nivells.length" class="min-w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-gray-200 text-left text-xs uppercase text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                                <th class="pb-1 pr-3 font-medium">Tolerància</th>
+                                <th class="pb-1 pr-3 text-right font-medium">Sortides del grup</th>
+                                <th class="pb-1 pr-3 text-right font-medium">En comú amb la representant</th>
+                                <th class="pb-1 font-medium"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                            <tr v-for="n in rutes.nivells" :key="n.nivell">
+                                <td class="py-1 pr-3 text-gray-700 dark:text-gray-300">
+                                    {{ nomNivell(n.nivell) }}
+                                    <span v-if="n.llindar !== null" class="text-xs text-gray-400 dark:text-gray-500">≥ {{ Math.round(n.llindar * 100) }} %</span>
+                                </td>
+                                <td class="py-1 pr-3 text-right tabular-nums text-gray-900 dark:text-gray-100">
+                                    {{ n.sortides === 1 ? 'només aquesta' : nombre(n.sortides) }}
+                                </td>
+                                <td class="py-1 pr-3 text-right tabular-nums text-gray-900 dark:text-gray-100">
+                                    <span v-if="n.representant" class="rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">n'és la representant</span>
+                                    <template v-else>{{ nombre(n.semblanca * 100) }} %</template>
+                                </td>
+                                <td class="py-1 text-right">
+                                    <Link :href="route('bicis.rutes.show', n.id)" class="text-sky-700 hover:underline dark:text-sky-400">Veure la ruta →</Link>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p v-else-if="rutes.pendent" class="text-sm text-gray-500 dark:text-gray-400">
+                        Encara no s'han calculat les rutes d'aquesta sortida: es calculen en segon pla després d'importar-la,
+                        en un parell de minuts (mira <code>storage/logs/rutes-calcula.log</code>).
+                    </p>
+                    <p v-else class="text-sm text-gray-500 dark:text-gray-400">
+                        Aquesta sortida no forma part de cap ruta: el recorregut és massa curt per comparar-lo.
+                    </p>
                 </div>
             </div>
         </div>
