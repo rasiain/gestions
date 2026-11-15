@@ -40,7 +40,7 @@ docker compose exec app php artisan tinker
 - **Revisió periòdica**: `.github/dependabot.yml` obre cada mes una PR amb les actualitzacions menors i de pedaç (PHP i JS, agrupades) i les de seguretat en sortir l'avís. Els canvis de versió major no els proposa.
 - **A mà**: `docker compose exec app composer audit` i `docker compose exec app npm audit`. Per actualitzar sense canviar de versió major: `composer update -W` i `npm audit fix`; després, tests i `npm run build`.
 - `src/.npmrc` porta `legacy-peer-deps=true`: vite 7 i `@vitejs/plugin-vue` 5 tenen un conflicte de peer dependencies que no afecta el build, i sense això `npm install` falla amb ERESOLVE.
-- **Pendent (2026-10-24)**: 5 avisos moderats de `postcss-selector-parser` 6, que arrosseguen Tailwind 3 i els connectors d'ESLint. Són eines de compilació que només processen el codi del projecte; arreglar-ho vol Tailwind 4 i eslint-plugin-vue 10 (versions majors). També queden per fer els salts majors de Laravel 13, Inertia 3, Pest 5 i maatwebsite/excel 4.
+- **Pendent (2026-11-15)**: 9 avisos moderats de `minimatch` (denegació de servei amb patrons de glob), que arrosseguen `vue-tsc` 2 i `@vue/eslint-config-typescript` 13. Són eines de compilació que només llegeixen els patrons del projecte; arreglar-ho vol `vue-tsc` 3 i `@vue/eslint-config-typescript` 14, que demana ESLint 9 amb configuració *flat* (versions majors). Els de `postcss-selector-parser` del 2026-10-24 ja no hi surten. També queden per fer els salts majors de Laravel 13, Inertia 3, Pest 5 i maatwebsite/excel 4.
 
 ## Estructura del projecte
 
