@@ -4,6 +4,7 @@ namespace App\Http\Services\ImportFiles;
 
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
+use Maatwebsite\Excel\Concerns\Import;
 use Maatwebsite\Excel\Facades\Excel;
 
 class FileParserService
@@ -174,7 +175,9 @@ class FileParserService
      */
     private function parseExcelFile(UploadedFile $file): array
     {
-        $data = Excel::toArray([], $file);
+        // Des d'Excel 4 cal un objecte d'importació (abans hi anava `[]`); aquí no en cal cap concern,
+        // només les cel·les de cada full
+        $data = Excel::toArray(new class implements Import {}, $file);
         return $data[0] ?? [];
     }
 
