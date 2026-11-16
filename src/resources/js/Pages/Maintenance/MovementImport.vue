@@ -424,7 +424,7 @@ const recalcularSaldos = () => {
                                     class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <span v-if="isProcessing">Analitzant...</span>
-                                    <span v-else">Analitzar fitxer</span>
+                                    <span v-else>Analitzar fitxer</span>
                                 </button>
                                 <button
                                     @click="resetForm"
