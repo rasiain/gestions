@@ -10,9 +10,9 @@ Aplicació de gestió financera personal i de lloguers. Dues àrees: gestions ba
 
 ## Stack
 
-- **Backend**: Laravel 12, PHP 8.4, SQLite
+- **Backend**: Laravel 13, PHP 8.4, SQLite
 - **Frontend**: Vue 3 (Composition API) + TypeScript + Tailwind CSS 3
-- **Bridge SPA**: Inertia.js (paquets `inertiajs/inertia-laravel` + `@inertiajs/vue3`)
+- **Bridge SPA**: Inertia.js 3 (paquets `inertiajs/inertia-laravel` + `@inertiajs/vue3`). Des de la v3 Inertia ja no fa servir axios: les seves visites van amb `fetch` i hi posa ell el `X-XSRF-TOKEN` de la galeta. axios continua al projecte perquè alguna pàgina el fa servir directament (`Maintenance/MovementImport.vue`).
 - **Infraestructura**: Docker (PHP-FPM + Nginx + Supervisor + Redis)
 - **Rutes JS**: Ziggy (`route()` disponible al frontend)
 - **Auth**: Laravel Breeze + Sanctum
@@ -41,7 +41,8 @@ docker compose exec app php artisan tinker
 - **A mà**: `docker compose exec app composer audit` i `docker compose exec app npm audit`. Per actualitzar sense canviar de versió major: `composer update -W` i `npm audit fix`; després, tests i `npm run build`.
 - `src/.npmrc` porta `legacy-peer-deps=true`: vite 7 i `@vitejs/plugin-vue` 5 tenen un conflicte de peer dependencies que no afecta el build, i sense això `npm install` falla amb ERESOLVE.
 - **ESLint 9 i vue-tsc 3** des del 2026-11-15, amb la configuració *flat* a `src/eslint.config.js` (la d'abans era `.eslintrc.cjs`). `package.json` porta un `overrides` que força `minimatch` 11 dins de `@typescript-eslint/typescript-estree`: la 8.72 de typescript-eslint encara demana la 10, que té un avís de denegació de servei. Quan typescript-eslint passi a la 11, l'`overrides` es pot treure. **El lint i vue-tsc es deixen a zero**: `docker compose exec app npx eslint resources/js` (o `npm run lint`, que hi afegeix `--fix`) no és al build, i per això cada repàs de dependències l'ha de passar i arreglar el que surti. Dins el contenidor tots dos triguen uns minuts.
-- **Pendent**: els salts majors de Laravel 13, Inertia 3, Pest 5 i maatwebsite/excel 4.
+- **Laravel 13 i Inertia 3** des del 2026-11-16. A la plantilla arrel (`resources/views/app.blade.php`) van `<x-inertia::head />` i `<x-inertia::app />`, i el títol porta `data-inertia`. Els tests fan 28 comprovacions menys que abans: `assertInertia()` en fa cinc per resposta i no set, perquè `encryptHistory` i `clearHistory` ja només hi són quan valen `true`.
+- **Pendent**: els salts majors de Pest 5 i maatwebsite/excel 4.
 
 ## Estructura del projecte
 
