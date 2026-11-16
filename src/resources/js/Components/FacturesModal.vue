@@ -186,7 +186,7 @@ const fetchEscombraries = async () => {
             escombrariesForm.value = {
                 import_total: json.data.import_total ? String(json.data.import_total) : '',
                 factura_separada: !!json.data.factura_separada,
-                fraccions: (json.data.fraccions ?? []).map((f: any) => ({ mes: f.mes, import: String(f.import) })),
+                fraccions: (json.data.fraccions ?? []).map((f: { mes: number; import: number | string }) => ({ mes: f.mes, import: String(f.import) })),
             };
         } else {
             escombrariesForm.value = { import_total: '', factura_separada: false, fraccions: [] };
@@ -522,8 +522,8 @@ const openVincularModal = async (factura: Factura) => {
         });
         const json = await res.json();
         movimentsDisponibles.value = json.data
-            .filter((m: any) => parseFloat(m.import) > 0)
-            .map((m: any) => ({
+            .filter((m: MovimentOption) => parseFloat(m.import) > 0)
+            .map((m: MovimentOption) => ({
                 id: m.id,
                 data_moviment: m.data_moviment,
                 concepte: m.concepte,

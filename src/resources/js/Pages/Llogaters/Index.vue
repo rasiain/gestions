@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 
 interface PersonaBasic {
     id: number;
@@ -35,7 +35,7 @@ interface Props {
     persones: PersonaBasic[];
 }
 
-const props = defineProps<Props>();
+defineProps<Props>();
 
 const showModal = ref(false);
 const isEditing = ref(false);

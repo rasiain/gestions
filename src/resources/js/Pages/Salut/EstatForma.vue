@@ -9,7 +9,7 @@ import Info from '@/Components/Info.vue';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { Bar, Line } from 'vue-chartjs';
 import { Chart as ChartJS, registerables } from 'chart.js';
-import type { Chart, ChartData, ChartOptions, Plugin } from 'chart.js';
+import type { Chart, ChartData, ChartOptions, Plugin, TooltipItem } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 
 ChartJS.register(...registerables);
@@ -212,8 +212,8 @@ function opcions(llegenda: boolean, ambZero = false): ChartOptions<'line'> {
             legend: { display: llegenda, position: 'top', align: 'end', labels: { color: tinta.value, boxWidth: 12 } },
             tooltip: {
                 callbacks: {
-                    title: (items: any[]) => formatData(new Date(Number(items[0]?.parsed.x)).toISOString().slice(0, 10)),
-                    label: (c: any) => `${c.dataset.label}: ${nombre(Number(c.parsed.y))}`,
+                    title: (items: TooltipItem<'line'>[]) => formatData(new Date(Number(items[0]?.parsed.x)).toISOString().slice(0, 10)),
+                    label: (c: TooltipItem<'line'>) => `${c.dataset.label}: ${nombre(Number(c.parsed.y))}`,
                 },
             },
         },
@@ -231,7 +231,7 @@ const opcionsFons = computed(() => opcions(true));
 const opcionsFrescor = computed(() => {
     const o = opcions(false, true);
     Object.assign(o.scales!.y!, { suggestedMin: -45, suggestedMax: 35, ticks: { color: tinta.value, callback: (v: number | string) => `${v} %` } });
-    (o.plugins!.tooltip!.callbacks as any).label = (c: any) => {
+    o.plugins!.tooltip!.callbacks!.label = (c: TooltipItem<'line'>) => {
         const d = dies.value[c.dataIndex];
         return `Frescor: ${c.parsed.y} % del fons (${nombre(d.frescor)}) · ${tramFrescor(c.parsed.y)?.nom ?? ''}`;
     };
@@ -242,7 +242,7 @@ const avuiPct = computed(() => (avui.value ? percentFrescor(avui.value) : null))
 const quocient = computed(() => (avui.value && avui.value.fons >= FONS_MINIM ? avui.value.fatiga / avui.value.fons : null));
 const opcionsSetmanes = computed(() => {
     const o = opcions(false) as ChartOptions<'bar'>;
-    (o.plugins!.tooltip!.callbacks as any).title = (items: any[]) => 'Setmana del ' + formatData(new Date(Number(items[0]?.parsed.x)).toISOString().slice(0, 10));
+    o.plugins!.tooltip!.callbacks!.title = (items: TooltipItem<'bar'>[]) => 'Setmana del ' + formatData(new Date(Number(items[0]?.parsed.x)).toISOString().slice(0, 10));
     return o;
 });
 

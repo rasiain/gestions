@@ -1063,8 +1063,10 @@ const conciliarPagina = async (conciliat: boolean) => {
                                             : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600',
                                         !link.url ? 'opacity-50 cursor-not-allowed' : ''
                                     ]"
-                                    v-html="link.label"
-                                />
+                                >
+                                    <!-- L'etiqueta la fa el paginador de Laravel: porta entitats («&laquo;») -->
+                                    <span v-html="link.label" />
+                                </Link>
                             </div>
                         </div>
                     </div>

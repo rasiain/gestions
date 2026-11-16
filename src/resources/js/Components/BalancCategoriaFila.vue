@@ -8,7 +8,7 @@ interface BalancCategoria {
     fills: BalancCategoria[];
 }
 
-const props = defineProps<{
+defineProps<{
     cat: BalancCategoria;
     nivell: number;
     formatEur: (val: number) => string;

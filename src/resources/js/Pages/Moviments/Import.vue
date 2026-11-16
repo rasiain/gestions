@@ -95,7 +95,7 @@ const scanFiles = async () => {
         if (files.value.length === 1) {
             await selectFile(files.value[0]);
         }
-    } catch (e) {
+    } catch {
         error.value = 'Error escanejant fitxers';
     } finally {
         scanning.value = false;
@@ -128,8 +128,8 @@ const doPreview = async (filePath: string, compteCorrentId?: number) => {
         } else {
             error.value = json.message || json.error || 'Error analitzant el fitxer';
         }
-    } catch (e: any) {
-        error.value = e?.message || 'Error analitzant el fitxer';
+    } catch (e) {
+        error.value = (e instanceof Error && e.message) || 'Error analitzant el fitxer';
     } finally {
         scanning.value = false;
     }
@@ -165,7 +165,7 @@ const confirmImport = async () => {
             error.value = json.message || 'Error important';
             step.value = 'preview';
         }
-    } catch (e) {
+    } catch {
         error.value = 'Error important els moviments';
         step.value = 'preview';
     }

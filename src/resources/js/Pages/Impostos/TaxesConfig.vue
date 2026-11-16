@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
 
 interface Patro {
     id: number;
@@ -27,8 +26,6 @@ function afegeix() {
     });
 }
 
-// Edició inline: es desa on canvia.
-const editant = ref<Record<number, Patro>>({});
 
 function desa(p: Patro) {
     router.put(route('impostos.taxes.patrons.update', p.id), {

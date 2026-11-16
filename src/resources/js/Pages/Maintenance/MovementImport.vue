@@ -4,6 +4,10 @@ import { Head, Link } from '@inertiajs/vue3';
 import { ref, computed, watch } from 'vue';
 import axios from 'axios';
 
+/** Un error d'axios amb el cos que torna el servidor (missatge i, si n'hi ha, les dades analitzades). */
+const cosDeLError = (error: unknown) =>
+    axios.isAxiosError<{ message?: string; data?: ParsedData & { errors?: unknown } }>(error) ? error.response?.data : undefined;
+
 interface CompteCorrent {
     id: number;
     compte_corrent: string;
@@ -29,7 +33,7 @@ interface Movement {
 interface ParsedData {
     movements: Movement[];
     last_hash_found: boolean;
-    last_db_movement: any | null;
+    last_db_movement: { data_moviment: string; saldo_posterior: number | string | null } | null;
     duplicates_skipped: number;
     to_import_count: number;
     warnings: string[];
@@ -138,11 +142,12 @@ const parseFile = async () => {
 
         parsedData.value = response.data.data;
         isParsed.value = true;
-    } catch (error: any) {
-        if (error.response?.data) {
-            errorMessage.value = error.response.data.message || 'Error processant el fitxer';
-            if (error.response.data.data?.errors) {
-                parsedData.value = { ...error.response.data.data };
+    } catch (error) {
+        const cos = cosDeLError(error);
+        if (cos) {
+            errorMessage.value = cos.message || 'Error processant el fitxer';
+            if (cos.data?.errors) {
+                parsedData.value = { ...cos.data };
             }
         } else {
             errorMessage.value = 'Error de xarxa';
@@ -183,9 +188,10 @@ const importMovements = async () => {
 
         // Reset form
         resetForm();
-    } catch (error: any) {
-        if (error.response?.data) {
-            errorMessage.value = error.response.data.message || 'Error important els moviments';
+    } catch (error) {
+        const cos = cosDeLError(error);
+        if (cos) {
+            errorMessage.value = cos.message || 'Error important els moviments';
         } else {
             errorMessage.value = 'Error de xarxa';
         }

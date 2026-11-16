@@ -14,7 +14,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { num, perAlServidor } from '@/formularis';
 import { Line } from 'vue-chartjs';
 import { Chart as ChartJS, registerables } from 'chart.js';
-import type { Chart, ChartData, ChartOptions, Plugin } from 'chart.js';
+import type { Chart, ChartData, ChartOptions, Plugin, TooltipItem } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 
 ChartJS.register(...registerables);
@@ -260,7 +260,7 @@ const opcionsImc = computed<ChartOptions<'line'>>(() => {
     const o = opcionsImcBase.value;
     return {
         ...o,
-        plugins: { ...o.plugins, tooltip: { callbacks: { ...o.plugins!.tooltip!.callbacks, label: (c: any) => `IMC ${nombre(Number(c.parsed.y), 1)} · ${tramImc(Number(c.parsed.y))?.nom ?? ''}` } } },
+        plugins: { ...o.plugins, tooltip: { callbacks: { ...o.plugins!.tooltip!.callbacks, label: (c: TooltipItem<'line'>) => `IMC ${nombre(Number(c.parsed.y), 1)} · ${tramImc(Number(c.parsed.y))?.nom ?? ''}` } } },
         scales: { ...o.scales, y: { ...o.scales!.y, suggestedMin: 18, suggestedMax: 31 } },
     };
 });
@@ -270,7 +270,7 @@ const opcionsGreix = computed<ChartOptions<'line'>>(() => {
     const o = opcionsGreixBase.value;
     return {
         ...o,
-        plugins: { ...o.plugins, tooltip: { callbacks: { ...o.plugins!.tooltip!.callbacks, label: (c: any) => `${nombre(Number(c.parsed.y), 1)} % · ${tramGreix(Number(c.parsed.y))?.nom ?? ''}` } } },
+        plugins: { ...o.plugins, tooltip: { callbacks: { ...o.plugins!.tooltip!.callbacks, label: (c: TooltipItem<'line'>) => `${nombre(Number(c.parsed.y), 1)} % · ${tramGreix(Number(c.parsed.y))?.nom ?? ''}` } } },
         scales: { ...o.scales, y: { ...o.scales!.y, suggestedMin: saludable.value ? saludable.value.des - 2 : undefined, suggestedMax: saludable.value ? saludable.value.fins + 8 : undefined } },
     };
 });

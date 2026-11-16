@@ -102,13 +102,15 @@ const posicionsTriades = ref<Set<string>>(new Set(props.posicions.map(p => p.cla
 const alternaTitular = (id: number | null) => {
     const nou = new Set(titularsTriats.value);
     const clau = clauTitular(id);
-    nou.has(clau) ? nou.delete(clau) : nou.add(clau);
+    if (nou.has(clau)) nou.delete(clau);
+    else nou.add(clau);
     titularsTriats.value = nou;
 };
 
 const alternaPosicio = (clau: string) => {
     const nou = new Set(posicionsTriades.value);
-    nou.has(clau) ? nou.delete(clau) : nou.add(clau);
+    if (nou.has(clau)) nou.delete(clau);
+    else nou.add(clau);
     posicionsTriades.value = nou;
 };
 
@@ -506,7 +508,8 @@ const fluxosPerTall = computed(() => {
     return perTall;
 });
 
-const fluxos = computed(() =>
+// No es diu `fluxos`: és el nom de la prop, i a la plantilla l'un tapava l'altre
+const fluxosDelRang = computed(() =>
     tallsDelRang.value.map(t => {
         const flux = fluxosPerTall.value.get(t.clau) ?? { entrades: 0, sortides: 0 };
 
@@ -519,8 +522,8 @@ const fluxos = computed(() =>
     }),
 );
 
-const totalEntrades = computed(() => round2(fluxos.value.reduce((s, f) => s + f.entrades, 0)));
-const totalSortides = computed(() => round2(fluxos.value.reduce((s, f) => s + f.sortides, 0)));
+const totalEntrades = computed(() => round2(fluxosDelRang.value.reduce((s, f) => s + f.entrades, 0)));
+const totalSortides = computed(() => round2(fluxosDelRang.value.reduce((s, f) => s + f.sortides, 0)));
 const totalNet = computed(() => round2(totalEntrades.value - totalSortides.value));
 
 /**
@@ -542,7 +545,7 @@ const totalDePartida = computed(() =>
 );
 
 /** Els períodes que van del punt de partida fins al final: els que el mercat ha de cobrir. */
-const fluxosDelTram = computed(() => (tallAnterior.value === null ? fluxos.value.slice(1) : fluxos.value));
+const fluxosDelTram = computed(() => (tallAnterior.value === null ? fluxosDelRang.value.slice(1) : fluxosDelRang.value));
 
 const netDelTram = computed(() => round2(fluxosDelTram.value.reduce((s, f) => s + f.net, 0)));
 
@@ -686,18 +689,18 @@ const ENTRADES = '#15803d';
 const SORTIDES = '#b91c1c';
 
 const dadesFluxos = computed<ChartData<'bar'>>(() => ({
-    labels: fluxos.value.map(f => f.tall.etiqueta),
+    labels: fluxosDelRang.value.map(f => f.tall.etiqueta),
     datasets: [
         {
             label: 'Entrades',
-            data: fluxos.value.map(f => f.entrades),
+            data: fluxosDelRang.value.map(f => f.entrades),
             backgroundColor: ENTRADES,
             borderWidth: 0,
             maxBarThickness: 28,
         },
         {
             label: 'Sortides',
-            data: fluxos.value.map(f => f.sortides),
+            data: fluxosDelRang.value.map(f => f.sortides),
             backgroundColor: SORTIDES,
             borderWidth: 0,
             maxBarThickness: 28,
@@ -705,7 +708,7 @@ const dadesFluxos = computed<ChartData<'bar'>>(() => ({
         {
             type: 'line' as const,
             label: 'Net',
-            data: fluxos.value.map(f => f.net),
+            data: fluxosDelRang.value.map(f => f.net),
             borderColor: tinta.value,
             backgroundColor: tinta.value,
             borderWidth: 2,
@@ -723,7 +726,7 @@ const opcionsFluxos = computed<ChartOptions<'bar'>>(() => ({
     // verda, les sortides si és la vermella
     onClick: (_e, elements) => {
         const punt = elements[0];
-        const fila = punt ? fluxos.value[punt.index] : undefined;
+        const fila = punt ? fluxosDelRang.value[punt.index] : undefined;
         if (!fila) return;
 
         tallTriat.value = fila.tall.clau;
@@ -1408,7 +1411,7 @@ const obreDetall = (fila: FilaTitular) => {
                         </label>
                     </div>
 
-                    <div v-if="fluxos.length" class="px-6 py-4">
+                    <div v-if="fluxosDelRang.length" class="px-6 py-4">
                         <div class="h-64">
                             <Bar :data="dadesFluxos" :options="opcionsFluxos" />
                         </div>

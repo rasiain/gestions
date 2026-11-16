@@ -6,7 +6,7 @@ import FacturesModal from '@/Components/FacturesModal.vue';
 import RevisioIpcModal from '@/Components/RevisioIpcModal.vue';
 import CategoriaCell from '@/Components/CategoriaCell.vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
-import { ref, computed, watch, Transition } from 'vue';
+import { ref, computed, watch } from 'vue';
 
 /** Un tram d'administració de l'immoble: la gestoria del lloguer entre dues dates. */
 interface Administracio {
@@ -223,7 +223,15 @@ function mostrarLlibreIvaMsg(text: string, ok: boolean, obrir?: string, numbers?
     llibreIvaMsgTimer = setTimeout(() => { llibreIvaMsg.value = null; }, obrir ? 15000 : 4000);
 }
 
-async function desarFitxer(postUrl: string, force = false): Promise<any> {
+/** El que torna el servidor en desar un fitxer exportat: si ja hi era, no el sobreescriu sense permís. */
+interface FitxerDesat {
+    exists?: boolean;
+    saved?: boolean;
+    filename?: string;
+    numbers_url?: string;
+}
+
+async function desarFitxer(postUrl: string, force = false): Promise<FitxerDesat | null> {
     return fetch(force ? postUrl + '&force=1' : postUrl, {
         method: 'POST',
         headers: { 'X-XSRF-TOKEN': xsrfToken() },

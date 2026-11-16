@@ -22,7 +22,7 @@ interface Props {
     proveidors: Proveidor[];
 }
 
-const props = defineProps<Props>();
+defineProps<Props>();
 
 const showModal = ref(false);
 const isEditing = ref(false);

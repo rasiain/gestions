@@ -19,7 +19,7 @@ interface Props {
     tipusDespesaOpcions: TipusDespesa[];
 }
 
-const props = defineProps<Props>();
+defineProps<Props>();
 
 const updateMapping = (categoria: string, tipusId: string) => {
     router.put(route('impostos.tipus-despesa-fiscal.update'), {

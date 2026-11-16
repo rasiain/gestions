@@ -475,7 +475,7 @@ function obreEdicio(vehicle: Vehicle) {
 function desa() {
     const opcions = { onSuccess: () => (showModal.value = false) };
     // El motiu només es veu amb data de baixa: si se n'ha esborrat la data, no s'ha d'enviar
-    const dades = (d: Record<string, any>) =>
+    const dades = (d: Record<string, unknown>) =>
         ({ ...d, motiu_baixa: d.data_baixa ? d.motiu_baixa : null });
 
     if (editant.value) {

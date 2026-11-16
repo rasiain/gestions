@@ -5,6 +5,7 @@ import Modal from '@/Components/Modal.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref, watch, nextTick, onMounted, onUnmounted, computed } from 'vue';
 import { Chart, registerables } from 'chart.js';
+import type { ChartConfiguration, TooltipItem } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 import zoomPlugin from 'chartjs-plugin-zoom';
 Chart.register(...registerables, zoomPlugin);
@@ -129,8 +130,6 @@ const fonsList = ref<Fons[]>(JSON.parse(JSON.stringify(props.fons)));
 watch(() => props.fons, v => { fonsList.value = JSON.parse(JSON.stringify(v)); }, { deep: true });
 
 const getFons = (id: number) => fonsList.value.find(f => f.id === id)!;
-const getContracte = (fonsId: number, contracteId: number) =>
-    getFons(fonsId).contractes.find(c => c.id === contracteId)!;
 
 // --- Expand ---
 const expandedFons = ref<Set<number>>(new Set());
@@ -140,14 +139,16 @@ const contracteTab = ref<Record<number, 'aportacions' | 'despeses'>>({});
 
 const toggleFons = (id: number) => {
     const s = new Set(expandedFons.value);
-    s.has(id) ? s.delete(id) : s.add(id);
+    if (s.has(id)) s.delete(id);
+    else s.add(id);
     if (!fonsTab.value[id]) fonsTab.value[id] = 'contractes';
     expandedFons.value = s;
 };
 
 const toggleContracte = (id: number) => {
     const s = new Set(expandedContractes.value);
-    s.has(id) ? s.delete(id) : s.add(id);
+    if (s.has(id)) s.delete(id);
+    else s.add(id);
     if (!contracteTab.value[id]) contracteTab.value[id] = 'aportacions';
     expandedContractes.value = s;
 };
@@ -198,8 +199,8 @@ const selectedPersonaId = ref<number | null>(null);
 const rangeMode = ref<'individual' | 'global'>('individual');
 const chartValorRef = ref<HTMLCanvasElement | null>(null);
 const chartRendRefs: Record<number, HTMLCanvasElement | null> = {};
-let chartValorInstance: Chart | null = null;
-const chartRendInstances: Record<number, Chart> = {};
+let chartValorInstance: Chart<'line'> | null = null;
+const chartRendInstances: Record<number, Chart<'line'>> = {};
 
 // Zoom als gràfics d'evolució: arrossega per ampliar una zona (eix temporal) o roda del ratolí.
 const valorZoomActiu = ref(false);
@@ -212,8 +213,8 @@ const makeZoom = (onZoomed?: () => void) => ({
     },
     pan: { enabled: false },
 });
-const resetValorZoom = () => { (chartValorInstance as any)?.resetZoom(); valorZoomActiu.value = false; };
-const resetRendZoom = (id: number) => { (chartRendInstances[id] as any)?.resetZoom(); };
+const resetValorZoom = () => { chartValorInstance?.resetZoom(); valorZoomActiu.value = false; };
+const resetRendZoom = (id: number) => { chartRendInstances[id]?.resetZoom(); };
 
 const CHART_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444'];
 const APORT_COLORS  = ['#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#84cc16', '#f97316', '#ec4899'];
@@ -396,7 +397,7 @@ function buildCharts() {
                             data: seriesTotal.map(s => s.invertit),
                             borderColor: '#9ca3af', backgroundColor: 'rgba(156,163,175,0.2)',
                             fill: true, tension: 0.3, pointRadius: 0, borderWidth: 1.5, order: 2,
-                        } as any,
+                        },
                         {
                             label: 'Valor cartera',
                             data: seriesTotal.map(s => s.valor),
@@ -405,7 +406,7 @@ function buildCharts() {
                             pointRadius: allDates.map(d => aportacioDates.has(d) ? 5 : 0),
                             pointBackgroundColor: allDates.map(d => aportacioDates.has(d) ? '#f59e0b' : '#10b981'),
                             pointBorderColor:     allDates.map(d => aportacioDates.has(d) ? '#f59e0b' : '#10b981'),
-                        } as any,
+                        },
                     ],
                 },
                 options: {
@@ -415,14 +416,14 @@ function buildCharts() {
                         zoom: makeZoom(() => { valorZoomActiu.value = true; }),
                         legend: { position: 'top' },
                         tooltip: { callbacks: {
-                            title: (items: any) => {
+                            title: (items: TooltipItem<'line'>[]) => {
                                 const d = allDates[items[0]?.dataIndex ?? -1];
                                 if (!d) return '';
                                 const [y, m, day] = d.split('-');
                                 return `${day}/${m}/${y}`;
                             },
-                            label: (ctx: any) => `${ctx.dataset.label}: ${formatEur(ctx.parsed.y)}`,
-                            afterBody: (items: any) => {
+                            label: (ctx: TooltipItem<'line'>) => `${ctx.dataset.label}: ${formatEur(ctx.parsed.y)}`,
+                            afterBody: (items: TooltipItem<'line'>[]) => {
                                 const idx = items[0]?.dataIndex ?? -1;
                                 const lines: string[] = [];
                                 const va = variacioGlobal[idx];
@@ -440,10 +441,10 @@ function buildCharts() {
                             time: { tooltipFormat: 'dd/MM/yyyy', displayFormats: { day: 'dd/MM/yy', month: 'MM/yy', year: 'yyyy' } },
                             ticks: { maxTicksLimit: 14, maxRotation: 0 },
                         },
-                        y: { ticks: { callback: (v: any) => typeof v === 'number' ? formatEur(v) : String(v) } },
+                        y: { ticks: { callback: (v: number | string) => typeof v === 'number' ? formatEur(v) : String(v) } },
                     },
                 },
-            } as any);
+            } as ChartConfiguration<'line'>);
         }
 
         // === Gràfics 2: un per fons ===
@@ -473,13 +474,13 @@ function buildCharts() {
                             backgroundColor: 'transparent',
                             tension: 0.3, pointRadius: 0, borderWidth: 1.5,
                             borderDash: [4, 3], spanGaps: false,
-                        } as any)),
+                        })),
                         {
                             label: 'Total',
                             data: fs.totalData,
                             borderColor: CHART_COLORS[fs.fonsIndex % CHART_COLORS.length], backgroundColor: 'transparent',
                             tension: 0.3, pointRadius: 0, borderWidth: 2.5, spanGaps: false,
-                        } as any,
+                        },
                     ],
                 },
                 options: {
@@ -489,14 +490,14 @@ function buildCharts() {
                         zoom: makeZoom(),
                         legend: { position: 'top', labels: { boxWidth: 16, padding: 10 } },
                         tooltip: { callbacks: {
-                            title: (items: any) => {
+                            title: (items: TooltipItem<'line'>[]) => {
                                 const d = fs.dates[items[0]?.dataIndex ?? -1];
                                 if (!d) return '';
                                 const [y, m, day] = d.split('-');
                                 return `${day}/${m}/${y}`;
                             },
-                            label: (ctx: any) => `${ctx.dataset.label}: ${ctx.parsed.y !== null ? formatPct(ctx.parsed.y) : '—'}`,
-                            afterBody: (items: any) => {
+                            label: (ctx: TooltipItem<'line'>) => `${ctx.dataset.label}: ${ctx.parsed.y !== null ? formatPct(ctx.parsed.y) : '—'}`,
+                            afterBody: (items: TooltipItem<'line'>[]) => {
                                 const va = variacioFons[items[0]?.dataIndex ?? -1];
                                 return va != null ? [`Variació vs. anterior: ${va >= 0 ? '+' : ''}${formatPct(va)}`] : [];
                             },
@@ -509,10 +510,10 @@ function buildCharts() {
                             time: { tooltipFormat: 'dd/MM/yyyy', displayFormats: { day: 'dd/MM/yy', month: 'MM/yy', year: 'yyyy' } },
                             ticks: { maxTicksLimit: 12, maxRotation: 0 },
                         },
-                        y: { ticks: { callback: (v: any) => typeof v === 'number' ? formatPct(v) : String(v) } },
+                        y: { ticks: { callback: (v: number | string) => typeof v === 'number' ? formatPct(v) : String(v) } },
                     },
                 },
-            } as any);
+            } as ChartConfiguration<'line'>);
         }
     });
 }
