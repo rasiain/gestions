@@ -365,7 +365,7 @@ class SortidaBiciController extends Controller
             'anterior' => $anterior,
             'seguent'  => $seguent,
             // Per corregir el material: les bicis i la resta de peces, amb les dates de cada una
-            'bicis'    => Vehicle::where('tipus', 'bici')->orderBy('nom')->get(['id', 'nom', 'data_alta', 'data_baixa'])
+            'bicis'    => Vehicle::bicisPerUs()->get(['id', 'nom', 'data_alta', 'data_baixa'])
                 ->map(fn (Vehicle $v) => ['id' => $v->id, 'nom' => $v->nom, 'actiu' => $v->esActiu()]),
             'peces'    => MaterialEsportiu::where('tipus', '!=', 'bici')->orderBy('tipus')->orderBy('nom')->get()
                 ->map(fn (MaterialEsportiu $m) => [

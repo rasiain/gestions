@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -75,6 +76,19 @@ class Vehicle extends Model
     }
 
     /** Un vehicle donat de baixa continua al catàleg, però ja no és nostre. */
+    /**
+     * Les bicis per ús: la de la darrera sortida primer, i les que no en tenen cap al final, per nom.
+     * L'ordre alfabètic posava a dalt bicis que fa anys que no surten. El fan servir la llista de
+     * bicis i tots els desplegables on se'n tria una.
+     */
+    public function scopeBicisPerUs(Builder $query): Builder
+    {
+        return $query->where('tipus', 'bici')
+            ->orderByRaw('(select max(data_local) from g_sortides_bici where g_sortides_bici.vehicle_id = g_vehicles.id) is null')
+            ->orderByDesc(SortidaBici::selectRaw('max(data_local)')->whereColumn('vehicle_id', 'g_vehicles.id'))
+            ->orderBy('nom');
+    }
+
     public function esActiu(): bool
     {
         return $this->data_baixa === null || $this->data_baixa->isFuture();

@@ -94,4 +94,30 @@ class DespesesBiciTest extends TestCase
         $this->getJson($url(['data' => '2026-06-01', 'q' => 'botiga', 'despesa' => $despesa->id]))->assertJsonCount(1);
         $this->getJson($url(['data' => '2026-06-01', 'despesa' => $despesa->id]))->assertJsonCount(0);
     }
+
+    public function test_la_llista_de_bicis_i_els_desplegables_van_per_la_darrera_sortida(): void
+    {
+        $antiga = Vehicle::create(['nom' => 'Antiga', 'tipus' => 'bici']);
+        $sense = Vehicle::create(['nom' => 'Aaa sense sortides', 'tipus' => 'bici']);
+        foreach ([[$antiga, '2019-05-01'], [$this->bici, '2026-11-15']] as [$bici, $data]) {
+            \App\Models\SortidaBici::create([
+                'vehicle_id' => $bici->id, 'origen' => 'garmin', 'id_extern' => uniqid(), 'tipus_activitat' => 'cycling',
+                'inici' => "{$data} 08:00:00", 'data_local' => $data, 'distancia_m' => 30000,
+            ]);
+        }
+
+        $this->get(route('bicis.index'))->assertInertia(fn ($p) => $p
+            ->where('vehicles.0.id', $this->bici->id)
+            ->where('vehicles.1.id', $antiga->id)
+            ->where('vehicles.2.id', $sense->id));
+
+        // I els desplegables on es tria una bici, en el mateix ordre
+        $this->get(route('bicis.importa.index'))->assertInertia(fn ($p) => $p
+            ->where('bicis.0.id', $this->bici->id)
+            ->where('bicis.1.id', $antiga->id)
+            ->where('bicis.2.id', $sense->id));
+        $this->get(route('bicis.material.index'))->assertInertia(fn ($p) => $p
+            ->where('bicis.0.id', $this->bici->id)
+            ->where('bicis.2.id', $sense->id));
+    }
 }

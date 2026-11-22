@@ -49,14 +49,13 @@ class VehicleController extends Controller
             ->get()
             ->keyBy('vehicle_id');
 
-        $vehicles = Vehicle::whereIn('tipus', $tipus)
+        // Les bicis, per ús (Vehicle::bicisPerUs()); els vehicles a motor, per l'ordre desat i el nom
+        $vehicles = ($tipus === ['bici'] ? Vehicle::bicisPerUs() : Vehicle::whereIn('tipus', $tipus)->orderBy('ordre')->orderBy('nom'))
             ->with([
                 'repostatges' => fn ($q) => $q->orderBy('data')->orderBy('id'),
                 'despeses'    => fn ($q) => $q->orderByDesc('data')->orderByDesc('id')
                     ->with(['moviment.compteCorrent:id,nom', 'moviment.concepte', 'material:id,nom']),
             ])
-            ->orderBy('ordre')
-            ->orderBy('nom')
             ->get()
             ->map(fn (Vehicle $vehicle) => [
                 'id'             => $vehicle->id,

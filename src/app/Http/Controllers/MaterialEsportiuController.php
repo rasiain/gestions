@@ -43,7 +43,7 @@ class MaterialEsportiuController extends Controller
 
         return Inertia::render('Bicis/Material', [
             'peces' => $peces,
-            'bicis' => Vehicle::where('tipus', 'bici')->orderBy('nom')->get(['id', 'nom']),
+            'bicis' => Vehicle::bicisPerUs()->get(['id', 'nom']),
             'tipus' => array_values(array_diff(MaterialEsportiu::TIPUS, ['bici'])),
         ]);
     }

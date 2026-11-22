@@ -69,7 +69,7 @@ class RutaController extends Controller
                 'bicis'       => array_map('intval', explode(',', $grups[$r->id]->bicis)),
             ])->values(),
             'tracats' => $tracats,
-            'bicis'   => Vehicle::where('tipus', 'bici')->orderBy('nom')->get(['id', 'nom', 'modalitat']),
+            'bicis'   => Vehicle::bicisPerUs()->get(['id', 'nom', 'modalitat']),
             'altitud' => $metode,
         ]);
     }

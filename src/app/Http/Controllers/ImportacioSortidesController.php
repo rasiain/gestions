@@ -23,7 +23,7 @@ class ImportacioSortidesController extends Controller
         return Inertia::render('Bicis/Importa', [
             // Les activitats de Garmin que hi ha a Baixades (null: no hi ha carpeta configurada)
             'baixades'        => $servei->fitxersBaixades(),
-            'bicis'           => Vehicle::where('tipus', 'bici')->orderBy('nom')->get()
+            'bicis'           => Vehicle::bicisPerUs()->get()
                 ->map(fn (Vehicle $v) => ['id' => $v->id, 'nom' => $v->nom, 'actiu' => $v->esActiu()]),
             'senseRecorregut' => SortidaBici::with('vehicle:id,nom')
                 ->where('punts', 0)
