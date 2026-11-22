@@ -54,7 +54,7 @@ const formatCurrency = (value: string | number | null): string => {
 const fetchRevisions = async () => {
     loading.value = true;
     try {
-        const res = await fetch(`/lloguers/${props.lloguer.id}/revisions-ipc`, {
+        const res = await fetch(route('lloguers.revisions-ipc.index', props.lloguer.id), {
             headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
         const json = await res.json();
@@ -68,7 +68,7 @@ const submitRevisio = async () => {
     saving.value = true;
     errors.value = {};
     try {
-        const res = await fetch(`/lloguers/${props.lloguer.id}/revisions-ipc`, {
+        const res = await fetch(route('lloguers.revisions-ipc.store', props.lloguer.id), {
             method: 'POST',
             headers: {
                 'Accept': 'application/json',

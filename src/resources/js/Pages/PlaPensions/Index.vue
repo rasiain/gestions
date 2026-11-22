@@ -7,6 +7,7 @@ import { Chart, registerables } from 'chart.js';
 import type { ChartConfiguration, TooltipItem } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 import zoomPlugin from 'chartjs-plugin-zoom';
+import { formatEur, formatPct } from '@/format';
 Chart.register(...registerables, zoomPlugin);
 
 interface ComptePlaPensions {
@@ -132,8 +133,6 @@ const toggleContracte = (id: number) => {
 };
 
 // --- Format ---
-const formatEur = (v: number | null) =>
-    v === null ? '—' : new Intl.NumberFormat('ca-ES', { style: 'currency', currency: 'EUR' }).format(v);
 
 const formatNum = (v: number, dec = 4) =>
     new Intl.NumberFormat('ca-ES', { minimumFractionDigits: dec, maximumFractionDigits: dec }).format(v);
@@ -143,8 +142,6 @@ const classeRend = (v: number | null) =>
     : v >= 0 ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
     : 'text-red-600 dark:text-red-400 font-semibold';
 
-const formatPct = (v: number | null) =>
-    v === null ? '—' : new Intl.NumberFormat('ca-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + ' %';
 
 
 // === GRÀFIQUES ===
@@ -504,8 +501,8 @@ const submitContracte = async () => {
     contracteSaving.value = true; contracteError.value = null;
     try {
         const url = isEditingContracte.value
-            ? `/plans-pensions/contractes/${editingContracteId.value}`
-            : '/plans-pensions/contractes';
+            ? route('plans-pensions.contractes.update', editingContracteId.value!)
+            : route('plans-pensions.contractes.store');
         const payload = { ...contracteForm.value, compte_nou: compteNou.value,
             compte_corrent_id: contracteForm.value.compte_corrent_id ? parseInt(contracteForm.value.compte_corrent_id) : null,
             data_fi: contracteForm.value.data_fi || null };
@@ -534,7 +531,7 @@ const submitContracte = async () => {
 
 const deleteContracte = async (c: Contracte) => {
     if (!confirm('Estàs segur que vols eliminar aquest contracte?')) return;
-    await fetch(`/plans-pensions/contractes/${c.id}`, { method: 'DELETE', headers: { 'X-XSRF-TOKEN': xsrfToken() } });
+    await fetch(route('plans-pensions.contractes.destroy', c.id), { method: 'DELETE', headers: { 'X-XSRF-TOKEN': xsrfToken() } });
     const pla = getPla(c.pla_id);
     pla.contractes = pla.contractes.filter(x => x.id !== c.id);
     recalcPla(pla);
@@ -613,7 +610,7 @@ const closeValorModal = () => { showValorModal.value = false; };
 const submitValor = async () => {
     valorSaving.value = true; valorError.value = null;
     try {
-        const url = isEditingValor.value ? `/plans-pensions/valors/${editingValorId.value}` : '/plans-pensions/valors';
+        const url = isEditingValor.value ? route('plans-pensions.valors.update', editingValorId.value!) : route('plans-pensions.valors.store');
         const res = await fetch(url, {
             method: isEditingValor.value ? 'PUT' : 'POST',
             headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
@@ -636,7 +633,7 @@ const submitValor = async () => {
 
 const deleteValor = async (v: ValorParticipacio) => {
     if (!confirm('Estàs segur que vols eliminar aquest valor?')) return;
-    await fetch(`/plans-pensions/valors/${v.id}`, { method: 'DELETE', headers: { 'X-XSRF-TOKEN': xsrfToken() } });
+    await fetch(route('plans-pensions.valors.destroy', v.id), { method: 'DELETE', headers: { 'X-XSRF-TOKEN': xsrfToken() } });
     const pla = getPla(v.pla_id);
     pla.valors = pla.valors.filter(x => x.id !== v.id);
     recalcPla(pla);
@@ -711,7 +708,7 @@ const submitImportValors = async () => {
     }
     importSaving.value = true; importError.value = null;
     try {
-        const res = await fetch('/plans-pensions/valors/import', {
+        const res = await fetch(route('plans-pensions.valors.import'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify({
@@ -774,7 +771,7 @@ const closeSnapshot = () => { showSnapshotModal.value = false; };
 const parseSnapshot = async () => {
     snapshotParsing.value = true; snapshotError.value = null;
     try {
-        const res = await fetch('/plans-pensions/valors/snapshot/parse', {
+        const res = await fetch(route('plans-pensions.valors.snapshot.parse'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify({ text: snapshotText.value, data: snapshotData.value }),
@@ -800,7 +797,7 @@ const submitSnapshot = async () => {
     if (!rows.length) return;
     snapshotSaving.value = true; snapshotError.value = null;
     try {
-        const res = await fetch('/plans-pensions/valors/snapshot', {
+        const res = await fetch(route('plans-pensions.valors.snapshot.store'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify({
@@ -851,7 +848,7 @@ const closeAportacioModal = () => { showAportacioModal.value = false; };
 const submitAportacio = async () => {
     aportacioSaving.value = true; aportacioError.value = null;
     try {
-        const url = isEditingAportacio.value ? `/plans-pensions/aportacions/${editingAportacioId.value}` : '/plans-pensions/aportacions';
+        const url = isEditingAportacio.value ? route('plans-pensions.aportacions.update', editingAportacioId.value!) : route('plans-pensions.aportacions.store');
         const res = await fetch(url, {
             method: isEditingAportacio.value ? 'PUT' : 'POST',
             headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
@@ -879,7 +876,7 @@ const submitAportacio = async () => {
 
 const deleteAportacio = async (a: Aportacio, plaId: number) => {
     if (!confirm('Estàs segur que vols eliminar aquesta aportació?')) return;
-    await fetch(`/plans-pensions/aportacions/${a.id}`, { method: 'DELETE', headers: { 'X-XSRF-TOKEN': xsrfToken() } });
+    await fetch(route('plans-pensions.aportacions.destroy', a.id), { method: 'DELETE', headers: { 'X-XSRF-TOKEN': xsrfToken() } });
     const pla = getPla(plaId);
     const contracte = pla.contractes.find(c => c.id === a.contracte_id)!;
     contracte.aportacions = contracte.aportacions.filter(x => x.id !== a.id);
@@ -912,7 +909,7 @@ const closeDespesaModal = () => { showDespesaModal.value = false; };
 const submitDespesa = async () => {
     despesaSaving.value = true; despesaError.value = null;
     try {
-        const url = isEditingDespesa.value ? `/plans-pensions/despeses/${editingDespesaId.value}` : '/plans-pensions/despeses';
+        const url = isEditingDespesa.value ? route('plans-pensions.despeses.update', editingDespesaId.value!) : route('plans-pensions.despeses.store');
         const res = await fetch(url, {
             method: isEditingDespesa.value ? 'PUT' : 'POST',
             headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
@@ -940,7 +937,7 @@ const submitDespesa = async () => {
 
 const deleteDespesa = async (d: DespesaPla, plaId: number) => {
     if (!confirm('Estàs segur que vols eliminar aquesta despesa?')) return;
-    await fetch(`/plans-pensions/despeses/${d.id}`, { method: 'DELETE', headers: { 'X-XSRF-TOKEN': xsrfToken() } });
+    await fetch(route('plans-pensions.despeses.destroy', d.id), { method: 'DELETE', headers: { 'X-XSRF-TOKEN': xsrfToken() } });
     const pla = getPla(plaId);
     const contracte = pla.contractes.find(c => c.id === d.contracte_id)!;
     contracte.despeses = contracte.despeses.filter(x => x.id !== d.id);

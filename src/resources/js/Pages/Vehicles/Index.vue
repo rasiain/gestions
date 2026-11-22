@@ -2,7 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { perAlServidor } from '@/formularis';
 import { Line } from 'vue-chartjs';
 import { Chart as ChartJS, registerables } from 'chart.js';
@@ -11,6 +11,8 @@ import 'chartjs-adapter-date-fns';
 import FitxaBici from '@/Components/Bicis/FitxaBici.vue';
 import DespesesVehicle from '@/Components/Vehicles/DespesesVehicle.vue';
 import type { Despesa, Peca } from '@/Components/Vehicles/DespesesVehicle.vue';
+import { formatEur } from '@/format';
+import { SERIE_AMBRE, SERIE_BLAU, useColorsGrafica } from '@/grafiques';
 
 ChartJS.register(...registerables);
 
@@ -237,38 +239,11 @@ function eliminaRepostatge(r: Repostatge) {
     router.delete(route('vehicles.repostatges.destroy', r.id), { preserveScroll: true });
 }
 
-function formatEur(v: number): string {
-    return new Intl.NumberFormat('ca-ES', { style: 'currency', currency: 'EUR' }).format(v);
-}
 
 // ---- Gràfiques ----
 
-/**
- * Els dos colors de sèrie. Passen les sis comprovacions de paleta (banda de lluminositat,
- * croma, separació per a daltonisme i contrast) tant sobre fons clar com fosc, i per això
- * són els mateixos a les dues aparences: només canvien els textos i la quadrícula.
- */
-const SERIE_BLAU  = '#0284c7';
-const SERIE_AMBRE = '#d97706';
+const { tinta, quadricula } = useColorsGrafica();
 
-/** Tailwind va per `prefers-color-scheme`: aquí també, que chart.js pinta en canvas. */
-const fosc = ref(false);
-let consultaFosc: MediaQueryList | null = null;
-
-function anotaFosc(e: MediaQueryListEvent | MediaQueryList) {
-    fosc.value = e.matches;
-}
-
-onMounted(() => {
-    consultaFosc = window.matchMedia('(prefers-color-scheme: dark)');
-    anotaFosc(consultaFosc);
-    consultaFosc.addEventListener('change', anotaFosc);
-});
-
-onUnmounted(() => consultaFosc?.removeEventListener('change', anotaFosc));
-
-const tinta      = computed(() => (fosc.value ? '#9ca3af' : '#6b7280'));
-const quadricula = computed(() => (fosc.value ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'));
 
 /** Migdiada local, no UTC: així la data no es desplaça un dia segons el fus. */
 function msDe(data: string): number {

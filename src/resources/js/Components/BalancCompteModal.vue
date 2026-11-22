@@ -15,6 +15,8 @@ import {
     Legend,
 } from 'chart.js';
 import type { TooltipItem } from 'chart.js';
+import { formatEur } from '@/format';
+import { xsrfToken } from '@/xsrf';
 
 ChartJS.register(
     CategoryScale,
@@ -75,11 +77,6 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const dades = ref<BalancData | null>(null);
 const mostrarCategories = ref(false);
-
-const xsrfToken = () => {
-    const m = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
-    return m ? decodeURIComponent(m[1]) : '';
-};
 
 /**
  * Un <input type="date"> emet un valor a cada tecla: mentre s'escriu l'any 2023
@@ -154,8 +151,6 @@ watch(vista, () => carregarDades());
 watch(dataInici, carregarAmbPausa);
 watch(dataFi, carregarAmbPausa);
 
-const formatEur = (val: number): string =>
-    new Intl.NumberFormat('ca-ES', { style: 'currency', currency: 'EUR' }).format(val);
 
 const chartData = computed(() => {
     if (!dades.value) return { labels: [], datasets: [] };

@@ -4,6 +4,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
+import { formatEur } from '@/format';
 
 interface FacturaDetall {
     data: string;
@@ -78,12 +79,6 @@ const props = defineProps<Props>();
 
 const trimestres = [1, 2, 3, 4];
 
-function formatEur(value: number): string {
-    return new Intl.NumberFormat('ca-ES', {
-        style: 'currency',
-        currency: 'EUR',
-    }).format(value);
-}
 
 function canviarAny(event: Event) {
     const target = event.target as HTMLSelectElement;
@@ -150,8 +145,8 @@ function tancaArrendador() {
 async function exportarLlibre(lloguer: LloguerIva) {
 
     // Sempre fem POST: el servidor decideix si desa al disc o si cal fer descàrrega
-    const postUrl = `/lloguers/${lloguer.id}/desar-llibre-iva?any=${props.any}`;
-    const downloadUrl = `/lloguers/${lloguer.id}/exportar-llibre-iva?any=${props.any}`;
+    const postUrl = route('lloguers.desar-llibre-iva', lloguer.id) + `?any=${props.any}`;
+    const downloadUrl = route('lloguers.exportar-llibre-iva', lloguer.id) + `?any=${props.any}`;
 
     const doPost = async (force = false) => {
         const url = force ? postUrl + '&force=1' : postUrl;

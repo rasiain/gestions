@@ -4,6 +4,7 @@ import Modal from '@/Components/Modal.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import { num, perAlServidor, queFalta } from '@/formularis';
+import { formatData, formatEur } from '@/format';
 
 interface Titol {
     id: number;
@@ -75,13 +76,7 @@ interface Props {
 
 const props = defineProps<Props>();
 
-function formatEur(value: number): string {
-    return new Intl.NumberFormat('ca-ES', { style: 'currency', currency: 'EUR' }).format(value);
-}
 
-function formatData(iso: string | null): string {
-    return iso ? new Intl.DateTimeFormat('ca-ES', { dateStyle: 'medium' }).format(new Date(iso)) : '—';
-}
 
 const totalNominal = computed(() => props.contractes.reduce((s, c) => s + c.nominal, 0));
 const totalValor = computed(() => props.contractes.reduce((s, c) => s + c.valor, 0));

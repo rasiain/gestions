@@ -4,6 +4,7 @@ import Modal from '@/Components/Modal.vue';
 import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import { formatEur } from '@/format';
 
 interface MovimentDetall {
     data: string;
@@ -107,9 +108,6 @@ interface Props {
 
 const props = defineProps<Props>();
 
-function formatEur(value: number): string {
-    return new Intl.NumberFormat('ca-ES', { style: 'currency', currency: 'EUR' }).format(value);
-}
 
 function canviarAny(event: Event) {
     const target = event.target as HTMLSelectElement;

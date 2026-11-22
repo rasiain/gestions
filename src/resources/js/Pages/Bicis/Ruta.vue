@@ -15,6 +15,8 @@ import type { ChartData, ChartOptions } from 'chart.js';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { SERIE_AMBRE, SERIE_BLAU, TRAMS_PENDENT, decodifica, pendents, rodaEnClicar, trossosPerPendent } from '@/bicis/recorregut';
+import { durada, nombre } from '@/format';
+import { useColorsGrafica } from '@/grafiques';
 
 ChartJS.register(...registerables);
 
@@ -42,12 +44,6 @@ const props = defineProps<{
 
 
 
-const nombre = (v: number | null | undefined, d = 0) =>
-    v === null || v === undefined ? '—' : v.toLocaleString('ca-ES', { minimumFractionDigits: d, maximumFractionDigits: d });
-function durada(s: number | null): string {
-    if (s === null) return '—';
-    return `${Math.floor(s / 3600)}:${String(Math.round((s % 3600) / 60)).padStart(2, '0')}`;
-}
 
 const canonic = computed(() => props.membres.find((m) => m.canonica)!);
 
@@ -145,17 +141,7 @@ onMounted(async () => {
 onUnmounted(() => mapa?.remove());
 
 // ---- Perfil d'altitud del canònic ----
-const fosc = ref(false);
-let consultaFosc: MediaQueryList | null = null;
-const anotaFosc = (e: MediaQueryListEvent | MediaQueryList) => (fosc.value = e.matches);
-onMounted(() => {
-    consultaFosc = window.matchMedia('(prefers-color-scheme: dark)');
-    anotaFosc(consultaFosc);
-    consultaFosc.addEventListener('change', anotaFosc);
-});
-onUnmounted(() => consultaFosc?.removeEventListener('change', anotaFosc));
-const tinta = computed(() => (fosc.value ? '#9ca3af' : '#6b7280'));
-const quadricula = computed(() => (fosc.value ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'));
+const { tinta, quadricula } = useColorsGrafica();
 
 const dadesPerfil = computed<ChartData<'line'>>(() => ({
     datasets: [{

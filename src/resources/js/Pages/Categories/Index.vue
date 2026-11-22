@@ -4,6 +4,7 @@ import CategoryTreeNode from '@/Components/CategoryTreeNode.vue';
 import CategoryTreeSelect from '@/Components/CategoryTreeSelect.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref, computed, watch } from 'vue';
+import { xsrfToken } from '@/xsrf';
 
 interface CompteCorrent {
     id: number;
@@ -131,11 +132,10 @@ const calcularTotals = async () => {
     }
 
     try {
-        const csrf = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
         const res = await fetch(route('categories.totals', totalsCategoria.value.id) + `?data_inici=${dataInici}&data_fi=${dataFi}`, {
             headers: {
                 'Accept': 'application/json',
-                'X-XSRF-TOKEN': csrf ? decodeURIComponent(csrf[1]) : '',
+                'X-XSRF-TOKEN': xsrfToken(),
             },
         });
         totalsResult.value = await res.json();
@@ -168,11 +168,6 @@ const movimentsTotal       = ref(0);
 const movimentsPage        = ref(1);
 const movimentsLastPage    = ref(1);
 const movimentsPerPage     = ref(25);
-
-const xsrfToken = () => {
-    const m = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
-    return m ? decodeURIComponent(m[1]) : '';
-};
 
 const obreMoviments = (categoria: Categoria) => {
     const flat = allCategories.value.find(c => c.id === categoria.id);

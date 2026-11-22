@@ -10,12 +10,14 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import Info from '@/Components/Info.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { num, perAlServidor } from '@/formularis';
 import { Line } from 'vue-chartjs';
 import { Chart as ChartJS, registerables } from 'chart.js';
 import type { Chart, ChartData, ChartOptions, Plugin, TooltipItem } from 'chart.js';
 import 'chartjs-adapter-date-fns';
+import { formatData, nombre } from '@/format';
+import { SERIE_BLAU, useColorsGrafica } from '@/grafiques';
 
 ChartJS.register(...registerables);
 
@@ -53,9 +55,6 @@ const props = defineProps<{
     avui: { pes: Vigent | null; greix: Vigent | null; fc_repos: Vigent | null; fc_maxima: FcDeduida | null };
 }>();
 
-const nombre = (v: number, decimals = 0) =>
-    v.toLocaleString('ca-ES', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-const formatData = (iso: string) => new Intl.DateTimeFormat('ca-ES', { dateStyle: 'medium' }).format(new Date(iso));
 const ORIGEN_FC: Record<FcDeduida['origen'], string> = {
     registre: 'apuntada',
     sortides: 'de les sortides',
@@ -126,18 +125,7 @@ function elimina(r: Registre) {
 }
 
 // ---- Gràfiques ----
-const fosc = ref(false);
-let consultaFosc: MediaQueryList | null = null;
-const anotaFosc = (e: MediaQueryListEvent | MediaQueryList) => (fosc.value = e.matches);
-onMounted(() => {
-    consultaFosc = window.matchMedia('(prefers-color-scheme: dark)');
-    anotaFosc(consultaFosc);
-    consultaFosc.addEventListener('change', anotaFosc);
-});
-onUnmounted(() => consultaFosc?.removeEventListener('change', anotaFosc));
-const tinta = computed(() => (fosc.value ? '#9ca3af' : '#6b7280'));
-const quadricula = computed(() => (fosc.value ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'));
-const SERIE = '#0284c7';
+const { fosc, tinta, quadricula } = useColorsGrafica();
 
 const cronologics = computed(() => [...props.registres].reverse());
 
@@ -146,8 +134,8 @@ const serie = (camp: 'pes' | 'greix' | 'fc_repos', etiqueta: string): ChartData<
     datasets: [{
         label: etiqueta,
         data: cronologics.value.filter((r) => r[camp] !== null).map((r) => ({ x: new Date(r.data).getTime(), y: r[camp] as number })),
-        borderColor: SERIE,
-        backgroundColor: SERIE,
+        borderColor: SERIE_BLAU,
+        backgroundColor: SERIE_BLAU,
         borderWidth: 2,
         pointRadius: 2,
         pointHoverRadius: 5,

@@ -7,6 +7,7 @@
 import { computed, ref } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import { num, perAlServidor, queFalta } from '@/formularis';
+import { formatEur } from '@/format';
 
 export interface MovimentDespesa {
     id: number;
@@ -83,7 +84,6 @@ const pecesOrdenades = computed(() => {
     };
 });
 
-const euros = (v: number) => v.toLocaleString('ca-ES', { style: 'currency', currency: 'EUR' });
 
 function edita(d: Despesa) {
     editant.value = d.id;
@@ -229,9 +229,9 @@ const camp = 'mt-0.5 block rounded-md border-gray-300 text-sm shadow-sm dark:bor
                 <span class="text-gray-500 dark:text-gray-400">Moviment del banc:</span>
                 <template v-if="movimentTriat">
                     <span class="rounded-full bg-sky-50 px-2 py-0.5 text-sky-800 dark:bg-sky-900/30 dark:text-sky-200">
-                        🔗 {{ movimentTriat.data }} · {{ euros(movimentTriat.import) }} · {{ movimentTriat.compte }}
+                        🔗 {{ movimentTriat.data }} · {{ formatEur(movimentTriat.import) }} · {{ movimentTriat.compte }}
                         <template v-if="movimentTriat.concepte"> · {{ movimentTriat.concepte }}</template>
-                        <template v-if="movimentTriat.pendent < movimentTriat.import - 0.005"> (en queden {{ euros(movimentTriat.pendent) }} sense aquesta)</template>
+                        <template v-if="movimentTriat.pendent < movimentTriat.import - 0.005"> (en queden {{ formatEur(movimentTriat.pendent) }} sense aquesta)</template>
                     </span>
                     <button type="button" @click="desvincula" class="text-gray-500 hover:text-red-600 dark:text-gray-400">Desvincula</button>
                 </template>
@@ -254,8 +254,8 @@ const camp = 'mt-0.5 block rounded-md border-gray-300 text-sm shadow-sm dark:bor
                 <button v-for="m in proposats" :key="m.id" type="button" @click="triaMoviment(m)"
                     class="flex w-full flex-wrap gap-x-3 rounded-md border border-gray-200 px-2 py-1 text-left hover:border-sky-400 hover:bg-sky-50 dark:border-gray-600 dark:hover:bg-sky-900/20">
                     <span class="tabular-nums text-gray-600 dark:text-gray-400">{{ m.data }}</span>
-                    <span class="font-medium tabular-nums text-gray-900 dark:text-gray-100">{{ euros(m.import) }}</span>
-                    <span v-if="m.pendent < m.import - 0.005" class="text-amber-700 dark:text-amber-400">en queden {{ euros(m.pendent) }}</span>
+                    <span class="font-medium tabular-nums text-gray-900 dark:text-gray-100">{{ formatEur(m.import) }}</span>
+                    <span v-if="m.pendent < m.import - 0.005" class="text-amber-700 dark:text-amber-400">en queden {{ formatEur(m.pendent) }}</span>
                     <span class="text-gray-500 dark:text-gray-400">{{ m.compte }}</span>
                     <span class="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-300">{{ m.concepte }}</span>
                 </button>
@@ -290,9 +290,9 @@ const camp = 'mt-0.5 block rounded-md border-gray-300 text-sm shadow-sm dark:bor
                             <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-300">{{ d.tipus_nom }}</span>
                         </td>
                         <td class="whitespace-nowrap py-1 pr-3 text-right font-medium tabular-nums text-gray-900 dark:text-gray-100">
-                            {{ euros(d.import) }}
+                            {{ formatEur(d.import) }}
                             <span v-if="d.moviment" class="ml-1 text-xs text-sky-500"
-                                :title="`Del moviment del ${d.moviment.data} (${euros(d.moviment.import)}, ${d.moviment.compte ?? ''}): ${d.moviment.concepte ?? ''}`">🔗</span>
+                                :title="`Del moviment del ${d.moviment.data} (${formatEur(d.moviment.import)}, ${d.moviment.compte ?? ''}): ${d.moviment.concepte ?? ''}`">🔗</span>
                         </td>
                         <td v-if="esMotor" class="whitespace-nowrap py-1 pr-3 text-right tabular-nums text-gray-500 dark:text-gray-400">
                             {{ d.km_totals !== null ? d.km_totals.toLocaleString('ca-ES') : '—' }}

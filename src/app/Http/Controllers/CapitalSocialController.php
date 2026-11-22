@@ -10,6 +10,7 @@ use App\Models\CompteCorrent;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
+use App\Support\RepartimentPerTitular;
 
 /**
  * El capital social de les cooperatives de crèdit.
@@ -167,45 +168,11 @@ class CapitalSocialController extends Controller
      */
     private function totalsPerTitular($contractes): array
     {
-        $perTitular = [];
-
-        foreach ($contractes as $contracte) {
-            $valor    = (float) $contracte['valor'];
-            $titulars = $contracte['titulars']->all() ?: [['id' => null, 'nom' => 'Sense titular']];
-            $parts    = count($titulars);
-            $repartit = 0.0;
-
-            foreach ($titulars as $i => $titular) {
-                // L'últim s'endú el residu: la suma de les parts ha de donar el valor
-                $part = $i === $parts - 1
-                    ? round($valor - $repartit, 2)
-                    : round($valor / $parts, 2);
-                $repartit += $part;
-
-                $clau = $titular['id'] ?? 'sense';
-
-                $perTitular[$clau] ??= [
-                    'id'         => $titular['id'],
-                    'nom'        => $titular['nom'],
-                    'total'      => 0.0,
-                    'contractes' => [],
-                ];
-
-                $perTitular[$clau]['total'] += $part;
-                $perTitular[$clau]['contractes'][] = [
-                    'compte'   => $contracte['nom'],
-                    'valor'    => $valor,
-                    'titulars' => $parts,
-                    'part'     => $part,
-                ];
-            }
-        }
-
-        return collect($perTitular)
-            ->map(fn (array $t) => ['total' => round($t['total'], 2)] + $t)
-            ->sortByDesc('total')
-            ->values()
-            ->all();
+        return RepartimentPerTitular::totals(collect($contractes)->map(fn ($contracte) => [
+            'valor'    => (float) $contracte['valor'],
+            'titulars' => $contracte['titulars'],
+            'detall'   => ['compte' => $contracte['nom'], 'valor' => (float) $contracte['valor']],
+        ]), 'contractes');
     }
 
     // ---- Contractes ----

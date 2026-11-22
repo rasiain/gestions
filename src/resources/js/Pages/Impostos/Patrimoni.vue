@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, router } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import { formatData, formatEur } from '@/format';
 
 interface Persona {
     id: number;
@@ -53,13 +54,7 @@ interface Props {
 
 const props = defineProps<Props>();
 
-function formatEur(value: number): string {
-    return new Intl.NumberFormat('ca-ES', { style: 'currency', currency: 'EUR' }).format(value);
-}
 
-function formatData(iso: string): string {
-    return new Intl.DateTimeFormat('ca-ES', { dateStyle: 'long' }).format(new Date(iso));
-}
 
 function recarrega(camp: 'persona_id' | 'any', valor: string) {
     router.get(route('impostos.patrimoni'), {
@@ -119,7 +114,7 @@ const capCompte = computed(() =>
                         </p>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                             El patrimoni es valora el darrer dia de l'any: els imports són els del
-                            <strong>{{ formatData(props.declaracio.data) }}</strong>, no els d'avui. L'exercici en curs no
+                            <strong>{{ formatData(props.declaracio.data, 'long') }}</strong>, no els d'avui. L'exercici en curs no
                             s'ofereix perquè encara no hi ha arribat.
                         </p>
                     </div>

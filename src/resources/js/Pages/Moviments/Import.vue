@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { ref, computed, onMounted } from 'vue';
 import { perEntitatINom, type CompteOrdenable } from '@/comptes';
+import { xsrfToken } from '@/xsrf';
 
 interface ScannedFile {
     name: string;
@@ -79,13 +80,6 @@ const comptesDescartats = computed(() => comptesDisponibles.value.length - compt
 const comptesCorrents = computed(() => comptesOferts.value.filter(c => !c.lloguer_nom).sort(perEntitatINom));
 const comptesLloguers = computed(() => comptesOferts.value.filter(c => !!c.lloguer_nom).sort(perEntitatINom));
 
-// Llegim el token de la cookie XSRF-TOKEN (sempre actual) en comptes del meta tag
-// (el meta tag només es refresca en full page load, la cookie es refresca a cada resposta Laravel)
-const csrfToken = () => {
-    const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
-    return match ? decodeURIComponent(match[1]) : '';
-};
-
 const scanFiles = async () => {
     scanning.value = true;
     error.value = '';
@@ -111,7 +105,7 @@ const doPreview = async (filePath: string, compteCorrentId?: number) => {
 
         const res = await fetch(route('importar.preview'), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-XSRF-TOKEN': csrfToken() },
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify(body),
         });
         const json = await res.json();
@@ -149,7 +143,7 @@ const confirmImport = async () => {
     try {
         const res = await fetch(route('importar.store'), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-XSRF-TOKEN': csrfToken() },
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify({
                 file_path: preview.value.file_path,
                 compte_corrent_id: preview.value.compte_corrent_id,

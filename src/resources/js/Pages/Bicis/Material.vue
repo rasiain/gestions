@@ -7,6 +7,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import { nombre } from '@/format';
 
 interface Peca {
     id: number;
@@ -43,7 +44,6 @@ const perTipus = computed(() =>
         .filter(([, llista]) => llista.length),
 );
 
-const nombre = (v: number) => v.toLocaleString('ca-ES');
 
 // ---- Alta i edició ----
 const showModal = ref(false);

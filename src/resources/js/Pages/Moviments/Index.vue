@@ -7,6 +7,7 @@ import CategoriaCell from '@/Components/CategoriaCell.vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch, onUnmounted } from 'vue';
 import { esInversio, perEntitatINom } from '@/comptes';
+import { dataCurta } from '@/format';
 
 interface CompteCorrent {
     id: number;
@@ -229,7 +230,7 @@ const comptesLloguers = computed(() => props.comptesCorrents.filter(c => !!c.llo
 const comptesInversions = computed(() => props.comptesCorrents.filter(esInversio).sort(perEntitatINom));
 
 const onCompteCorrentChange = () => {
-    router.get('/moviments', {
+    router.get(route('moviments.index'), {
         compte_corrent_id: filterForm.compte_corrent_id,
     }, {
         preserveState: false,
@@ -238,7 +239,7 @@ const onCompteCorrentChange = () => {
 };
 
 const applyFilters = () => {
-    router.get('/moviments', filterForm.data(), {
+    router.get(route('moviments.index'), filterForm.data(), {
         preserveState: true,
         preserveScroll: true,
     });
@@ -306,7 +307,7 @@ const resumFiltres = computed(() => {
 // són estat intern del selector, i la petició depenia del watch amb debounce.
 // Remuntant la pàgina, el formulari es refà des dels filtres buits del servidor.
 const clearFilters = () => {
-    router.get('/moviments', { compte_corrent_id: filterForm.compte_corrent_id }, {
+    router.get(route('moviments.index'), { compte_corrent_id: filterForm.compte_corrent_id }, {
         preserveState: false,
         preserveScroll: true,
     });
@@ -366,7 +367,7 @@ const verificaSaldos = async () => {
     if (filterForm.tipus)        params.set('tipus', filterForm.tipus);
 
     try {
-        const res = await fetch(`/moviments/verifica-saldos?${params}`, {
+        const res = await fetch(route('moviments.verifica-saldos') + '?' + params, {
             headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
         const data = await res.json();
@@ -450,14 +451,6 @@ const formatCurrency = (amount: number): string => {
         style: 'currency',
         currency: 'EUR',
     }).format(amount);
-};
-
-const formatDate = (date: string): string => {
-    return new Date(date).toLocaleDateString('ca-ES', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-    });
 };
 
 const getImportClass = (import_val: number): string => {
@@ -994,7 +987,7 @@ const conciliarPagina = async (conciliat: boolean) => {
                                             />
                                         </td>
                                         <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
-                                            {{ formatDate(moviment.data_moviment) }}
+                                            {{ dataCurta(moviment.data_moviment) }}
                                         </td>
                                         <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                                             {{ moviment.concepte }}
@@ -1298,7 +1291,7 @@ const conciliarPagina = async (conciliat: boolean) => {
                         </p>
                         <div v-if="movimentToDelete" class="mt-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-md">
                             <p class="text-sm text-gray-900 dark:text-gray-100">
-                                <strong>Data:</strong> {{ formatDate(movimentToDelete.data_moviment) }}
+                                <strong>Data:</strong> {{ dataCurta(movimentToDelete.data_moviment) }}
                             </p>
                             <p class="text-sm text-gray-900 dark:text-gray-100">
                                 <strong>Concepte:</strong> {{ movimentToDelete.concepte }}

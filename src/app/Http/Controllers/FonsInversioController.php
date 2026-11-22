@@ -18,6 +18,7 @@ use App\Http\Services\FonsValorsPasteParser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use App\Support\RepartimentPerTitular;
 
 class FonsInversioController extends Controller
 {
@@ -74,48 +75,19 @@ class FonsInversioController extends Controller
     {
         $noms = $persones->mapWithKeys(fn ($p) => [$p->id => trim($p->nom . ' ' . $p->cognoms)]);
 
-        $perTitular = [];
-
+        $posicions = [];
         foreach ($fons as $f) {
             foreach ($f['contractes'] as $contracte) {
                 $valor = (float) ($contracte['valor_contracte_num'] ?? 0);
-                $ids   = $contracte['titular_ids'] ?: [null];
-                $parts = count($ids);
-
-                $repartit = 0.0;
-
-                foreach ($ids as $i => $id) {
-                    $part = $i === $parts - 1
-                        ? round($valor - $repartit, 2)
-                        : round($valor / $parts, 2);
-                    $repartit += $part;
-
-                    $clau = $id ?? 'sense';
-
-                    $perTitular[$clau] ??= [
-                        'id'         => $id,
-                        'nom'        => $id !== null ? ($noms[$id] ?? 'Titular ' . $id) : 'Sense titular',
-                        'total'      => 0.0,
-                        'contractes' => [],
-                    ];
-
-                    $perTitular[$clau]['total'] += $part;
-                    $perTitular[$clau]['contractes'][] = [
-                        'fons'     => $f['nom'],
-                        'compte'   => $contracte['compte_nom'],
-                        'valor'    => $valor,
-                        'titulars' => $parts,
-                        'part'     => $part,
-                    ];
-                }
+                $posicions[] = [
+                    'valor'    => $valor,
+                    'titulars' => array_map(fn ($id) => ['id' => $id, 'nom' => $noms[$id] ?? 'Titular ' . $id], $contracte['titular_ids'] ?? []),
+                    'detall'   => ['fons' => $f['nom'], 'compte' => $contracte['compte_nom'], 'valor' => $valor],
+                ];
             }
         }
 
-        return collect($perTitular)
-            ->map(fn (array $t) => ['total' => round($t['total'], 2)] + $t)
-            ->sortByDesc('total')
-            ->values()
-            ->all();
+        return RepartimentPerTitular::totals($posicions, 'contractes');
     }
 
     // === FONS ===

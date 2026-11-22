@@ -12,6 +12,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import { xsrfToken } from '@/xsrf';
+import { nombre } from '@/format';
 
 interface Resultat {
     fitxer: string;
@@ -127,7 +128,6 @@ const ESTATS: Record<Resultat['estat'], { etiqueta: string; classe: string }> = 
 };
 
 const calBici = computed(() => (resultats.value ?? []).some((r) => r.estat === 'cal_bici'));
-const nombre = (v: number | null, d = 1) => (v === null ? '—' : v.toLocaleString('ca-ES', { minimumFractionDigits: d, maximumFractionDigits: d }));
 const mida = (bytes: number) => (bytes < 1048576 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1048576).toFixed(1)} MB`);
 </script>
 
@@ -262,7 +262,7 @@ const mida = (bytes: number) => (bytes < 1048576 ? `${Math.round(bytes / 1024)} 
                                         <Link :href="route('bicis.sortida', s.id)" class="text-gray-900 hover:underline dark:text-gray-100">{{ s.nom ?? 'Sortida' }}</Link>
                                         <span class="block text-xs text-gray-500 dark:text-gray-400">{{ s.bici }}</span>
                                     </td>
-                                    <td class="whitespace-nowrap py-1 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ nombre(s.km) }} km</td>
+                                    <td class="whitespace-nowrap py-1 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ nombre(s.km, 1) }} km</td>
                                     <td class="whitespace-nowrap py-1 text-right">
                                         <a v-if="s.garmin" :href="s.garmin" target="_blank" rel="noopener" class="text-xs text-sky-700 hover:underline dark:text-sky-400">Garmin Connect ↗</a>
                                     </td>

@@ -6,7 +6,7 @@
  * Sense `vehicleId`, és la de **totes les bicis juntes**: el mateix resum sumat, les sortides amb el nom
  * de la bici, i a les gràfiques els km de cada any apilats per bici. Sense components, que són de cada bici.
  */
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import SelectorAltitud from '@/Components/Bicis/SelectorAltitud.vue';
 import GraficaBarres from '@/Components/Bicis/GraficaBarres.vue';
@@ -14,6 +14,8 @@ import DespesesVehicle from '@/Components/Vehicles/DespesesVehicle.vue';
 import type { Despesa, Peca } from '@/Components/Vehicles/DespesesVehicle.vue';
 import { Chart as ChartJS, registerables } from 'chart.js';
 import type { ChartData, ChartOptions } from 'chart.js';
+import { durada, formatEur, nombre } from '@/format';
+import { SERIE_AMBRE, SERIE_BLAU, useColorsGrafica } from '@/grafiques';
 
 ChartJS.register(...registerables);
 
@@ -175,15 +177,6 @@ onMounted(async () => {
 });
 
 // ---- Formats ----
-const nombre = (v: number, decimals = 0) =>
-    v.toLocaleString('ca-ES', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-const euros = (v: number) => v.toLocaleString('ca-ES', { style: 'currency', currency: 'EUR' });
-function durada(s: number | null): string {
-    if (s === null) return '—';
-    const h = Math.floor(s / 3600);
-    const m = Math.round((s % 3600) / 60);
-    return `${h}:${String(m).padStart(2, '0')}`;
-}
 
 // ---- Per any ----
 const total = computed(() => {
@@ -218,23 +211,8 @@ const anysAmbSortides = computed(() => (fitxa.value?.per_any ?? []).filter((a) =
 const noMarcades = (c: Component) => Math.max(0, c.sortides_en_dates - c.sortides);
 
 // ---- Gràfiques ----
-/** Els mateixos dos colors de sèrie que les gràfiques de vehicles: validats en clar i en fosc. */
-const SERIE_BLAU = '#0284c7';
-const SERIE_AMBRE = '#d97706';
+const { fosc, tinta, quadricula, superficie } = useColorsGrafica();
 
-const fosc = ref(false);
-let consultaFosc: MediaQueryList | null = null;
-const anotaFosc = (e: MediaQueryListEvent | MediaQueryList) => (fosc.value = e.matches);
-onMounted(() => {
-    consultaFosc = window.matchMedia('(prefers-color-scheme: dark)');
-    anotaFosc(consultaFosc);
-    consultaFosc.addEventListener('change', anotaFosc);
-});
-onUnmounted(() => consultaFosc?.removeEventListener('change', anotaFosc));
-
-const tinta = computed(() => (fosc.value ? '#9ca3af' : '#6b7280'));
-const quadricula = computed(() => (fosc.value ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'));
-const superficie = computed(() => (fosc.value ? '#1f2937' : '#ffffff'));
 
 const teIndoor = computed(() => total.value.km_indoor > 0);
 
@@ -476,7 +454,7 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                             <td class="py-1 pr-3 text-right tabular-nums">{{ nombre(total.hores) }}</td>
                             <td class="py-1 pr-3 text-right tabular-nums">{{ nombre(total.desnivell) }}</td>
                             <td class="py-1 pr-3 text-right tabular-nums">{{ nombre(total.calories) }}</td>
-                            <td class="py-1 pr-3 text-right tabular-nums">{{ total.despeses ? euros(total.despeses) : '—' }}</td>
+                            <td class="py-1 pr-3 text-right tabular-nums">{{ total.despeses ? formatEur(total.despeses) : '—' }}</td>
                             <td class="py-1 text-right tabular-nums">{{ total.despeses && total.km ? (total.despeses / total.km).toFixed(3) : '—' }}</td>
                         </tr>
                         <tr v-for="a in fitxa.per_any" :key="a.any">
@@ -491,7 +469,7 @@ const opcions = computed<ChartOptions<'bar'>>(() => ({
                             <td class="py-1 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ nombre(a.hores, 1) }}</td>
                             <td class="py-1 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ nombre(a.desnivell) }}</td>
                             <td class="py-1 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ a.calories ? nombre(a.calories) : '—' }}</td>
-                            <td class="py-1 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ a.despeses ? euros(a.despeses) : '—' }}</td>
+                            <td class="py-1 pr-3 text-right tabular-nums text-gray-700 dark:text-gray-300">{{ a.despeses ? formatEur(a.despeses) : '—' }}</td>
                             <td class="py-1 text-right tabular-nums text-gray-500 dark:text-gray-400">{{ a.cost_km?.toFixed(3) ?? '—' }}</td>
                         </tr>
                     </tbody>

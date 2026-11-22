@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { ref, computed, watch } from 'vue';
 import axios from 'axios';
+import { dataCurta } from '@/format';
 
 /** Un error d'axios amb el cos que torna el servidor (missatge i, si n'hi ha, les dades analitzades). */
 const cosDeLError = (error: unknown) =>
@@ -134,7 +135,7 @@ const parseFile = async () => {
         formData.append('compte_corrent_id', selectedCompteCorrent.value.toString());
         formData.append('bank_type', selectedBankType.value);
 
-        const response = await axios.post('/maintenance/movements/import/parse', formData, {
+        const response = await axios.post(route('maintenance.movements.import.parse'), formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -176,7 +177,7 @@ const importMovements = async () => {
         const allExcluded = new Set([...excludedHashes.value, ...committedExcludedHashes.value]);
         allExcluded.forEach(hash => formData.append('excluded_hashes[]', hash));
 
-        const response = await axios.post('/maintenance/movements/import', formData, {
+        const response = await axios.post(route('maintenance.movements.import.store'), formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -220,11 +221,6 @@ const formatCurrency = (amount: number) => {
         style: 'currency',
         currency: 'EUR'
     }).format(amount);
-};
-
-const formatDate = (date: string) => {
-    const [year, month, day] = date.split('-');
-    return `${day}/${month}/${year}`;
 };
 
 const previewOrdre = ref<'asc' | 'desc'>('desc');
@@ -564,7 +560,7 @@ const recalcularSaldos = () => {
                             <div v-if="parsedData.last_db_movement" class="rounded-lg bg-green-50 dark:bg-green-900/20 p-4">
                                 <p class="text-xs text-green-600 dark:text-green-400">Últim moviment BD</p>
                                 <p class="text-sm font-semibold text-green-700 dark:text-green-300">
-                                    {{ formatDate(parsedData.last_db_movement.data_moviment) }}
+                                    {{ dataCurta(parsedData.last_db_movement.data_moviment) }}
                                 </p>
                             </div>
                         </div>
@@ -646,7 +642,7 @@ const recalcularSaldos = () => {
                                             />
                                         </td>
                                         <td class="px-3 py-2 whitespace-nowrap text-sm" :class="excludedHashes.has(movement.hash) ? 'line-through text-gray-400' : 'text-gray-900 dark:text-gray-100'">
-                                            {{ formatDate(movement.data_moviment) }}
+                                            {{ dataCurta(movement.data_moviment) }}
                                         </td>
                                         <td class="px-3 py-2 text-sm" :class="excludedHashes.has(movement.hash) ? 'line-through text-gray-400' : 'text-gray-900 dark:text-gray-100'">
                                             <span>{{ movement.concepte_net || movement.concepte }}</span>

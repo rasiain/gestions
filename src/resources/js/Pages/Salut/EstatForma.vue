@@ -6,11 +6,13 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
 import Info from '@/Components/Info.vue';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Bar, Line } from 'vue-chartjs';
 import { Chart as ChartJS, registerables } from 'chart.js';
 import type { Chart, ChartData, ChartOptions, Plugin, TooltipItem } from 'chart.js';
 import 'chartjs-adapter-date-fns';
+import { formatData, nombre } from '@/format';
+import { SERIE_AMBRE, SERIE_BLAU, useColorsGrafica } from '@/grafiques';
 
 ChartJS.register(...registerables);
 
@@ -45,9 +47,6 @@ const props = defineProps<{
     constants: { fons: number; fatiga: number };
 }>();
 
-const nombre = (v: number, decimals = 0) =>
-    v.toLocaleString('ca-ES', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-const formatData = (iso: string) => new Intl.DateTimeFormat('ca-ES', { dateStyle: 'medium' }).format(new Date(iso));
 const ms = (iso: string) => new Date(iso + 'T00:00:00').getTime();
 
 const ORIGEN_FC: Record<string, string> = {
@@ -99,21 +98,7 @@ const resum = computed(() => {
 });
 
 // ---- Gràfiques ----
-const fosc = ref(false);
-let consultaFosc: MediaQueryList | null = null;
-const anotaFosc = (e: MediaQueryListEvent | MediaQueryList) => (fosc.value = e.matches);
-onMounted(() => {
-    consultaFosc = window.matchMedia('(prefers-color-scheme: dark)');
-    anotaFosc(consultaFosc);
-    consultaFosc.addEventListener('change', anotaFosc);
-});
-onUnmounted(() => consultaFosc?.removeEventListener('change', anotaFosc));
-const tinta = computed(() => (fosc.value ? '#9ca3af' : '#6b7280'));
-const quadricula = computed(() => (fosc.value ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'));
-const zero = computed(() => (fosc.value ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'));
-/** Els dos colors de sèrie del projecte: validats en clar i en fosc i per a daltonisme. */
-const BLAU = '#0284c7';
-const AMBRE = '#d97706';
+const { fosc, tinta, quadricula, zero } = useColorsGrafica();
 
 const linia = (label: string, color: string, valors: Array<{ x: number; y: number }>) => ({
     label,
@@ -129,8 +114,8 @@ const linia = (label: string, color: string, valors: Array<{ x: number; y: numbe
 
 const dadesFons = computed<ChartData<'line'>>(() => ({
     datasets: [
-        linia(`Fons (${props.constants.fons} dies)`, BLAU, dies.value.map((d) => ({ x: ms(d.data), y: d.fons }))),
-        linia(`Fatiga (${props.constants.fatiga} dies)`, AMBRE, dies.value.map((d) => ({ x: ms(d.data), y: d.fatiga }))),
+        linia(`Fons (${props.constants.fons} dies)`, SERIE_BLAU, dies.value.map((d) => ({ x: ms(d.data), y: d.fons }))),
+        linia(`Fatiga (${props.constants.fatiga} dies)`, SERIE_AMBRE, dies.value.map((d) => ({ x: ms(d.data), y: d.fatiga }))),
     ],
 }));
 
@@ -188,7 +173,7 @@ const dadesSetmanes = computed<ChartData<'bar', Array<{ x: number; y: number }>>
     datasets: [{
         label: 'Càrrega de la setmana',
         data: setmanes.value.map(([d, c]) => ({ x: ms(d), y: Math.round(c) })),
-        backgroundColor: BLAU,
+        backgroundColor: SERIE_BLAU,
         borderRadius: 2,
         barPercentage: 0.9,
         categoryPercentage: 1,

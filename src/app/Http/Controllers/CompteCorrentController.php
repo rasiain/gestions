@@ -14,6 +14,7 @@ use App\Models\Persona;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use App\Support\RepartimentPerTitular;
 
 class CompteCorrentController extends Controller
 {
@@ -133,53 +134,15 @@ class CompteCorrentController extends Controller
      */
     private function totalsPerTitular($comptes): array
     {
-        $perTitular = [];
-
-        foreach ($comptes->where('tipus', 'corrent') as $compte) {
-            $saldo    = (float) $compte->saldo_actual;
-            $titulars = $compte->titulars;
-            // Un compte sense titular no es pot repartir, però tampoc s'ha de perdre
-            $parts    = max($titulars->count(), 1);
-
-            $files = $titulars->isEmpty()
-                ? [['id' => null, 'nom' => 'Sense titular']]
-                : $titulars->map(fn ($t) => ['id' => $t->id, 'nom' => trim($t->nom . ' ' . $t->cognoms)])->all();
-
-            $repartit = 0.0;
-
-            foreach ($files as $i => $titular) {
-                // L'últim s'endú el que queda: arrodonir cada part per separat faria que
-                // la suma dels titulars no donés el saldo del compte.
-                $part = $i === $parts - 1
-                    ? round($saldo - $repartit, 2)
-                    : round($saldo / $parts, 2);
-                $repartit += $part;
-
-                $clau = $titular['id'] ?? 'sense';
-
-                $perTitular[$clau] ??= [
-                    'id'      => $titular['id'],
-                    'nom'     => $titular['nom'],
-                    'total'   => 0.0,
-                    'comptes' => [],
-                ];
-
-                $perTitular[$clau]['total'] += $part;
-                $perTitular[$clau]['comptes'][] = [
-                    'nom'      => $compte->nom ?? $compte->compte_corrent,
-                    'lloguer'  => $compte->lloguer_nom,
-                    'saldo'    => $saldo,
-                    'titulars' => $parts,
-                    'part'     => $part,
-                ];
-            }
-        }
-
-        return collect($perTitular)
-            ->map(fn (array $t) => ['total' => round($t['total'], 2)] + $t)
-            ->sortByDesc('total')
-            ->values()
-            ->all();
+        return RepartimentPerTitular::totals($comptes->where('tipus', 'corrent')->map(fn ($compte) => [
+            'valor'    => (float) $compte->saldo_actual,
+            'titulars' => $compte->titulars->map(fn ($t) => ['id' => $t->id, 'nom' => trim($t->nom . ' ' . $t->cognoms)]),
+            'detall'   => [
+                'nom'     => $compte->nom ?? $compte->compte_corrent,
+                'lloguer' => $compte->lloguer_nom,
+                'saldo'   => (float) $compte->saldo_actual,
+            ],
+        ]), 'comptes');
     }
 
     /**

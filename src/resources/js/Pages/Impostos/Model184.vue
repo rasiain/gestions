@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import { formatEur, formatPct } from '@/format';
 
 interface Comunitat {
     id: number;
@@ -71,13 +72,7 @@ interface Props {
 
 const props = defineProps<Props>();
 
-function formatEur(value: number): string {
-    return new Intl.NumberFormat('ca-ES', { style: 'currency', currency: 'EUR' }).format(value);
-}
 
-function formatPct(value: number | null): string {
-    return value === null ? '—' : new Intl.NumberFormat('ca-ES', { minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(value) + ' %';
-}
 
 const anyOpcions = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - i);
 
@@ -370,7 +365,7 @@ function formatDataHora(iso: string): string {
                                                 <span v-if="c.nif" class="block font-mono text-xs text-gray-400 dark:text-gray-500">{{ c.nif }}</span>
                                             </td>
                                             <td class="whitespace-nowrap py-1.5 text-right align-top tabular-nums" :class="c.quota === null ? 'text-amber-600 dark:text-amber-400' : 'text-gray-700 dark:text-gray-300'">
-                                                {{ c.quota === null ? '—' : formatPct(c.quota) }}
+                                                {{ c.quota === null ? '—' : formatPct(c.quota, 4) }}
                                             </td>
                                             <td class="whitespace-nowrap py-1.5 text-right align-top tabular-nums" :class="c.amortitzacio ? 'text-gray-700 dark:text-gray-300' : 'text-amber-600 dark:text-amber-400'">
                                                 {{ c.amortitzacio ? formatEur(c.amortitzacio) : '—' }}
@@ -378,7 +373,7 @@ function formatDataHora(iso: string): string {
                                             <td class="whitespace-nowrap py-1.5 text-right align-top font-medium tabular-nums text-gray-900 dark:text-gray-100">
                                                 {{ c.rendiment === null ? '—' : formatEur(c.rendiment) }}
                                             </td>
-                                            <td class="whitespace-nowrap py-1.5 text-right align-top tabular-nums text-gray-700 dark:text-gray-300">{{ formatPct(c.participacio) }}</td>
+                                            <td class="whitespace-nowrap py-1.5 text-right align-top tabular-nums text-gray-700 dark:text-gray-300">{{ formatPct(c.participacio, 4) }}</td>
                                             <td class="whitespace-nowrap py-1.5 text-right align-top tabular-nums text-gray-700 dark:text-gray-300">
                                                 {{ c.retencio === null ? '—' : formatEur(c.retencio) }}
                                             </td>

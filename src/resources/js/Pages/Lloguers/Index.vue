@@ -7,6 +7,7 @@ import RevisioIpcModal from '@/Components/RevisioIpcModal.vue';
 import CategoriaCell from '@/Components/CategoriaCell.vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import { ref, computed, watch } from 'vue';
+import { xsrfToken } from '@/xsrf';
 
 /** Un tram d'administració de l'immoble: la gestoria del lloguer entre dues dates. */
 interface Administracio {
@@ -232,14 +233,15 @@ interface FitxerDesat {
 }
 
 async function desarFitxer(postUrl: string, force = false): Promise<FitxerDesat | null> {
-    return fetch(force ? postUrl + '&force=1' : postUrl, {
+    // L'export de tots els anys no porta cap paràmetre: «&force=1» sol no és cap URL
+    return fetch(force ? postUrl + (postUrl.includes('?') ? '&' : '?') + 'force=1' : postUrl, {
         method: 'POST',
         headers: { 'X-XSRF-TOKEN': xsrfToken() },
     }).then(r => r.json()).catch(() => null);
 }
 
 async function exportarLlibreIva(lloguerEl: Lloguer, any: number) {
-    const postUrl = `/lloguers/${lloguerEl.id}/desar-llibre-iva?any=${any}`;
+    const postUrl = route('lloguers.desar-llibre-iva', lloguerEl.id) + `?any=${any}`;
 
     let result = await desarFitxer(postUrl);
     if (!result) { mostrarLlibreIvaMsg('Error de comunicació.', false); return; }
@@ -257,7 +259,7 @@ async function exportarLlibreIva(lloguerEl: Lloguer, any: number) {
 
 async function exportarResum(lloguerEl: Lloguer, any: number | null) {
     const anyParam = any ? `?any=${any}` : '';
-    const postUrl = `/lloguers/${lloguerEl.id}/desar-export${anyParam}`;
+    const postUrl = route('lloguers.desar-export', lloguerEl.id) + anyParam;
 
     let result = await desarFitxer(postUrl);
     if (!result) { mostrarLlibreIvaMsg('Error de comunicació.', false); return; }
@@ -270,7 +272,7 @@ async function exportarResum(lloguerEl: Lloguer, any: number | null) {
     mostrarLlibreIvaMsg(
         result?.saved ? `Fitxer desat: ${result.filename}` : 'Error en desar el fitxer.',
         result?.saved ?? false,
-        result?.saved ? `/lloguers/${lloguerEl.id}/veure-export${anyParam}` : undefined,
+        result?.saved ? route('lloguers.veure-export', lloguerEl.id) + anyParam : undefined,
         result?.saved ? result.numbers_url : undefined,
     );
 }
@@ -542,11 +544,6 @@ const esComunitatBens = ref(false);
 const casellaMapping = ref<Record<string, number>>({});
 const caselles184 = ref<Record<number, string>>({});
 
-const xsrfToken = (): string => {
-    const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
-    return match ? decodeURIComponent(match[1]) : '';
-};
-
 const fetchMoviments = async (lloguer: Lloguer, page: number, append = false) => {
     movimentsLoading.value = true;
     try {
@@ -557,7 +554,7 @@ const fetchMoviments = async (lloguer: Lloguer, page: number, append = false) =>
         if (movimentsFilterCerca.value.trim()) params.set('cerca', movimentsFilterCerca.value.trim());
         if (movimentsFilterTotsComptes.value) params.set('tots_comptes', '1');
 
-        const res = await fetch(`/lloguers/${lloguer.id}/moviments?${params}`, {
+        const res = await fetch(route('lloguers.moviments', lloguer.id) + '?' + params, {
             headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
         const json = await res.json();
@@ -592,7 +589,7 @@ const toggleExclou = async (moviment: Moviment) => {
     moviments.value[index] = { ...moviments.value[index], exclou_lloguer: newValue };
 
     try {
-        const res = await fetch(`/moviments/${moviment.id}/exclou-lloguer`, {
+        const res = await fetch(route('moviments.toggle-exclou', moviment.id), {
             method: 'PATCH',
             headers: {
                 'Accept': 'application/json',
@@ -649,7 +646,7 @@ const submitMovimentEdit = async () => {
     movimentEditSaving.value = true;
     movimentEditErrors.value = {};
     try {
-        const res = await fetch(`/moviments/${moviment.id}`, {
+        const res = await fetch(route('moviments.update', moviment.id), {
             method: 'PUT',
             headers: {
                 'Accept': 'application/json',
@@ -746,7 +743,7 @@ const handleBulkEdit = async (payload: { concepte: string; notes: string; catego
         if (payload.notes !== '')          body.notes        = payload.notes;
         if (payload.categoria_id !== null) body.categoria_id = payload.categoria_id;
 
-        const res = await fetch('/moviments/edicio-multiple', {
+        const res = await fetch(route('moviments.bulk-edit'), {
             method:  'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body:    JSON.stringify(body),
@@ -784,7 +781,7 @@ const submitBulk = async () => {
         if (bulkDespesa.value.iva_percentatge !== null) body.iva_percentatge        = bulkDespesa.value.iva_percentatge;
         if (bulkDespesa.value.iva_import !== null)      body.iva_import             = bulkDespesa.value.iva_import;
 
-        const res = await fetch('/moviments/classificacio-multiple', {
+        const res = await fetch(route('moviments.classificacio.bulk'), {
             method:  'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body:    JSON.stringify(body),
@@ -1115,7 +1112,7 @@ const submitClassificacio = async () => {
     }
 
     try {
-        const res = await fetch(`/moviments/${moviment.id}/classificacio`, {
+        const res = await fetch(route('moviments.classificacio.store', moviment.id), {
             method: isEditing ? 'PUT' : 'POST',
             headers: {
                 'Accept': 'application/json',
@@ -1148,7 +1145,7 @@ const deleteClassificacio = async (moviment: Moviment) => {
 
     try {
         const lloguerId = selectedLloguerId.value;
-        const res = await fetch(`/moviments/${moviment.id}/classificacio?lloguer_id=${lloguerId}`, {
+        const res = await fetch(route('moviments.classificacio.destroy', moviment.id) + `?lloguer_id=${lloguerId}`, {
             method: 'DELETE',
             headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
@@ -1246,7 +1243,7 @@ const openResum = async () => {
     try {
         const params = new URLSearchParams();
         if (movimentsFilterAny.value) params.set('any', String(movimentsFilterAny.value));
-        const res = await fetch(`/lloguers/${selectedLloguer.value.id}/resum?${params}`, {
+        const res = await fetch(route('lloguers.resum', selectedLloguer.value.id) + '?' + params, {
             headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
         resumData.value = await res.json();
@@ -1344,7 +1341,7 @@ const submitNouArrendador = async () => {
     nouArrendadorSaving.value = true;
     nouArrendadorErrors.value = {};
     try {
-        const res = await fetch('/arrendadors', {
+        const res = await fetch(route('arrendadors.store'), {
             method: 'POST',
             headers: {
                 'Accept': 'application/json',
@@ -1402,7 +1399,7 @@ const submitNouLlogater = async () => {
             ? { tipus: 'persona', persona_id: nouLlogaterForm.value.persona_id }
             : { tipus: 'empresa', nom_rao_social: nouLlogaterForm.value.nom_rao_social, nif: nouLlogaterForm.value.nif };
 
-        const res = await fetch('/llogaters', {
+        const res = await fetch(route('llogaters.store'), {
             method: 'POST',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify(body),

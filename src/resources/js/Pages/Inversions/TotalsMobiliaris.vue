@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head } from '@inertiajs/vue3';
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import { num, perAlServidor } from '@/formularis';
 import Modal from '@/Components/Modal.vue';
 import { Bar } from 'vue-chartjs';
 import { Chart as ChartJS, registerables } from 'chart.js';
 import type { ChartData, ChartDataset, ChartOptions } from 'chart.js';
+import { formatEur } from '@/format';
+import { SERIE_AMBRE, SERIE_BLAU, useColorsGrafica } from '@/grafiques';
 
 ChartJS.register(...registerables);
 
@@ -364,8 +366,6 @@ const percentatge = (valor: number) =>
 
 const titolFont = (font: Font) => FONTS.find(f => f.clau === font)?.titol ?? font;
 
-const formatEur = (n: number) =>
-    new Intl.NumberFormat('ca-ES', { style: 'currency', currency: 'EUR' }).format(n);
 
 const formatPercent = (n: number | null) =>
     n === null ? '—' : new Intl.NumberFormat('ca-ES', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(n) + ' %';
@@ -617,31 +617,8 @@ const variacioPercent = computed(() =>
     primerTotal.value === 0 ? null : (variacio.value / Math.abs(primerTotal.value)) * 100,
 );
 
-/**
- * Els dos colors de sèrie, els mateixos que a les gràfiques dels vehicles: passen les
- * comprovacions de contrast i de daltonisme sobre fons clar i fosc.
- */
-const SERIE_BLAU  = '#0284c7';
-const SERIE_AMBRE = '#d97706';
+const { tinta, quadricula } = useColorsGrafica();
 
-/** Tailwind va per `prefers-color-scheme`: aquí també, que chart.js pinta en canvas. */
-const fosc = ref(false);
-let consultaFosc: MediaQueryList | null = null;
-
-const anotaFosc = (e: MediaQueryListEvent | MediaQueryList) => {
-    fosc.value = e.matches;
-};
-
-onMounted(() => {
-    consultaFosc = window.matchMedia('(prefers-color-scheme: dark)');
-    anotaFosc(consultaFosc);
-    consultaFosc.addEventListener('change', anotaFosc);
-});
-
-onUnmounted(() => consultaFosc?.removeEventListener('change', anotaFosc));
-
-const tinta      = computed(() => (fosc.value ? '#9ca3af' : '#6b7280'));
-const quadricula = computed(() => (fosc.value ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'));
 
 /** Milers i milions, que a l'eix no hi caben els cèntims. */
 const formatEurCurt = (n: number) => {

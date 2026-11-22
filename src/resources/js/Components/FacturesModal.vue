@@ -125,7 +125,7 @@ const fetchFactures = async () => {
     try {
         const params = new URLSearchParams();
         if (filterAny.value) params.set('any', String(filterAny.value));
-        const res = await fetch(`/lloguers/${props.lloguer.id}/factures?${params}`, {
+        const res = await fetch(route('lloguers.factures.index', props.lloguer.id) + '?' + params, {
             headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
         const json = await res.json();
@@ -138,7 +138,7 @@ const fetchFactures = async () => {
 const generarFactures = async () => {
     generarLoading.value = true;
     try {
-        const res = await fetch(`/lloguers/${props.lloguer.id}/factures/generar`, {
+        const res = await fetch(route('lloguers.factures.generar', props.lloguer.id), {
             method: 'POST',
             headers: {
                 'Accept': 'application/json',
@@ -176,7 +176,7 @@ const fetchEscombraries = async () => {
     escombrariesLoading.value = true;
     escombrariesMissatge.value = null;
     try {
-        const res = await fetch(`/lloguers/${props.lloguer.id}/escombraries?any=${filterAny.value}`, {
+        const res = await fetch(route('lloguers.escombraries.index', props.lloguer.id) + `?any=${filterAny.value}`, {
             headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
         const json = await res.json();
@@ -237,7 +237,7 @@ const desarEscombraries = async () => {
     escombrariesLoading.value = true;
     escombrariesMissatge.value = null;
     try {
-        const res = await fetch(`/lloguers/${props.lloguer.id}/escombraries`, {
+        const res = await fetch(route('lloguers.escombraries.store', props.lloguer.id), {
             method: 'POST',
             headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify({
@@ -262,14 +262,14 @@ const desantAny = ref(false);
 const missatgePdf = ref<string | null>(null);
 
 const veurePdf = (factura: Factura) => {
-    window.open(`/factures/${factura.id}/pdf`, '_blank');
+    window.open(route('factures.pdf', factura.id), '_blank');
 };
 
 const desarPdf = async (factura: Factura, force = false) => {
     desantPdf.value = factura.id;
     missatgePdf.value = null;
     try {
-        const res = await fetch(`/factures/${factura.id}/desar-pdf${force ? '?force=1' : ''}`, {
+        const res = await fetch(route('factures.desar-pdf', factura.id) + (force ? '?force=1' : ''), {
             method: 'POST',
             headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
@@ -300,7 +300,7 @@ const desarPdfAny = async (force = false) => {
     try {
         const params = new URLSearchParams({ any: String(filterAny.value) });
         if (force) params.set('force', '1');
-        const res = await fetch(`/lloguers/${props.lloguer.id}/factures/desar-pdf?${params}`, {
+        const res = await fetch(route('lloguers.factures.desar-pdf', props.lloguer.id) + '?' + params, {
             method: 'POST',
             headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
@@ -345,7 +345,7 @@ const prepararCorreu = async (factura: Factura) => {
     finestra.document.title = 'Preparant l\'esborrany…';
     finestra.document.body.textContent = 'Preparant l\'esborrany a Gmail…';
 
-    const res = await fetch(`/factures/${factura.id}/esborrany-gmail`, {
+    const res = await fetch(route('factures.esborrany-gmail', factura.id), {
         method: 'POST',
         headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
     });
@@ -473,8 +473,8 @@ const submitEditFactura = async () => {
     editErrors.value = {};
     try {
         const url = editingFactura.value
-            ? `/factures/${editingFactura.value.id}`
-            : `/lloguers/${props.lloguer.id}/factures`;
+            ? route('factures.update', editingFactura.value.id)
+            : route('lloguers.factures.store', props.lloguer.id);
         const method = editingFactura.value ? 'PUT' : 'POST';
         const res = await fetch(url, {
             method,
@@ -499,7 +499,7 @@ const submitEditFactura = async () => {
 
 const deleteFactura = async (factura: Factura) => {
     if (!confirm('Estàs segur que vols eliminar aquesta factura?')) return;
-    const res = await fetch(`/factures/${factura.id}`, {
+    const res = await fetch(route('factures.destroy', factura.id), {
         method: 'DELETE',
         headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
     });
@@ -517,7 +517,7 @@ const openVincularModal = async (factura: Factura) => {
     try {
         const params = new URLSearchParams({ page: '1', per_vincular_factura: String(factura.id) });
         if (filterAny.value) params.set('any', String(filterAny.value));
-        const res = await fetch(`/lloguers/${props.lloguer.id}/moviments?${params}`, {
+        const res = await fetch(route('lloguers.moviments', props.lloguer.id) + '?' + params, {
             headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         });
         const json = await res.json();
@@ -536,7 +536,7 @@ const openVincularModal = async (factura: Factura) => {
 
 const submitVincular = async () => {
     if (!vincularFactura.value) return;
-    const res = await fetch(`/factures/${vincularFactura.value.id}/vincular-moviment`, {
+    const res = await fetch(route('factures.vincular-moviment', vincularFactura.value.id), {
         method: 'POST',
         headers: {
             'Accept': 'application/json',

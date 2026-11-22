@@ -23,6 +23,8 @@ import { nomNivell } from '@/bicis/nivells';
 import InfoTolerancia from '@/Components/Bicis/InfoTolerancia.vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { durada, nombre } from '@/format';
+import { useColorsGrafica } from '@/grafiques';
 
 ChartJS.register(...registerables, zoomPlugin);
 
@@ -78,15 +80,6 @@ const ETIQUETA_TIPUS: Record<string, string> = {
 };
 
 // ---- Formats ----
-const nombre = (v: number | null | undefined, decimals = 0) =>
-    v === null || v === undefined ? '—' : v.toLocaleString('ca-ES', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-function durada(s: number | null | undefined): string {
-    if (s === null || s === undefined) return '—';
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sg = Math.round(s % 60);
-    return `${h}:${String(m).padStart(2, '0')}:${String(sg).padStart(2, '0')}`;
-}
 
 // ---- Punts ----
 const punts = shallowRef<Punts | null>(null);
@@ -418,18 +411,8 @@ watch([modeMapa, pendent], () => {
 });
 
 // ---- Gràfiques ----
-const fosc = ref(false);
-let consultaFosc: MediaQueryList | null = null;
-const anotaFosc = (e: MediaQueryListEvent | MediaQueryList) => (fosc.value = e.matches);
-onMounted(() => {
-    consultaFosc = window.matchMedia('(prefers-color-scheme: dark)');
-    anotaFosc(consultaFosc);
-    consultaFosc.addEventListener('change', anotaFosc);
-});
-onUnmounted(() => consultaFosc?.removeEventListener('change', anotaFosc));
+const { tinta, quadricula } = useColorsGrafica();
 
-const tinta = computed(() => (fosc.value ? '#9ca3af' : '#6b7280'));
-const quadricula = computed(() => (fosc.value ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'));
 
 const grafiques = ref<unknown[]>([]);
 
@@ -602,7 +585,7 @@ function baixaRecorregut() {
 // ---- Resum ----
 const xifres = computed(() => [
     { etiqueta: 'Distància', valor: `${nombre(g.km, 1)} km` },
-    { etiqueta: 'En moviment', valor: durada(g.moviment_s ?? g.temps_s) },
+    { etiqueta: 'En moviment', valor: durada(g.moviment_s ?? g.temps_s, true) },
     // Amb el dispositiu, el de Garmin Connect (el de sempre); amb un altre mètode, el seu
     triat.value.metode === 'dispositiu'
         ? { etiqueta: 'Desnivell +', valor: `${nombre(g.pujada)} m${props.sortida.desnivell_corregit ? ' *' : ''}` }
@@ -781,7 +764,7 @@ const comparacio = computed(() => {
                         <!-- Lectura del punt assenyalat: fa de tooltip comú a totes les gràfiques -->
                         <div class="mb-3 flex min-h-[1.5rem] flex-wrap gap-x-5 gap-y-1 text-sm tabular-nums text-gray-700 dark:text-gray-300">
                             <template v-if="lectura">
-                                <span><span class="text-gray-400">Temps</span> {{ durada(lectura.t) }}</span>
+                                <span><span class="text-gray-400">Temps</span> {{ durada(lectura.t, true) }}</span>
                                 <span v-if="lectura.km !== null"><span class="text-gray-400">Km</span> {{ nombre(lectura.km, 2) }}</span>
                                 <span v-if="lectura.alt !== null"><span class="text-gray-400">Altitud</span> {{ nombre(lectura.alt) }} m</span>
                                 <span v-if="lectura.pendent !== null"><span class="text-gray-400">Pendent</span> {{ nombre(lectura.pendent, 1) }} %</span>

@@ -16,6 +16,8 @@ import 'leaflet/dist/leaflet.css';
 import { SERIE_BLAU, TRAMS_PENDENT, pendents, rodaEnClicar, trossosPerPendent } from '@/bicis/recorregut';
 import { num } from '@/formularis';
 import { baixaGpx } from '@/bicis/gpx';
+import { nombre } from '@/format';
+import { useColorsGrafica } from '@/grafiques';
 
 ChartJS.register(...registerables);
 
@@ -80,7 +82,6 @@ async function proposa() {
 }
 
 // ---- Formats ----
-const nombre = (v: number, decimals = 0) => v.toLocaleString('ca-ES', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 const signe = (v: number, decimals = 0) => (v > 0 ? '+' : v < 0 ? '−' : '±') + nombre(Math.abs(v), decimals);
 
 /** La distància acumulada de cada punt, en km. */
@@ -187,15 +188,7 @@ watch([propostes, triada], () => {
 });
 
 // ---- Perfil ----
-const fosc = ref(false);
-let consultaFosc: MediaQueryList | null = null;
-const anotaFosc = (e: MediaQueryListEvent | MediaQueryList) => (fosc.value = e.matches);
-onMounted(() => {
-    consultaFosc = window.matchMedia('(prefers-color-scheme: dark)');
-    anotaFosc(consultaFosc);
-    consultaFosc.addEventListener('change', anotaFosc);
-});
-onUnmounted(() => consultaFosc?.removeEventListener('change', anotaFosc));
+const { tinta: colorTinta, quadricula: colorQuadricula } = useColorsGrafica();
 
 function perfil(p: Proposta): ChartData<'line'> {
     const km = distancies(p.punts);
@@ -213,8 +206,8 @@ function perfil(p: Proposta): ChartData<'line'> {
 }
 
 const opcionsPerfil = computed<ChartOptions<'line'>>(() => {
-    const tinta = fosc.value ? '#9ca3af' : '#6b7280';
-    const quadricula = fosc.value ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+    const tinta = colorTinta.value;
+    const quadricula = colorQuadricula.value;
     return {
         responsive: true,
         maintainAspectRatio: false,

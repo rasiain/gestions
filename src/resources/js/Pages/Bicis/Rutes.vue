@@ -14,6 +14,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { SERIE_AMBRE, SERIE_BLAU, decodifica, rodaEnClicar } from '@/bicis/recorregut';
 import { num } from '@/formularis';
+import { nombre } from '@/format';
 
 interface Ruta {
     id: number;
@@ -96,7 +97,6 @@ const sortidesVisibles = computed(() => visibles.value.reduce((t, r) => t + r.so
 const dUnaSortida = computed(() => props.rutes.filter((r) => r.nivell === nivell.value && r.sortides === 1 && passaLaResta(r)).length);
 
 // ---- Formats ----
-const nombre = (v: number, d = 0) => v.toLocaleString('ca-ES', { minimumFractionDigits: d, maximumFractionDigits: d });
 function fa(data: string): string {
     const dies = Math.round((Date.now() - Date.parse(data + 'T12:00:00')) / 86400000);
     if (dies < 1) return 'avui';

@@ -33,7 +33,7 @@ const saveEdit = async (e: Entitat) => {
     if (!editingNom.value.trim()) return;
     saving.value = true; error.value = null;
     try {
-        const res = await fetch(`/entitats/${e.id}`, {
+        const res = await fetch(route('entitats.update', e.id), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify({ nom: editingNom.value.trim() }),
@@ -55,7 +55,7 @@ const saveCreate = async () => {
     if (!newNom.value.trim()) return;
     saving.value = true; error.value = null;
     try {
-        const res = await fetch('/entitats', {
+        const res = await fetch(route('entitats.store'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
             body: JSON.stringify({ nom: newNom.value.trim() }),
@@ -76,7 +76,7 @@ const saveCreate = async () => {
 const deleteEntitat = async (e: Entitat) => {
     if (!confirm(`Estàs segur que vols eliminar "${e.nom}"?`)) return;
     error.value = null;
-    const res = await fetch(`/entitats/${e.id}`, {
+    const res = await fetch(route('entitats.destroy', e.id), {
         method: 'DELETE',
         headers: { 'X-XSRF-TOKEN': xsrfToken() },
     });

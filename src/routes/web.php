@@ -85,26 +85,26 @@ Route::middleware('auth')->group(function () {
     Route::get('/lloguers/{lloguer}/resum', [LloguerController::class, 'resum'])->name('lloguers.resum');
 
     // Factures
-    Route::get('/lloguers/{lloguer}/factures', [FacturaController::class, 'index']);
-    Route::post('/lloguers/{lloguer}/factures', [FacturaController::class, 'store']);
-    Route::post('/lloguers/{lloguer}/factures/generar', [FacturaController::class, 'generar']);
-    Route::put('/factures/{factura}', [FacturaController::class, 'update']);
-    Route::delete('/factures/{factura}', [FacturaController::class, 'destroy']);
-    Route::post('/factures/{factura}/vincular-moviment', [FacturaController::class, 'vincularMoviment']);
+    Route::get('/lloguers/{lloguer}/factures', [FacturaController::class, 'index'])->name('lloguers.factures.index');
+    Route::post('/lloguers/{lloguer}/factures', [FacturaController::class, 'store'])->name('lloguers.factures.store');
+    Route::post('/lloguers/{lloguer}/factures/generar', [FacturaController::class, 'generar'])->name('lloguers.factures.generar');
+    Route::put('/factures/{factura}', [FacturaController::class, 'update'])->name('factures.update');
+    Route::delete('/factures/{factura}', [FacturaController::class, 'destroy'])->name('factures.destroy');
+    Route::post('/factures/{factura}/vincular-moviment', [FacturaController::class, 'vincularMoviment'])->name('factures.vincular-moviment');
     Route::get('/factures/{factura}/pdf', [FacturaController::class, 'pdf'])->name('factures.pdf');
-    Route::get('/factures/{factura}/correu', [FacturaController::class, 'correu']);
-    Route::post('/factures/{factura}/esborrany-gmail', [FacturaController::class, 'esborranyGmail']);
+    Route::get('/factures/{factura}/correu', [FacturaController::class, 'correu'])->name('factures.correu');
+    Route::post('/factures/{factura}/esborrany-gmail', [FacturaController::class, 'esborranyGmail'])->name('factures.esborrany-gmail');
     Route::get('/google/connectar', [GoogleController::class, 'connectar'])->name('google.connectar');
     Route::get('/google/callback', [GoogleController::class, 'callback']);
-    Route::post('/factures/{factura}/desar-pdf', [FacturaController::class, 'desar']);
-    Route::post('/lloguers/{lloguer}/factures/desar-pdf', [FacturaController::class, 'desarAny']);
-    Route::get('/lloguers/{lloguer}/escombraries', [LloguerEscombrariesController::class, 'index']);
-    Route::post('/lloguers/{lloguer}/escombraries', [LloguerEscombrariesController::class, 'store']);
-    Route::delete('/lloguers/{lloguer}/escombraries', [LloguerEscombrariesController::class, 'destroy']);
+    Route::post('/factures/{factura}/desar-pdf', [FacturaController::class, 'desar'])->name('factures.desar-pdf');
+    Route::post('/lloguers/{lloguer}/factures/desar-pdf', [FacturaController::class, 'desarAny'])->name('lloguers.factures.desar-pdf');
+    Route::get('/lloguers/{lloguer}/escombraries', [LloguerEscombrariesController::class, 'index'])->name('lloguers.escombraries.index');
+    Route::post('/lloguers/{lloguer}/escombraries', [LloguerEscombrariesController::class, 'store'])->name('lloguers.escombraries.store');
+    Route::delete('/lloguers/{lloguer}/escombraries', [LloguerEscombrariesController::class, 'destroy'])->name('lloguers.escombraries.destroy');
 
     // Revisions IPC
-    Route::get('/lloguers/{lloguer}/revisions-ipc', [LloguerRevisioIpcController::class, 'index']);
-    Route::post('/lloguers/{lloguer}/revisions-ipc', [LloguerRevisioIpcController::class, 'store']);
+    Route::get('/lloguers/{lloguer}/revisions-ipc', [LloguerRevisioIpcController::class, 'index'])->name('lloguers.revisions-ipc.index');
+    Route::post('/lloguers/{lloguer}/revisions-ipc', [LloguerRevisioIpcController::class, 'store'])->name('lloguers.revisions-ipc.store');
 
     // Contractes management
     Route::resource('contractes', ContracteController::class)->only([

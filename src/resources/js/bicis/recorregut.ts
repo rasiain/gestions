@@ -31,9 +31,8 @@ export function rodaEnClicar(mapa: L.Map): void {
     });
 }
 
-/** Els dos colors de sèrie del projecte: validats en clar i en fosc. */
-export const SERIE_BLAU = '#0284c7';
-export const SERIE_AMBRE = '#d97706';
+// Els colors de sèrie són de totes les gràfiques: es reexporten perquè els mapes els trobin aquí
+export { SERIE_AMBRE, SERIE_BLAU } from '@/grafiques';
 
 /** Polilínia codificada de Google (5 decimals) → [lat, lon]. */
 export function decodifica(codi: string): [number, number][] {

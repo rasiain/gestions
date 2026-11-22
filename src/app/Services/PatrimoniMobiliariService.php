@@ -11,6 +11,7 @@ use App\Models\RendaFixaContracte;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use App\Support\RepartimentPerTitular;
 
 /**
  * Tot el patrimoni mobiliari com una sola llista de posicions.
@@ -565,18 +566,9 @@ class PatrimoniMobiliariService
      */
     private function reparteix(float $valor, array $parts): array
     {
-        $files = $parts === [] ? [['titular_id' => null, 'nom' => 'Sense titular', 'pes' => 1.0]] : $parts;
-        $total = array_sum(array_column($files, 'pes')) ?: 1.0;
+        $files = $parts === [] ? [['titular_id' => null, 'nom' => RepartimentPerTitular::SENSE_TITULAR, 'pes' => 1.0]] : array_values($parts);
 
-        $repartit = 0.0;
-        $ultim    = count($files) - 1;
-
-        foreach ($files as $i => $fila) {
-            $part = $i === $ultim
-                ? round($valor - $repartit, 2)
-                : round($valor * $fila['pes'] / $total, 2);
-            $repartit += $part;
-
+        foreach (RepartimentPerTitular::parts($valor, array_column($files, 'pes')) as $i => $part) {
             $files[$i]['part'] = $part;
             unset($files[$i]['pes']);
         }

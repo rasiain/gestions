@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
+import { formatEur } from '@/format';
 
 interface MovimentDetall {
     data: string;
@@ -64,12 +65,6 @@ const categories: (keyof DespesesPerCategoria)[] = [
     'comunitat', 'taxes', 'assegurança', 'compres', 'reparacions', 'gestoria', 'comissions', 'altres',
 ];
 
-function formatEur(value: number): string {
-    return new Intl.NumberFormat('ca-ES', {
-        style: 'currency',
-        currency: 'EUR',
-    }).format(value);
-}
 
 function canviarAny(event: Event) {
     const target = event.target as HTMLSelectElement;
