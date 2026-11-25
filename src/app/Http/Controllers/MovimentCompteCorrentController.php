@@ -444,39 +444,23 @@ class MovimentCompteCorrentController extends Controller
             return response()->json(['updated' => 0]);
         }
 
-        $moviments = MovimentCompteCorrent::whereIn('id', $movimentIds)
-            ->where('exclou_lloguer', false)
-            ->get();
-
-        DB::beginTransaction();
-        try {
-            foreach ($moviments as $moviment) {
-                $fields = [];
-
-                if ($hasConcepte) {
-                    $concepteModel = MovimentConcepte::findOrCreateByConcepte($request->input('concepte'));
-                    $fields['concepte_id'] = $concepteModel->id;
-                }
-
-                if ($hasNotes) {
-                    $fields['notes'] = $request->input('notes');
-                }
-
-                if ($hasCategoria) {
-                    $fields['categoria_id'] = $request->input('categoria_id');
-                }
-
-                if (!empty($fields)) {
-                    $moviment->update($fields);
-                }
-            }
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json(['error' => $e->getMessage()], 500);
+        // Tots els seleccionats, també els exclosos del lloguer: «exclou_lloguer» només diu que
+        // el moviment no és del lloguer del compte, i a la vista de lloguers ja no es llisten.
+        // Abans aquí es filtraven, i el concepte (i la resta) d'aquests no canviava sense dir res.
+        $fields = [];
+        if ($hasConcepte) {
+            $fields['concepte_id'] = MovimentConcepte::findOrCreateByConcepte($request->input('concepte'))->id;
+        }
+        if ($hasNotes) {
+            $fields['notes'] = $request->input('notes');
+        }
+        if ($hasCategoria) {
+            $fields['categoria_id'] = $request->input('categoria_id');
         }
 
-        return response()->json(['updated' => $moviments->count()]);
+        $updated = MovimentCompteCorrent::whereIn('id', $movimentIds)->update($fields);
+
+        return response()->json(['updated' => $updated]);
     }
 
     /**
