@@ -7,10 +7,11 @@ use App\Models\CapitalSocialContracte;
 use App\Models\CapitalSocialRendiment;
 use App\Models\CapitalSocialValor;
 use App\Models\CompteCorrent;
+use App\Models\Persona;
+use App\Support\RepartimentPerTitular;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
-use App\Support\RepartimentPerTitular;
 
 /**
  * El capital social de les cooperatives de crèdit.
@@ -43,7 +44,7 @@ class CapitalSocialController extends Controller
             'comptesCapital'   => $this->comptes(['capital_social']),
             'comptesRendiment' => $this->comptes(['corrent']),
             // Per a les aportacions sense compte, que els titulars s'han de triar a mà
-            'persones'         => \App\Models\Persona::orderBy('nom')->orderBy('cognoms')
+            'persones'         => Persona::orderBy('nom')->orderBy('cognoms')
                 ->get()->map(fn ($p) => ['id' => $p->id, 'nom' => trim($p->nom . ' ' . $p->cognoms)]),
         ]);
     }
@@ -54,7 +55,7 @@ class CapitalSocialController extends Controller
     private function comptes(array $tipus)
     {
         return CompteCorrent::whereIn('tipus', $tipus)
-            ->with('titulars')
+            ->with(['titulars', 'entitatRelacio'])
             ->orderBy('ordre')
             ->get()
             ->map(fn (CompteCorrent $c) => [

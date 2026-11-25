@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ArrendadorRequest;
 use App\Models\Arrendador;
+use App\Models\ComunitatBens;
+use App\Models\Persona;
 
 class ArrendadorController extends Controller
 {
@@ -12,8 +14,8 @@ class ArrendadorController extends Controller
         $validated = $request->validated();
 
         $typeMap = [
-            'persona'        => \App\Models\Persona::class,
-            'comunitat_bens' => \App\Models\ComunitatBens::class,
+            'persona'        => Persona::class,
+            'comunitat_bens' => ComunitatBens::class,
         ];
 
         $arrendador = Arrendador::create([
@@ -34,8 +36,8 @@ class ArrendadorController extends Controller
         $validated = $request->validated();
 
         $typeMap = [
-            'persona'        => \App\Models\Persona::class,
-            'comunitat_bens' => \App\Models\ComunitatBens::class,
+            'persona'        => Persona::class,
+            'comunitat_bens' => ComunitatBens::class,
         ];
 
         $arrendador->update([

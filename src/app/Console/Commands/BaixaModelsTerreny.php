@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Support\TiffSimple;
 use Illuminate\Console\Command;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 
@@ -237,7 +238,7 @@ class BaixaModelsTerreny extends Command
             foreach ($grup as $i => $t) {
                 $desti = "{$carpeta}/{$this->nomTros($t)}.tif";
                 $resposta = $respostes[$i];
-                $bo = $resposta instanceof \Illuminate\Http\Client\Response && $resposta->successful()
+                $bo = $resposta instanceof Response && $resposta->successful()
                     && str_starts_with((string) @file_get_contents("{$desti}.part", false, null, 0, 2), 'II');
                 if ($bo) {
                     rename("{$desti}.part", $desti);

@@ -10,11 +10,13 @@ use App\Http\Requests\ValorPlaPensionsRequest;
 use App\Models\AportacioPlaPensions;
 use App\Models\CompteCorrent;
 use App\Models\ContractePlaPensions;
-use App\Models\Entitat;
 use App\Models\DespesaPlaPensions;
+use App\Models\Entitat;
+use App\Models\Persona;
 use App\Models\PlaPensions;
 use App\Models\ValorPlaPensions;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class PlaPensionsController extends Controller
@@ -42,8 +44,8 @@ class PlaPensionsController extends Controller
                 'titulars' => $c->titulars->map(fn($t) => $t->nom . ' ' . $t->cognoms)->join(', '),
             ]);
 
-        $entitats = \App\Models\Entitat::orderBy('nom')->get(['id', 'nom']);
-        $persones = \App\Models\Persona::orderBy('cognoms')->orderBy('nom')->get(['id', 'nom', 'cognoms']);
+        $entitats = Entitat::orderBy('nom')->get(['id', 'nom']);
+        $persones = Persona::orderBy('cognoms')->orderBy('nom')->get(['id', 'nom', 'cognoms']);
 
         return Inertia::render('PlaPensions/Index', [
             'plans'              => $plans,
@@ -182,7 +184,7 @@ class PlaPensionsController extends Controller
     }
 
     /** Importa una llista de valors en bloc (des de la posició enganxada). */
-    public function importValors(\Illuminate\Http\Request $request): JsonResponse
+    public function importValors(Request $request): JsonResponse
     {
         $data = $request->validate([
             'pla_id'                      => ['required', 'integer', 'exists:g_pp_plans,id'],
@@ -204,7 +206,7 @@ class PlaPensionsController extends Controller
      * Format per línia:  <compte>  <producte>  <saldo> EUR  <disponible>
      * El valor/participació surt de: saldo ÷ participacions del contracte.
      */
-    public function parseSnapshotImport(\Illuminate\Http\Request $request): JsonResponse
+    public function parseSnapshotImport(Request $request): JsonResponse
     {
         $text = (string) $request->input('text', '');
         $data = $request->input('data') ?: now()->toDateString();
@@ -270,7 +272,7 @@ class PlaPensionsController extends Controller
     }
 
     /** Desa els valors confirmats del snapshot (una data per pla). */
-    public function storeSnapshotImport(\Illuminate\Http\Request $request): JsonResponse
+    public function storeSnapshotImport(Request $request): JsonResponse
     {
         $data = $request->validate([
             'valors'                      => ['required', 'array', 'min:1'],

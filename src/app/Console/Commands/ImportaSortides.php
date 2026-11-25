@@ -31,7 +31,7 @@ class ImportaSortides extends Command
     /** Diferència entre el resum de Garmin i el del dispositiu que val la pena ensenyar. */
     private const DIFERENCIA_NOTABLE = 0.10;
 
-    public function handle(SortidesGarminService $servei): int
+    public function handle(SortidesGarminService $servei, ImportacioRecorregutsService $importacio): int
     {
         $zip = $this->argument('fitxer');
 
@@ -132,7 +132,7 @@ class ImportaSortides extends Command
             $this->info('Amb --prova no s\'ha desat res.');
         } else {
             // Com la pantalla d'importació: altitud, rutes i xarxa, en segon pla
-            app(ImportacioRecorregutsService::class)->recalculaDerivats();
+            $importacio->recalculaDerivats();
             $this->line('L\'altitud, les rutes i la xarxa es recalculen en segon pla (storage/logs/).');
         }
 

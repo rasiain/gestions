@@ -6,6 +6,7 @@ use App\Http\Requests\ImmobleRequest;
 use App\Models\AdministracioImmoble;
 use App\Models\Immoble;
 use App\Models\Persona;
+use App\Models\Proveidor;
 use Inertia\Inertia;
 
 class ImmobleController extends Controller
@@ -43,7 +44,7 @@ class ImmobleController extends Controller
             ->orderBy('nom')
             ->get();
 
-        $proveidors = \App\Models\Proveidor::orderBy('nom_rao_social')
+        $proveidors = Proveidor::orderBy('nom_rao_social')
             ->get();
 
         return Inertia::render('Immobles/Index', [

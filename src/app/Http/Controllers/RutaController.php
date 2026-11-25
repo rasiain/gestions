@@ -18,6 +18,8 @@ use Inertia\Inertia;
  */
 class RutaController extends Controller
 {
+    public function __construct(private readonly AltitudTerrenyService $altitud) {}
+
     /** Per a la llista i el mapa general n'hi ha prou amb ~50 m: centenars de rutes alhora. */
     private const TOLERANCIA_CATALEG = 0.0005;
 
@@ -31,7 +33,7 @@ class RutaController extends Controller
             ->selectRaw("json_extract(c.dades_originals, '$.locationName') as lloc")
             ->get();
         $metode = AltitudTerrenyService::metodeDemanat($request->query('altitud'));
-        $triats = app(AltitudTerrenyService::class)->desnivellsTriats(
+        $triats = $this->altitud->desnivellsTriats(
             $rutes->unique('canonica_id')->map(fn ($r) => (object) (['id' => $r->canonica_id] + (array) $r)),
             $metode,
         );
@@ -80,7 +82,7 @@ class RutaController extends Controller
         $membres = $ruta->sortidesDelGrup()->with('vehicle:id,nom')->orderByDesc('inici')->get();
         $c = $ruta->canonica;
         $metode = AltitudTerrenyService::metodeDemanat($request->query('altitud'));
-        $triats = app(AltitudTerrenyService::class)->desnivellsTriats($membres->concat([$c])->unique('id'), $metode);
+        $triats = $this->altitud->desnivellsTriats($membres->concat([$c])->unique('id'), $metode);
 
         // La mateixa sortida canònica, als altres nivells: per veure com creix o s'aprima el grup
         $altresNivells = DB::table('g_sortida_ruta as sr')

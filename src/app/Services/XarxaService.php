@@ -40,6 +40,8 @@ use Illuminate\Support\Facades\DB;
  */
 class XarxaService
 {
+    public function __construct(private readonly AltitudTerrenyService $altitudTerreny) {}
+
     public const PAS_M = 10.0;
 
     public const RADI_M = 15.0;
@@ -105,7 +107,7 @@ class XarxaService
      */
     public function construeix(?callable $progres = null): array
     {
-        $altitud = app(AltitudTerrenyService::class);
+        $altitud = $this->altitudTerreny;
         $sortides = SortidaBici::query()
             ->join('g_vehicles', 'g_vehicles.id', '=', 'g_sortides_bici.vehicle_id')
             ->where('g_sortides_bici.punts', '>', 0)

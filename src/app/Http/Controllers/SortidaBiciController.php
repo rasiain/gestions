@@ -26,6 +26,8 @@ use Inertia\Inertia;
  */
 class SortidaBiciController extends Controller
 {
+    public function __construct(private readonly AltitudTerrenyService $altitud) {}
+
     /** Els rodets: la distància és virtual i es compta a part. */
     private const INDOOR = 'indoor_cycling';
 
@@ -108,7 +110,7 @@ class SortidaBiciController extends Controller
 
         // El desnivell no és cap columna: el de cada sortida surt de l'altitud triada, i se suma aquí
         $sortides = (clone $base)->get(['id', 'vehicle_id', 'data_local', 'tipus_activitat', 'distancia_m', 'calories', 'temps_moviment_s', 'temps_s', 'desnivell_pos_m', 'altitud_metode', 'altitud_font']);
-        $triats = app(AltitudTerrenyService::class)->desnivellsTriats($sortides, AltitudTerrenyService::metodeDemanat($request->query('altitud')));
+        $triats = $this->altitud->desnivellsTriats($sortides, AltitudTerrenyService::metodeDemanat($request->query('altitud')));
         $pujada = fn (SortidaBici $s) => $triats[$s->id]['pujada'] ?? 0;
         $indoor = fn (SortidaBici $s) => $s->tipus_activitat === self::INDOOR ? $pujada($s) : 0;
         $perAnyS = $sortides->groupBy(fn (SortidaBici $s) => $s->data_local->format('Y'));
@@ -200,24 +202,29 @@ class SortidaBiciController extends Controller
         // També els muntats a la bici, encara que no tinguin cap sortida (una peça nova)
         $ids = $ids->merge(MaterialEsportiu::where('muntat_a_vehicle_id', $vehicle->id)->pluck('id'))->unique();
 
+        // Les sortides marcades de cada component, d'una consulta (abans n'eren dues per component)
+        $marcades = DB::table('g_sortida_material')
+            ->join('g_sortides_bici', 'g_sortides_bici.id', '=', 'g_sortida_material.sortida_id')
+            ->whereIn('g_sortida_material.material_id', $ids)
+            ->where('g_sortides_bici.vehicle_id', $vehicle->id)
+            ->groupBy('g_sortida_material.material_id')
+            ->selectRaw('g_sortida_material.material_id, count(*) as sortides, sum(distancia_m) / 1000.0 as km')
+            ->get()
+            ->keyBy('material_id');
+
+        // I les de la bici, un sol cop: les de dins de les dates de cada component es compten aquí
+        $sortidesBici = SortidaBici::where('vehicle_id', $vehicle->id)
+            ->where('tipus_activitat', '!=', self::INDOOR)
+            ->get(['data_local', 'distancia_m']);
+
         return MaterialEsportiu::whereIn('id', $ids)
             ->orderByRaw("estat = 'retirat'")
             ->orderByDesc('data_inici')
             ->get()
-            ->map(function (MaterialEsportiu $m) use ($vehicle) {
-                $marcades = DB::table('g_sortida_material')
-                    ->join('g_sortides_bici', 'g_sortides_bici.id', '=', 'g_sortida_material.sortida_id')
-                    ->where('g_sortida_material.material_id', $m->id)
-                    ->where('g_sortides_bici.vehicle_id', $vehicle->id)
-                    ->selectRaw('count(*) as sortides, sum(distancia_m) / 1000.0 as km')
-                    ->first();
-
-                $enDates = SortidaBici::where('vehicle_id', $vehicle->id)
-                    ->when($m->data_inici, fn ($q) => $q->where('data_local', '>=', $m->data_inici->toDateString()))
-                    ->when($m->data_fi, fn ($q) => $q->where('data_local', '<=', $m->data_fi->toDateString()))
-                    ->where('tipus_activitat', '!=', self::INDOOR)
-                    ->selectRaw('count(*) as sortides, sum(distancia_m) / 1000.0 as km')
-                    ->first();
+            ->map(function (MaterialEsportiu $m) use ($vehicle, $marcades, $sortidesBici) {
+                $marcada = $marcades->get($m->id);
+                $enDates = $sortidesBici->filter(fn (SortidaBici $s) => (! $m->data_inici || $s->data_local->toDateString() >= $m->data_inici->toDateString())
+                    && (! $m->data_fi || $s->data_local->toDateString() <= $m->data_fi->toDateString()));
 
                 return [
                     'id'                => $m->id,
@@ -226,10 +233,10 @@ class SortidaBiciController extends Controller
                     'muntat'            => $m->muntat_a_vehicle_id === $vehicle->id,
                     'data_inici'        => $m->data_inici?->toDateString(),
                     'data_fi'           => $m->data_fi?->toDateString(),
-                    'sortides'          => (int) $marcades->sortides,
-                    'km'                => round((float) $marcades->km, 0),
-                    'sortides_en_dates' => (int) $enDates->sortides,
-                    'km_en_dates'       => round((float) $enDates->km, 0),
+                    'sortides'          => (int) ($marcada->sortides ?? 0),
+                    'km'                => round((float) ($marcada->km ?? 0), 0),
+                    'sortides_en_dates' => $enDates->count(),
+                    'km_en_dates'       => round($enDates->sum(fn (SortidaBici $s) => (float) $s->distancia_m) / 1000, 0),
                 ];
             })->all();
     }
@@ -268,7 +275,7 @@ class SortidaBiciController extends Controller
             ])
             ->selectRaw("json_extract(dades_originals, '$.startTimeLocal') as inici_local_ms")
             ->get();
-        $triats = app(AltitudTerrenyService::class)->desnivellsTriats($sortides, AltitudTerrenyService::metodeDemanat($request->query('altitud')));
+        $triats = $this->altitud->desnivellsTriats($sortides, AltitudTerrenyService::metodeDemanat($request->query('altitud')));
 
         return $sortides->map(fn (SortidaBici $s) => [
                 'id'                 => $s->id,
@@ -360,7 +367,7 @@ class SortidaBiciController extends Controller
                     'temp_max'  => $d['maxTemperature'] ?? null,
                 ],
             ],
-            'altitud'  => app(AltitudTerrenyService::class)->opcions($sortida),
+            'altitud'  => $this->altitud->opcions($sortida),
             'rutes'    => $this->rutes($sortida),
             'anterior' => $anterior,
             'seguent'  => $seguent,
@@ -421,7 +428,7 @@ class SortidaBiciController extends Controller
         }
 
         // Els perfils del terreny i combinats de cada model que la cobreix; el del dispositiu és `alt`
-        $columnes['altituds'] = collect(app(AltitudTerrenyService::class)->perfils($sortida->id))
+        $columnes['altituds'] = collect($this->altitud->perfils($sortida->id))
             ->except('dispositiu/dispositiu')
             ->map(fn ($alts) => array_map(fn ($a) => $a === null ? null : round($a, 1), $alts));
 

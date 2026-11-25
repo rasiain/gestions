@@ -14,9 +14,9 @@ class ImportacioBaixadesRequest extends FormRequest
         return true;
     }
 
-    public function rules(): array
+    public function rules(ImportacioRecorregutsService $importacio): array
     {
-        $carpeta = app(ImportacioRecorregutsService::class)->carpetaBaixades();
+        $carpeta = $importacio->carpetaBaixades();
 
         return [
             'fitxers'    => ['required', 'array', 'max:200'],

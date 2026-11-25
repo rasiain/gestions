@@ -37,10 +37,11 @@ class CompteCorrentController extends Controller
             ->keyBy('compte_corrent_id');
 
         $comptesCorrents = CompteCorrent::with(['titulars', 'entitatRelacio'])
+            ->select('g_comptes_corrents.*')
+            ->ambSaldoActual()
             ->orderBy('ordre')
             ->get()
             ->map(function ($compte) use ($lloguersPerCompte, $contractesFonsPerCompte, $contractesPensionsPerCompte) {
-                $compte->saldo_actual = $compte->saldo_actual;
                 $lloguer = $lloguersPerCompte->get($compte->id);
                 $compte->lloguer_nom = $lloguer?->nom;
                 $compte->lloguer_acronim = $lloguer?->acronim;

@@ -4,28 +4,33 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\LloguerRequest;
 use App\Models\Arrendador;
+use App\Models\Categoria;
+use App\Models\CategoriaLloguerFiscal;
 use App\Models\CompteCorrent;
 use App\Models\ComunitatBens;
 use App\Models\Immoble;
 use App\Models\Llogater;
 use App\Models\Lloguer;
-use App\Models\Categoria;
 use App\Models\MovimentCompteCorrent;
 use App\Models\MovimentConcepte;
+use App\Models\MovimentLloguerIngresLinia;
 use App\Models\Persona;
 use App\Models\Proveidor;
+use App\Models\TipusDespesaFiscal;
+use App\Services\Model184Service;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use PhpOffice\PhpSpreadsheet\Writer\Html;
+use Inertia\Inertia;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Writer\Html;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\StreamedResponse;
-use Inertia\Inertia;
 
 class LloguerController extends Controller
 {
@@ -41,9 +46,9 @@ class LloguerController extends Controller
                     })->orderBy('data_inici', 'desc');
                 },
                 'contractes.llogaters.persona',
-                'contractes.arrendadors.arrendadorable' => function (\Illuminate\Database\Eloquent\Relations\MorphTo $morphTo) {
+                'contractes.arrendadors.arrendadorable' => function (MorphTo $morphTo) {
                     $morphTo->morphWith([
-                        \App\Models\ComunitatBens::class => ['comuners'],
+                        ComunitatBens::class => ['comuners'],
                     ]);
                 },
             ])
@@ -109,13 +114,13 @@ class LloguerController extends Controller
                         'arrendador_ids' => $contracteActiu->arrendadors->pluck('id')->toArray(),
                         'arrendadors' => $contracteActiu->arrendadors->map(fn($a) => [
                             'id'    => $a->id,
-                            'arrendadorable_type' => $a->arrendadorable_type === \App\Models\Persona::class ? 'persona' : 'comunitat_bens',
+                            'arrendadorable_type' => $a->arrendadorable_type === Persona::class ? 'persona' : 'comunitat_bens',
                             'arrendadorable' => $a->arrendadorable ? [
                                 'id'      => $a->arrendadorable->id,
-                                'nom'     => $a->arrendadorable instanceof \App\Models\Persona
+                                'nom'     => $a->arrendadorable instanceof Persona
                                     ? ($a->arrendadorable->nom . ' ' . $a->arrendadorable->cognoms)
                                     : $a->arrendadorable->nom,
-                                'comuners' => $a->arrendadorable instanceof \App\Models\ComunitatBens
+                                'comuners' => $a->arrendadorable instanceof ComunitatBens
                                     ? $a->arrendadorable->comuners->pluck('id')->toArray()
                                     : null,
                             ] : null,
@@ -147,20 +152,20 @@ class LloguerController extends Controller
 
         $arrendadorsRaw = Arrendador::with('arrendadorable')->get();
         $cbIds = $arrendadorsRaw
-            ->where('arrendadorable_type', \App\Models\ComunitatBens::class)
+            ->where('arrendadorable_type', ComunitatBens::class)
             ->pluck('arrendadorable_id');
         $cbComuners = $cbIds->isNotEmpty()
-            ? \App\Models\ComunitatBens::with('comuners')->whereIn('id', $cbIds)->get()->keyBy('id')
+            ? ComunitatBens::with('comuners')->whereIn('id', $cbIds)->get()->keyBy('id')
             : collect();
         $arrendadors = $arrendadorsRaw->map(fn($a) => [
             'id'    => $a->id,
-            'arrendadorable_type' => $a->arrendadorable_type === \App\Models\Persona::class ? 'persona' : 'comunitat_bens',
+            'arrendadorable_type' => $a->arrendadorable_type === Persona::class ? 'persona' : 'comunitat_bens',
             'arrendadorable' => $a->arrendadorable ? [
                 'id'      => $a->arrendadorable->id,
-                'nom'     => $a->arrendadorable instanceof \App\Models\Persona
+                'nom'     => $a->arrendadorable instanceof Persona
                     ? ($a->arrendadorable->nom . ' ' . $a->arrendadorable->cognoms)
                     : $a->arrendadorable->nom,
-                'comuners' => $a->arrendadorable instanceof \App\Models\ComunitatBens
+                'comuners' => $a->arrendadorable instanceof ComunitatBens
                     ? ($cbComuners->get($a->arrendadorable->id)?->comuners->pluck('id')->toArray() ?? [])
                     : null,
             ] : null,
@@ -324,18 +329,18 @@ class LloguerController extends Controller
             ->get(['id', 'nom', 'compte_corrent_id', 'categoria_pare_id', 'ordre'])
             ->toArray();
 
-        $tipusDespesaFiscal = \App\Models\TipusDespesaFiscal::orderBy('codi')->get(['id', 'codi', 'descripcio'])->toArray();
-        $categoriaMapping = \App\Models\CategoriaLloguerFiscal::whereNotNull('tipus_despesa_fiscal_id')
+        $tipusDespesaFiscal = TipusDespesaFiscal::orderBy('codi')->get(['id', 'codi', 'descripcio'])->toArray();
+        $categoriaMapping = CategoriaLloguerFiscal::whereNotNull('tipus_despesa_fiscal_id')
             ->pluck('tipus_despesa_fiscal_id', 'categoria')
             ->toArray();
 
         // La casella del 184 només té sentit als lloguers d'una comunitat de béns:
         // a la resta no s'ensenya, que ja hi ha prou camps a omplir.
         $esComunitatBens = $lloguer->contractes()
-            ->whereHas('arrendadors', fn ($q) => $q->where('arrendadorable_type', \App\Models\ComunitatBens::class))
+            ->whereHas('arrendadors', fn ($q) => $q->where('arrendadorable_type', ComunitatBens::class))
             ->exists();
 
-        $casellaMapping = \App\Models\CategoriaLloguerFiscal::whereNotNull('casella_184')
+        $casellaMapping = CategoriaLloguerFiscal::whereNotNull('casella_184')
             ->pluck('casella_184', 'categoria')
             ->toArray();
 
@@ -350,7 +355,7 @@ class LloguerController extends Controller
             'categoriaMapping'      => $categoriaMapping,
             'esComunitatBens'       => $esComunitatBens,
             'casellaMapping'        => $esComunitatBens ? $casellaMapping : [],
-            'caselles184'           => $esComunitatBens ? \App\Services\Model184Service::CASELLES : [],
+            'caselles184'           => $esComunitatBens ? Model184Service::CASELLES : [],
         ];
 
         if ($page === 1) {
@@ -399,7 +404,7 @@ class LloguerController extends Controller
                 $concepte = $moviment->concepte?->concepte ?? $moviment->concepte_original ?? '';
                 // Les repercussions ja són dins de la base: només la desglossen
                 $deduccions = $ingresLloguer->linies
-                    ->where('naturalesa', '!=', \App\Models\MovimentLloguerIngresLinia::REPERCUSSIO);
+                    ->where('naturalesa', '!=', MovimentLloguerIngresLinia::REPERCUSSIO);
                 $totalLinies = (float) $deduccions->sum(fn($l) => (float) $l->import);
                 $netCalculat = $base - $totalLinies;
                 $importBanc = (float) $moviment->import;
@@ -407,7 +412,7 @@ class LloguerController extends Controller
                 $altresIngressosNet = $moviment->ingressos
                     ->filter(fn($i) => $i->lloguer_id !== $lloguer->id)
                     ->sum(fn($i) => (float) $i->base_lloguer - $i->linies
-                        ->where('naturalesa', '!=', \App\Models\MovimentLloguerIngresLinia::REPERCUSSIO)
+                        ->where('naturalesa', '!=', MovimentLloguerIngresLinia::REPERCUSSIO)
                         ->sum(fn($l) => (float) $l->import));
                 $importBancAjustat = round($importBanc - $altresIngressosNet, 2);
 

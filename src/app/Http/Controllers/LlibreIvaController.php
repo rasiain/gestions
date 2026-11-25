@@ -6,14 +6,15 @@ use App\Models\Factura;
 use App\Models\Lloguer;
 use App\Models\MovimentLloguerDespesa;
 use App\Models\Persona;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class LlibreIvaController extends Controller
@@ -259,7 +260,7 @@ class LlibreIvaController extends Controller
             $proveidor = $despesa->proveidor;
 
             $dataMoviment = $moviment?->data_moviment
-                ? \Carbon\Carbon::parse($moviment->data_moviment)->format('d/m/Y')
+                ? Carbon::parse($moviment->data_moviment)->format('d/m/Y')
                 : '';
 
             $base = (float) $despesa->base_imposable;
@@ -340,7 +341,7 @@ class LlibreIvaController extends Controller
             $tipusFiscal = $despesa->tipusDespesaFiscal;
 
             $dataMoviment = $moviment?->data_moviment
-                ? \Carbon\Carbon::parse($moviment->data_moviment)->format('d/m/Y')
+                ? Carbon::parse($moviment->data_moviment)->format('d/m/Y')
                 : '';
             $concepte = $despesa->concepte ?? $moviment?->concepte?->concepte ?? $moviment?->concepte_original ?? '';
             $import   = $moviment ? -(float) $moviment->import : 0;

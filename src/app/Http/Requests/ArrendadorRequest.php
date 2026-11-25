@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests;
 
+use App\Models\ComunitatBens;
+use App\Models\Persona;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -41,8 +43,8 @@ class ArrendadorRequest extends FormRequest
             }
 
             $modelClass = match ($type) {
-                'persona'        => \App\Models\Persona::class,
-                'comunitat_bens' => \App\Models\ComunitatBens::class,
+                'persona'        => Persona::class,
+                'comunitat_bens' => ComunitatBens::class,
                 default          => null,
             };
 

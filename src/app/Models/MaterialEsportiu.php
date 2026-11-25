@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 /**
  * Una peça de material esportiu tal com la porta l'aplicació d'on ve (Garmin…). Quan és
@@ -53,7 +54,7 @@ class MaterialEsportiu extends Model
         return $this->belongsTo(Vehicle::class, 'muntat_a_vehicle_id');
     }
 
-    public function sortides(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    public function sortides(): BelongsToMany
     {
         return $this->belongsToMany(SortidaBici::class, 'g_sortida_material', 'material_id', 'sortida_id');
     }

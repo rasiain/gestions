@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Factura;
 use App\Models\FacturaLinia;
 use App\Models\Lloguer;
+use App\Models\MovimentCompteCorrent;
 use App\Services\FacturaCorreuService;
 use App\Services\FacturaPdfService;
 use App\Services\GmailDesconnectat;
 use App\Services\GmailService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -81,7 +83,7 @@ class FacturaController extends Controller
 
         if ($tipus === 'puntual' && ($any === null || $mes === null)) {
             $dataEmissio = $validated['data_emissio'] ?? null;
-            $data = $dataEmissio ? \Carbon\Carbon::parse($dataEmissio) : now();
+            $data = $dataEmissio ? Carbon::parse($dataEmissio) : now();
             $any = $any ?? $data->year;
             $mes = $mes ?? $data->month;
         }
@@ -173,7 +175,7 @@ class FacturaController extends Controller
             && !array_key_exists('mes', $validated)
             && isset($validated['data_emissio'])
         ) {
-            $data = \Carbon\Carbon::parse($validated['data_emissio']);
+            $data = Carbon::parse($validated['data_emissio']);
             $any = $data->year;
             $mes = $data->month;
         }
@@ -616,7 +618,7 @@ class FacturaController extends Controller
                 'estat'       => 'cobrada',
             ]);
             // Auto-conciliat: vincular una factura a un moviment implica que ja ha estat revisat
-            \App\Models\MovimentCompteCorrent::where('id', $validated['moviment_id'])
+            MovimentCompteCorrent::where('id', $validated['moviment_id'])
                 ->update(['conciliat' => true]);
         } else {
             $factura->update([

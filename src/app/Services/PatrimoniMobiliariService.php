@@ -6,12 +6,13 @@ use App\Models\CapitalSocialContracte;
 use App\Models\CapitalSocialValor;
 use App\Models\CompteCorrent;
 use App\Models\FonsInversio;
+use App\Models\Lloguer;
 use App\Models\PlaPensions;
 use App\Models\RendaFixaContracte;
+use App\Support\RepartimentPerTitular;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use App\Support\RepartimentPerTitular;
 
 /**
  * Tot el patrimoni mobiliari com una sola llista de posicions.
@@ -39,6 +40,9 @@ class PatrimoniMobiliariService
 {
     /** Les fonts que se sumen, en l'ordre en què es llegeixen. */
     public const FONTS = ['comptes', 'fons', 'pensions', 'renda_fixa', 'capital_social'];
+
+    /** @var Collection<int|string, Collection<int, Lloguer>>|null  els lloguers de cada compte, llegits un sol cop */
+    private ?Collection $lloguersPerCompte = null;
 
     /**
      * Una fila per posició: un compte, un contracte de fons, de pla o de renda fixa.
@@ -127,9 +131,10 @@ class PatrimoniMobiliariService
      */
     private function quotesDelCompte(int $compteId): array
     {
-        $immobles = \App\Models\Lloguer::where('compte_corrent_id', $compteId)
-            ->with('immoble.propietaris')
-            ->get()
+        // Tots d'un cop: es pregunta per cada compte, i eren una consulta per compte
+        $this->lloguersPerCompte ??= Lloguer::with('immoble.propietaris')->get()->groupBy('compte_corrent_id');
+
+        $immobles = ($this->lloguersPerCompte[$compteId] ?? collect())
             ->map(fn ($ll) => $ll->immoble)
             ->filter()
             ->unique('id');
@@ -217,7 +222,7 @@ class PatrimoniMobiliariService
      */
     private function comptes(array $mesos): array
     {
-        $lloguers = \App\Models\Lloguer::pluck('nom', 'compte_corrent_id');
+        $lloguers = Lloguer::pluck('nom', 'compte_corrent_id');
         $saldos   = $this->saldosPerMes($mesos);
 
         return CompteCorrent::where('tipus', 'corrent')

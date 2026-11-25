@@ -2,16 +2,20 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\VehicleDespesaRequest;
 use App\Http\Requests\VehicleRepostatgeRequest;
 use App\Http\Requests\VehicleRequest;
+use App\Models\Categoria;
 use App\Models\MaterialEsportiu;
 use App\Models\MovimentCompteCorrent;
+use App\Models\SortidaBici;
 use App\Models\Vehicle;
 use App\Models\VehicleDespesa;
 use App\Models\VehicleRepostatge;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 
 class VehicleController extends Controller
@@ -43,13 +47,19 @@ class VehicleController extends Controller
     private function llista(array $tipus, string $titol, string $descripcio)
     {
         // A les bicis, el resum de les sortides: el detall va a la fitxa, per JSON
-        $sortides = \App\Models\SortidaBici::query()
+        $sortides = SortidaBici::query()
             ->selectRaw('vehicle_id, count(*) as sortides, sum(distancia_m) / 1000.0 as km, max(data_local) as darrera')
             ->groupBy('vehicle_id')
             ->get()
             ->keyBy('vehicle_id');
 
         // Les bicis, per ús (Vehicle::bicisPerUs()); els vehicles a motor, per l'ordre desat i el nom
+        // El que han pres les despeses de cada moviment, d'una consulta (abans, una per despesa)
+        $assignatPerMoviment = VehicleDespesa::whereNotNull('moviment_id')
+            ->groupBy('moviment_id')
+            ->selectRaw('moviment_id, sum(import) as total')
+            ->pluck('total', 'moviment_id');
+
         $vehicles = ($tipus === ['bici'] ? Vehicle::bicisPerUs() : Vehicle::whereIn('tipus', $tipus)->orderBy('ordre')->orderBy('nom'))
             ->with([
                 'repostatges' => fn ($q) => $q->orderBy('data')->orderBy('id'),
@@ -84,7 +94,7 @@ class VehicleController extends Controller
                     'taller'      => $d->taller,
                     'motiu'       => $d->motiu,
                     'moviment_id' => $d->moviment_id,
-                    'moviment'    => $d->moviment ? $this->movimentPerDespesa($d->moviment, $d->id) : null,
+                    'moviment'    => $d->moviment ? $this->movimentPerDespesa($d->moviment, $d->id, (float) ($assignatPerMoviment[$d->moviment_id] ?? 0) - (float) $d->import) : null,
                     'material_id' => $d->material_id,
                     'material'    => $d->material?->nom,
                 ])->values(),
@@ -279,7 +289,7 @@ class VehicleController extends Controller
      * @param  \Illuminate\Support\Collection<int, array{data: \Carbon\CarbonInterface, km: int}>  $lectures
      * @return \Illuminate\Support\Collection<int, array{data: \Carbon\CarbonInterface, km: int}>
      */
-    private function ordenaLectures(\Illuminate\Support\Collection $lectures): \Illuminate\Support\Collection
+    private function ordenaLectures(Collection $lectures): Collection
     {
         return $lectures
             ->sortBy([fn ($a, $b) => $a['data'] <=> $b['data'], fn ($a, $b) => $a['km'] <=> $b['km']])
@@ -293,7 +303,7 @@ class VehicleController extends Controller
      *
      * @param  \Illuminate\Support\Collection<int, array{data: \Carbon\CarbonInterface, km: int}>  $lectures
      */
-    private function kmDeLany(\Illuminate\Support\Collection $lectures, int $any): ?int
+    private function kmDeLany(Collection $lectures, int $any): ?int
     {
         $fins  = $lectures->last(fn (array $l) => (int) $l['data']->format('Y') === $any);
         $abans = $lectures->last(fn (array $l) => (int) $l['data']->format('Y') < $any);
@@ -303,14 +313,14 @@ class VehicleController extends Controller
 
     // ---- Despeses ----
 
-    public function storeDespesa(\App\Http\Requests\VehicleDespesaRequest $request)
+    public function storeDespesa(VehicleDespesaRequest $request)
     {
         $despesa = VehicleDespesa::create($request->validated());
 
         return $this->tornaALaLlista($despesa->vehicle, 'Despesa desada.');
     }
 
-    public function updateDespesa(\App\Http\Requests\VehicleDespesaRequest $request, VehicleDespesa $despesa)
+    public function updateDespesa(VehicleDespesaRequest $request, VehicleDespesa $despesa)
     {
         $despesa->update($request->validated());
 
@@ -355,7 +365,7 @@ class VehicleController extends Controller
      * Serveix per proposar-los en apuntar-ne un: així el cost no s'escriu dues vegades i,
      * de passada, se sap de quin vehicle és cada repostatge de `MOTOR > GASOLINA`.
      */
-    public function movimentsCombustible(\Illuminate\Http\Request $request)
+    public function movimentsCombustible(Request $request)
     {
         $data = $request->input('data');
 
@@ -363,7 +373,7 @@ class VehicleController extends Controller
             return response()->json([]);
         }
 
-        $categories = \App\Models\Categoria::all()
+        $categories = Categoria::all()
             ->filter(fn ($c) => str_contains(mb_strtoupper($c->nom), 'GASOLINA')
                 || str_contains(mb_strtoupper($c->nom), 'CARBURANT'))
             ->pluck('id');

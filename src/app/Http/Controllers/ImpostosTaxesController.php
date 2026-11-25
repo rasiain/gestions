@@ -103,7 +103,7 @@ class ImpostosTaxesController extends Controller
                             'moviments_actual'  => $this->movimentsAny($movsTipus, $anyActual),
                             'moviments_anterior' => $this->movimentsAny($movsTipus, $anyAnterior),
                             // Null quan no s'ha definit el total del rebut
-                            'estat'             => $estats[\App\Models\TaxaRebut::clauDe($grup, $tipus)] ?? null,
+                            'estat'             => $estats[TaxaRebut::clauDe($grup, $tipus)] ?? null,
                         ];
                     })
                     ->sortBy('tipus')
@@ -167,7 +167,7 @@ class ImpostosTaxesController extends Controller
 
     private static function normalitzaOrdre(string $text): string
     {
-        return \App\Services\TaxesService::normalitza($text);
+        return TaxesService::normalitza($text);
     }
 
     /**

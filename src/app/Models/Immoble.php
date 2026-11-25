@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 
 class Immoble extends Model
@@ -67,7 +68,7 @@ class Immoble extends Model
     /**
      * L'administració vigent a una data (avui, per defecte), si n'hi havia cap.
      */
-    public function administracioA(\Carbon\CarbonInterface|string|null $data = null): ?AdministracioImmoble
+    public function administracioA(CarbonInterface|string|null $data = null): ?AdministracioImmoble
     {
         $data ??= now();
 

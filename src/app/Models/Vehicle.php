@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Un vehicle del catàleg: cotxe, moto o bicicleta.
@@ -59,18 +60,18 @@ class Vehicle extends Model
         'ordre'          => 'integer',
     ];
 
-    public function repostatges(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function repostatges(): HasMany
     {
         return $this->hasMany(VehicleRepostatge::class, 'vehicle_id');
     }
 
     /** El material de l'aplicació d'origen (Garmin…) que correspon a aquest vehicle. */
-    public function material(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function material(): HasMany
     {
         return $this->hasMany(MaterialEsportiu::class, 'vehicle_id');
     }
 
-    public function despeses(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function despeses(): HasMany
     {
         return $this->hasMany(VehicleDespesa::class, 'vehicle_id');
     }

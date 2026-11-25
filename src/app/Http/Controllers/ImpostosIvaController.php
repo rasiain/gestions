@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Factura;
 use App\Models\Lloguer;
 use App\Models\MovimentLloguerDespesa;
+use App\Models\Persona;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -115,7 +116,7 @@ class ImpostosIvaController extends Controller
                 'ruta_descarrega' => $lloguer->ruta_descarrega,
                 'immoble_adreca'  => $lloguer->immoble?->adreca,
                 'arrendador'    => $arrendadorable ? (function () use ($arrendadorable) {
-                    $isPersona = $arrendadorable instanceof \App\Models\Persona;
+                    $isPersona = $arrendadorable instanceof Persona;
                     $base = [
                         'nom'   => $isPersona
                             ? trim($arrendadorable->nom . ' ' . $arrendadorable->cognoms)

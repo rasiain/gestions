@@ -68,6 +68,8 @@ src/
 - **Models**: singular en català (`Lloguer`, `CompteCorrent`, `Persona`)
 - **Controllers**: resource controllers (`index`, `store`, `update`, `destroy`)
 - **Validació**: sempre via Form Request dedicat (ex: `LloguerRequest`)
+- **Dependències per injecció**, mai amb `app(Classe::class)` dins d'un mètode: al constructor (`private readonly`) als controladors i serveis, i com a paràmetre a `handle()` de les comandes i a `rules()` de les Form Requests, que Laravel també resol. Les classes van sempre amb `use`, no amb el nom sencer enmig del codi.
+- **Res de consultes per fila**: una dada que s'ha de llegir per a cada element d'una llista es llegeix per a tots d'un cop (`whereIn` + `groupBy`, una subconsulta o carregant la relació). El saldo d'una llista de comptes, per exemple, va amb `CompteCorrent::ambSaldoActual()`; sense, `saldo_actual` en fa una per compte.
 - **Commits**: Conventional Commits en català
 
 ### Frontend

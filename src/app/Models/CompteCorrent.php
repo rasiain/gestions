@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -83,10 +84,28 @@ class CompteCorrent extends Model
     }
 
     /**
-     * Get the current balance (saldo_posterior from the most recent movement).
+     * El saldo actual de cada compte d'una llista, d'una sola consulta: si no, `saldo_actual`
+     * en fa una per compte (i una altra cada cop que es llegeix).
+     */
+    public function scopeAmbSaldoActual(Builder $query): Builder
+    {
+        return $query->addSelect(['saldo_actual' => MovimentCompteCorrent::select('saldo_posterior')
+            ->whereColumn('compte_corrent_id', $this->getTable() . '.id')
+            ->orderByDesc('data_moviment')
+            ->orderByDesc('id')
+            ->limit(1)]);
+    }
+
+    /**
+     * El saldo actual: el `saldo_posterior` del moviment més recent. Amb `ambSaldoActual()` ja ve
+     * de la consulta; si no, es busca.
      */
     public function getSaldoActualAttribute(): ?float
     {
+        if (array_key_exists('saldo_actual', $this->attributes)) {
+            return $this->attributes['saldo_actual'] === null ? null : (float) $this->attributes['saldo_actual'];
+        }
+
         $lastMoviment = $this->moviments()
             ->orderByDesc('data_moviment')
             ->orderByDesc('id')

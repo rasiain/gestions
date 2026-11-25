@@ -47,7 +47,7 @@ class RendaFixaController extends Controller
     private function comptes(array $tipus)
     {
         return CompteCorrent::whereIn('tipus', $tipus)
-            ->with('titulars')
+            ->with(['titulars', 'entitatRelacio'])
             ->orderBy('ordre')
             ->get()
             ->map(fn (CompteCorrent $c) => [

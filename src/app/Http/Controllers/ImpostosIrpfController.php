@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Lloguer;
 use App\Models\MovimentCompteCorrent;
+use App\Models\MovimentLloguerIngresLinia;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -59,7 +60,7 @@ class ImpostosIrpfController extends Controller
                     // Les línies d'ingrés es comptabilitzen com a despeses per categoria.
                     // Les repercussions no: només desglossen la base, que ja s'ha comptat
                     // sencera com a ingrés íntegre (la taxa es dedueix pel seu pagament).
-                    foreach ($ingresLloguer->linies->where('naturalesa', '!=', \App\Models\MovimentLloguerIngresLinia::REPERCUSSIO) as $linia) {
+                    foreach ($ingresLloguer->linies->where('naturalesa', '!=', MovimentLloguerIngresLinia::REPERCUSSIO) as $linia) {
                         $cat = $linia->tipus ?? 'altres';
                         if (!isset($despesesPerCategoria[$cat])) {
                             $cat = 'altres';

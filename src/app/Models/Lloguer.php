@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -59,7 +60,7 @@ class Lloguer extends Model
      * La gestoria del lloguer és l'administradora de l'immoble a aquella data: qui cobra
      * la renda i en descompta la comissió.
      */
-    public function administracioA(\Carbon\CarbonInterface|string|null $data = null): ?AdministracioImmoble
+    public function administracioA(CarbonInterface|string|null $data = null): ?AdministracioImmoble
     {
         return $this->immoble?->administracioA($data);
     }

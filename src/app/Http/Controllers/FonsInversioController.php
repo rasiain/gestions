@@ -7,18 +7,19 @@ use App\Http\Requests\ContracteFonsRequest;
 use App\Http\Requests\DespesaFonsRequest;
 use App\Http\Requests\FonsInversioRequest;
 use App\Http\Requests\ValorFonsRequest;
+use App\Http\Services\FonsValorsPasteParser;
 use App\Models\AportacioFons;
 use App\Models\CompteCorrent;
 use App\Models\ContracteFons;
-use App\Models\Entitat;
 use App\Models\DespesaFons;
+use App\Models\Entitat;
 use App\Models\FonsInversio;
+use App\Models\Persona;
 use App\Models\ValorFons;
-use App\Http\Services\FonsValorsPasteParser;
+use App\Support\RepartimentPerTitular;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use App\Support\RepartimentPerTitular;
 
 class FonsInversioController extends Controller
 {
@@ -45,8 +46,8 @@ class FonsInversioController extends Controller
                 'titulars' => $c->titulars->map(fn($t) => $t->nom . ' ' . $t->cognoms)->join(', '),
             ]);
 
-        $entitats = \App\Models\Entitat::orderBy('nom')->get(['id', 'nom']);
-        $persones = \App\Models\Persona::orderBy('cognoms')->orderBy('nom')->get(['id', 'nom', 'cognoms']);
+        $entitats = Entitat::orderBy('nom')->get(['id', 'nom']);
+        $persones = Persona::orderBy('cognoms')->orderBy('nom')->get(['id', 'nom', 'cognoms']);
 
         return Inertia::render('FonsInversio/Index', [
             'fons'               => $fons,

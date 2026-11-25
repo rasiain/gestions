@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\SortidaBici;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -39,7 +40,10 @@ class EstatFormaService
 
     public const DIES_FATIGA = 7;
 
-    /** Un forat més llarg entre dos punts és una pausa: només en compta això. */
+    /** Quantes sortides es llegeixen alhora de la BD de recorreguts. */
+    private const SORTIDES_PER_LOT = 50;
+
+        /** Un forat més llarg entre dos punts és una pausa: només en compta això. */
     public const MAXIM_SEGONS_PUNT = 10;
 
     /** Una sortida amb més d'aquesta part del temps sense pulsació és parcial. */
@@ -63,11 +67,25 @@ class EstatFormaService
             ->orderBy('inici')
             ->get(['id', 'vehicle_id', 'nom', 'tipus_activitat', 'data_local', 'inici', 'fc_mitjana', 'fc_max', 'temps_moviment_s', 'temps_s', 'punts', 'dades_originals']);
 
-        return $sortides->map(fn (SortidaBici $s) => $this->carrega($s))->all();
+        // Els punts, per lots: un per sortida eren més de 500 consultes, i tots d'un cop, 800.000 punts a la memòria
+        $carregues = [];
+        foreach ($sortides->chunk(self::SORTIDES_PER_LOT) as $lot) {
+            $punts = DB::connection('recorreguts')->table('punts')
+                ->whereIn('sortida_id', $lot->where('punts', '>', 0)->pluck('id'))
+                ->orderBy('sortida_id')->orderBy('t')
+                ->get(['sortida_id', 't', 'fc'])
+                ->groupBy('sortida_id');
+
+            foreach ($lot as $s) {
+                $carregues[] = $this->carrega($s, $punts[$s->id] ?? collect());
+            }
+        }
+
+        return $carregues;
     }
 
     /** @return array{id: int, data: string, nom: ?string, bici: ?string, rodets: bool, minuts: ?float, trimp: ?float, zones: ?array<int, float>, fc_maxima: ?array{valor: int, origen: string}, metode: ?string, parcial: bool} */
-    public function carrega(SortidaBici $s): array
+    public function carrega(SortidaBici $s, ?Collection $punts = null): array
     {
         $fila = [
             'id'        => $s->id,
@@ -88,7 +106,8 @@ class EstatFormaService
             return $fila;
         }
 
-        $punts = $s->punts ? DB::connection('recorreguts')->table('punts')->where('sortida_id', $s->id)->orderBy('t')->get(['t', 'fc']) : collect();
+        // Els punts, si no els porta qui la crida (carregues() els llegeix per lots)
+        $punts ??= $s->punts ? DB::connection('recorreguts')->table('punts')->where('sortida_id', $s->id)->orderBy('t')->get(['t', 'fc']) : collect();
         $ambFc = $punts->contains(fn ($p) => $p->fc > 0);
 
         if ($ambFc) {
