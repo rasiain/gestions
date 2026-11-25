@@ -78,6 +78,8 @@ interface Stats {
     total_ingressos: number;
     total_despeses: number;
     saldo_actual: number | null;
+    /** La suma de tots els moviments que passen el filtre (no només els de la pàgina); null sense filtre. */
+    suma_filtrada: { moviments: number; ingressos: number; despeses: number; total: number } | null;
 }
 
 interface Props {
@@ -1037,6 +1039,23 @@ const conciliarPagina = async (conciliat: boolean) => {
                                     </tr>
                                 </tbody>
                             </table>
+                        </div>
+
+                        <div
+                            v-if="stats.suma_filtrada && moviments.data.length"
+                            class="mt-2 flex flex-wrap items-baseline justify-end gap-x-6 gap-y-1 border-t border-gray-200 dark:border-gray-700 px-6 pt-3 text-sm tabular-nums"
+                        >
+                            <span class="text-gray-500 dark:text-gray-400">
+                                Suma dels {{ stats.suma_filtrada.moviments }} moviments filtrats<template v-if="moviments.last_page > 1"> (totes les pàgines)</template>
+                            </span>
+                            <span v-if="stats.suma_filtrada.ingressos && stats.suma_filtrada.despeses" class="text-gray-500 dark:text-gray-400">
+                                <span :class="getImportClass(stats.suma_filtrada.ingressos)">{{ formatCurrency(stats.suma_filtrada.ingressos) }}</span>
+                                <span class="mx-1">·</span>
+                                <span :class="getImportClass(stats.suma_filtrada.despeses)">{{ formatCurrency(stats.suma_filtrada.despeses) }}</span>
+                            </span>
+                            <span class="font-semibold" :class="getImportClass(stats.suma_filtrada.total)">
+                                {{ formatCurrency(stats.suma_filtrada.total) }}
+                            </span>
                         </div>
 
                         <!-- Pagination -->

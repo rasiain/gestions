@@ -124,6 +124,24 @@ class MovimentCompteCorrentController extends Controller
             }
         }
 
+        // La suma del que llista el filtre: de tots els moviments que hi passen, no només
+        // dels 50 de la pàgina. Sense cap filtre no es calcula, que ja la diuen les xifres de dalt.
+        $ambFiltre = collect($filters)->except('ordre')->contains(fn ($v) => $v !== null && $v !== '');
+        $sumaFiltrada = null;
+        if ($ambFiltre) {
+            $fila = (clone $query)->toBase()
+                ->selectRaw('COUNT(*) as moviments')
+                ->selectRaw('COALESCE(SUM(CASE WHEN import > 0 THEN import END), 0) as ingressos')
+                ->selectRaw('COALESCE(SUM(CASE WHEN import < 0 THEN import END), 0) as despeses')
+                ->first();
+            $sumaFiltrada = [
+                'moviments' => (int) $fila->moviments,
+                'ingressos' => round((float) $fila->ingressos, 2),
+                'despeses' => round((float) $fila->despeses, 2),
+                'total' => round((float) $fila->ingressos + (float) $fila->despeses, 2),
+            ];
+        }
+
         $moviments = $query->orderBy('data_moviment', $ordre)
             ->orderBy('id', $ordre)
             ->paginate(50)
@@ -167,6 +185,7 @@ class MovimentCompteCorrentController extends Controller
                 ->orderBy('data_moviment', 'desc')
                 ->orderBy('id', 'desc')
                 ->value('saldo_posterior'),
+            'suma_filtrada' => $sumaFiltrada,
         ];
 
         // Get distinct concepts used in this compte corrent for autocomplete
